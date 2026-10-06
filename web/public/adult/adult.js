@@ -239,6 +239,8 @@ function itemEditor(mode, it, i, urls, remove) {
   if (mode === 'story') body = [
     field('Pictures, in order', imagePicker(it, 'image_ids', urls, true)),
     h('div', { class: 'grid2' }, field('Story title', txt(it, 'title')), field('Setting (where)', txt(it, 'setting')), field('Other accepted setting words', csv(it, 'setting_alternatives'))),
+    field('What Buddy says first', txt(it, 'intro'), 'Tells Sam which story this is, e.g. "Let\u2019s tell the story of your trip to Ireland." Needed if there are no pictures.'),
+    field("Buddy's question (optional)", txt(it, 'prompt'), 'Leave blank for: "When you are ready, tell me the story. Say where it happens, then what happens first, next and last."'),
     field('Events, one per line, in order', multi(it, 'events'), 'e.g. "the boy builds a kite"'),
     h('div', { class: 'grid2' }, field("Therapist's target words", csv(it, 'target_words'), 'e.g. spin, build, construct'), field('Approved alternative words', csv(it, 'word_alternatives'))),
     field('Model sentence using a target word (optional)', txt(it, 'vocabulary_model')),

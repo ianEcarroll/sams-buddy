@@ -76,6 +76,8 @@ function openItem(state) {
   if (state.mode === 'object') {
     lines.push(line(m.prompt(item), 'prompt'));
   } else if (state.mode === 'story') {
+    // Optional opening line from the team, e.g. "Let's tell the story of your trip to Ireland."
+    if (item.intro) lines.push(line(item.intro, 'intro'));
     lines.push(line(TEAM_PHRASE, 'movie', { pauseAfter: think }));
     lines.push(line(m.prompt(item), 'prompt'));
   } else if (state.mode === 'task') {

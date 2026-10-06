@@ -155,6 +155,7 @@ function validateActivity(b) {
   for (const [i, it] of items.entries()) {
     if (b.mode === 'object' && (!it.name || !it.category || !it.function)) return `Item ${i + 1}: add the name, group and use.`;
     if (b.mode === 'story' && (!it.setting || !(it.events || []).filter(Boolean).length)) return `Story ${i + 1}: add the setting and at least one event.`;
+    if (b.mode === 'story' && !(it.image_ids || []).length && !it.intro?.trim()) return `Story ${i + 1}: add pictures, or a line for Buddy to say first, so Sam knows which story to tell.`;
     if (b.mode === 'task' && ((it.steps || []).filter(Boolean).length < 1)) return `Task ${i + 1}: add the steps.`;
     if (b.mode === 'conversation' && (!it.topic || !it.opener)) return `Topic ${i + 1}: add the topic and Buddy's opening line.`;
   }

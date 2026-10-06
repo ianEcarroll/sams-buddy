@@ -117,3 +117,10 @@ test('support fades on later items', async () => {
   const { turn } = await say(state, 'A cup to drink.');
   assert.equal(turn.lines.at(-1).level, 'specific cue', 'starts one level lighter than last time');
 });
+
+test('story: the team opening line comes before the movie phrase', () => {
+  const act = structuredClone(storyActivity);
+  act.content.items[0].intro = "Let's tell the story of your trip to Ireland.";
+  const { turn } = createSession({ activity: act });
+  assert.deepEqual(turn.lines.slice(0, 2).map((l) => l.text), ["Let's tell the story of your trip to Ireland.", 'Make a movie in your mind.']);
+});
