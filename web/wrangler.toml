@@ -1,0 +1,16 @@
+# Deploys to the existing worker: https://divine-bird-d627.ian-d13.workers.dev
+name = "divine-bird-d627"
+main = "worker.js"
+compatibility_date = "2026-09-01"
+
+[assets]
+directory = "./public"
+binding = "ASSETS"
+run_worker_first = true
+
+[vars]
+# Render API URL (no trailing slash). Check it on the Render service page once it's created;
+# if the name was taken Render adds a suffix, e.g. sams-buddy-api-x1y2.onrender.com
+API_ORIGIN = "https://sams-buddy-api.onrender.com"
+
+# Secret (not stored here):  npx wrangler secret put PROXY_SECRET

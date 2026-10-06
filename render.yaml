@@ -1,0 +1,33 @@
+# Render Blueprint: API only. Database: sams_buddy on the existing Postgres instance.
+services:
+  - type: web
+    name: sams-buddy-api
+    runtime: node
+    plan: starter
+    # Must match the Postgres instance's region (shown on the database page in Render)
+    # so DATABASE_URL can use the internal URL. Region cannot be changed after creation.
+    region: oregon
+    rootDir: api
+    buildCommand: npm ci
+    startCommand: npm start
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL        # internal URL of the existing instance, ending in /sams_buddy
+        sync: false
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: SETUP_TOKEN
+        generateValue: true
+      - key: PROXY_SECRET        # same value as the Worker secret
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: ANTHROPIC_MODEL
+        value: claude-sonnet-5-5
+      - key: ELEVENLABS_API_KEY
+        sync: false
+      - key: ELEVENLABS_VOICE_ID
+        sync: false
