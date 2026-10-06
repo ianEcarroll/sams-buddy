@@ -275,8 +275,10 @@ async function onTalk() {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
       const type = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4'].find((t) => MediaRecorder.isTypeSupported?.(t)) || '';
       const recorder = new MediaRecorder(stream, type ? { mimeType: type } : undefined);
-      rec = { recorder, chunks: [], stream };
-      recorder.ondataavailable = (e) => e.data.size && rec.chunks.push(e.data);
+      // Keep the chunks in this closure: the last chunk arrives AFTER stop(), when `rec` is already cleared.
+      const chunks = [];
+      rec = { recorder, chunks, stream };
+      recorder.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
       recorder.start();
       P.talk = 'recording'; drawPractice();
     } catch {

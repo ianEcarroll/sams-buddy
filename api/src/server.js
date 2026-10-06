@@ -299,6 +299,12 @@ async function deliver(sid, state, turn) {
   return { ...turn, sessionId: sid, lines, ui: { ...turn.ui, images: turn.ui.images.map(imageUrl) } };
 }
 
+// The UI state for a turn Buddy builds itself (e.g. after a speech-to-text failure).
+function lastUi(state) {
+  const { turn } = control(structuredClone(state), 'ready');
+  return turn.ui;
+}
+
 async function saveRecords(sid, learnerId, state, reason) {
   const { records } = finish(state, reason);
   await q('delete from practice_records where session_id=$1', [sid]);
@@ -329,7 +335,20 @@ device.post('/practice/:sid/respond', upload.single('audio'), wrap(async (req, r
   let audio = null;
   if (req.file) {
     if (!voiceEnabled()) return res.status(503).json({ error: 'Voice is not set up yet. Type your answer instead.' });
-    input = await transcribe(req.file.buffer, req.file.mimetype);
+    // A tap on Talk then I'm done with almost no audio: treat as silence, not an error.
+    if (req.file.size < 1500) {
+      input = { text: '', displayText: '', uncertain: false };
+    } else {
+      try {
+        input = await transcribe(req.file.buffer, req.file.mimetype);
+      } catch (err) {
+        console.error('[stt]', err.message, req.file.mimetype, req.file.size);
+        return res.json({ heard: '', ...(await deliver(s.id, s.state, {
+          lines: [{ text: "Sorry, I couldn't hear that properly. Please press Talk and try again.", kind: 'clarify' }],
+          expect: 'response', done: false, ui: lastUi(s.state),
+        })) });
+      }
+    }
     const c = await one('select save_audio from consent where learner_id=$1', [req.learnerId]);
     if (c?.save_audio) audio = req.file;
   } else {
