@@ -48,21 +48,30 @@ function unlockAudio() {
 document.addEventListener('pointerdown', unlockAudio, { once: true });
 
 // ------------------------------------------------------------ pairing & privacy
+// A friendly name for this device in the team's device list. iPadOS reports itself as a Mac,
+// so a touch-screen "Mac" is treated as an iPad.
+function deviceLabel() {
+  const ua = navigator.userAgent;
+  if (/iPad/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1)) return 'iPad';
+  if (/iPhone/.test(ua)) return 'iPhone';
+  if (/Android/.test(ua)) return Math.min(screen.width, screen.height) >= 600 ? 'Android tablet' : 'Android phone';
+  return 'Computer';
+}
 function renderPair(message) {
   const input = h('input', { id: 'code', inputmode: 'text', autocomplete: 'one-time-code', maxlength: '8', style: 'text-transform:uppercase;font-size:1.6rem;letter-spacing:.15em' });
   mount(
     h('h1', { class: 'hello' }, "Sam's Buddy"),
-    h('p', { class: 'hello-sub' }, message || 'Ask someone on your support team for a code to connect this phone.'),
+    h('p', { class: 'hello-sub' }, message || 'Ask someone on your support team for a code to connect this device.'),
     h('div', { class: 'field' }, h('label', { for: 'code' }, 'Code'), input),
     h('button', { class: 'btn btn-primary', onclick: async () => {
       try {
-        const res = await fetch('/api/device/pair', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ code: input.value }) });
+        const res = await fetch('/api/device/pair', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ code: input.value, label: deviceLabel() }) });
         const d = await res.json();
         if (!res.ok) throw new Error(d.error);
         token = d.token; localStorage.setItem(TOKEN_KEY, token);
         boot();
       } catch (e) { toast(e.message); }
-    } }, 'Connect this phone'),
+    } }, 'Connect'),
   );
 }
 

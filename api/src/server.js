@@ -8,6 +8,7 @@ import { transcribe, speak, voiceEnabled } from './voice.js';
 import { createSession, respond, confirmHeard, control, finish, ENGINE_DEFAULTS } from './coach/engine.js';
 import { judgeFromEnv } from './coach/judge.js';
 import { MODES } from './coach/modes.js';
+import { PLAN_GOALS, GOAL_KEYS, SUPPORT_CODES } from './coach/goals.js';
 
 const app = express();
 app.set('trust proxy', true);
@@ -100,7 +101,7 @@ adult.post('/password', wrap(async (req, res) => {
   res.json({ ok: true });
 }));
 
-// ------------------------------------------------------------------ Sam's phone
+// ------------------------------------------------------------------ Sam's device (iPad)
 
 adult.post('/pairing-code', wrap(async (req, res) => {
   const code = Array.from(crypto.randomBytes(6), (b) => 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'[b % 31]).join('');
@@ -119,7 +120,7 @@ app.post('/api/device/pair', rateLimit(10), wrap(async (req, res) => {
   const code = String(req.body?.code || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
   const p = await one('update pairing_codes set used_at=now() where code_hash=$1 and used_at is null and expires_at > now() returning learner_id', [hmac(code)]);
   if (!p) return res.status(400).json({ error: 'That code did not work. Ask for a new one.' });
-  const d = await one('insert into devices(learner_id, label) values ($1,$2) returning id', [p.learner_id, String(req.body?.label || "Sam's phone").slice(0, 60)]);
+  const d = await one('insert into devices(learner_id, label) values ($1,$2) returning id', [p.learner_id, String(req.body?.label || "Sam's device").slice(0, 60)]);
   res.json({ token: sign({ kind: 'device', sub: d.id }) });
 }));
 
@@ -140,15 +141,17 @@ adult.put('/settings', wrap(async (req, res) => {
 }));
 
 adult.get('/activities', wrap(async (req, res) => {
-  const rows = await many("select id, mode, title, goal, status, content, updated_at from activities where learner_id=$1 and status<>'archived' order by mode, updated_at desc", [req.learnerId]);
+  const rows = await many("select id, mode, title, goal, plan_goal, status, content, updated_at from activities where learner_id=$1 and status<>'archived' order by mode, updated_at desc", [req.learnerId]);
   for (const r of rows) {
     const ids = (r.content.items || []).flatMap((it) => [it.image_id, ...(it.image_ids || [])]).filter(Boolean);
     r.image_urls = Object.fromEntries(ids.map((id) => [id, imageUrl(id)]));
   }
   res.json(rows);
 }));
+const planGoalOf = (b) => (GOAL_KEYS.includes(b.plan_goal) ? b.plan_goal : 'other');
 function validateActivity(b) {
   if (!MODES[b.mode]) return 'Choose a practice type.';
+  if (b.plan_goal && !GOAL_KEYS.includes(b.plan_goal)) return 'Choose which plan goal this activity practises.';
   if (!b.title?.trim()) return 'Give the activity a title.';
   const items = b.content?.items;
   if (!Array.isArray(items) || !items.length) return 'Add at least one item to practise.';
@@ -165,14 +168,14 @@ adult.post('/activities', wrap(async (req, res) => {
   const err = validateActivity(req.body || {});
   if (err) return res.status(400).json({ error: err });
   const { mode, title, goal = '', status = 'active', content } = req.body;
-  const a = await one('insert into activities(learner_id, mode, title, goal, status, content, created_by) values ($1,$2,$3,$4,$5,$6,$7) returning id', [req.learnerId, mode, title.trim(), goal, status, content, req.adult.id]);
+  const a = await one('insert into activities(learner_id, mode, title, goal, plan_goal, status, content, created_by) values ($1,$2,$3,$4,$5,$6,$7,$8) returning id', [req.learnerId, mode, title.trim(), goal, planGoalOf(req.body), status, content, req.adult.id]);
   res.json({ id: a.id });
 }));
 adult.put('/activities/:id', wrap(async (req, res) => {
   const err = validateActivity(req.body || {});
   if (err) return res.status(400).json({ error: err });
   const { mode, title, goal = '', status = 'active', content } = req.body;
-  await q('update activities set mode=$1, title=$2, goal=$3, status=$4, content=$5, updated_at=now() where id=$6 and learner_id=$7', [mode, title.trim(), goal, status, content, req.params.id, req.learnerId]);
+  await q('update activities set mode=$1, title=$2, goal=$3, plan_goal=$4, status=$5, content=$6, updated_at=now() where id=$7 and learner_id=$8', [mode, title.trim(), goal, planGoalOf(req.body), status, content, req.params.id, req.learnerId]);
   res.json({ ok: true });
 }));
 adult.delete('/activities/:id', wrap(async (req, res) => {
@@ -183,6 +186,7 @@ adult.delete('/activities/:id', wrap(async (req, res) => {
 adult.get('/modes', (req, res) => {
   res.json(Object.fromEntries(Object.entries(MODES).map(([k, m]) => [k, { label: m.label, defaultGoal: m.defaultGoal, defaultCues: m.defaultCues }])));
 });
+adult.get('/goals', (req, res) => res.json({ goals: PLAN_GOALS, codes: SUPPORT_CODES }));
 
 adult.post('/images', upload.single('image'), wrap(async (req, res) => {
   if (!req.file || !/^image\/(png|jpe?g|webp|gif)$/.test(req.file.mimetype)) return res.status(400).json({ error: 'Upload a PNG, JPG, WebP or GIF picture.' });
@@ -224,6 +228,80 @@ adult.post('/observations', wrap(async (req, res) => {
 adult.get('/export', wrap(requireRecordAccess), wrap(async (req, res) => {
   res.set('content-disposition', 'attachment; filename="sams-buddy-records.json"').json(await exportFor(req.learnerId));
 }));
+// ---- plan tracking: per-goal summary and CSV exports in the team's weekly-record format
+
+// The viewer's time zone decides what counts as "a date" (the plan asks for success on two separate dates).
+function tzOf(req) {
+  const tz = String(req.query.tz || 'UTC');
+  try { new Intl.DateTimeFormat('en', { timeZone: tz }); return tz; } catch { return 'UTC'; }
+}
+
+adult.get('/summary', wrap(requireRecordAccess), wrap(async (req, res) => {
+  const tz = tzOf(req);
+  const rows = await many(`select plan_goal, (created_at at time zone $2)::date::text as day,
+      count(*)::int as items,
+      count(success)::int as opportunities,
+      count(*) filter (where success)::int as successes,
+      count(*) filter (where support_code='I')::int as "I",
+      count(*) filter (where support_code='M')::int as "M",
+      count(*) filter (where support_code='P')::int as "P",
+      count(*) filter (where support_code='F')::int as "F"
+    from practice_records where learner_id=$1
+    group by 1, 2 order by 2 desc`, [req.learnerId, tz]);
+  res.json({ tz, days: rows });
+}));
+
+const csvCell = (v) => {
+  const s = v == null ? '' : Array.isArray(v) ? v.join('; ') : String(v);
+  return /[",\n;]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+};
+const toCsv = (header, rows) => '﻿' + [header, ...rows].map((r) => r.map(csvCell).join(',')).join('\r\n') + '\r\n';
+const goalLabel = (k) => (PLAN_GOALS[k] ? `${PLAN_GOALS[k].n < 5 ? `${PLAN_GOALS[k].n}. ` : ''}${PLAN_GOALS[k].label}` : k);
+const clip = (s, n = 160) => (s && s.length > n ? `${s.slice(0, n - 1)}…` : s || '');
+
+async function recordsForExport(learnerId, tz) {
+  return many(`select r.*, to_char(r.created_at at time zone $2, 'YYYY-MM-DD') as day, to_char(r.created_at at time zone $2, 'HH24:MI') as time
+    from practice_records r where r.learner_id=$1 order by r.created_at`, [learnerId, tz]);
+}
+
+// One row per goal per date — the plan's "Weekly record" columns.
+adult.get('/export/weekly.csv', wrap(requireRecordAccess), wrap(async (req, res) => {
+  const recs = await recordsForExport(req.learnerId, tzOf(req));
+  const groups = new Map();
+  for (const r of recs) {
+    const k = `${r.day}|${r.plan_goal}`;
+    if (!groups.has(k)) groups.set(k, []);
+    groups.get(k).push(r);
+  }
+  const order = (k) => PLAN_GOALS[k]?.n ?? 9;
+  const rows = [...groups.values()].sort((x, y) => x[0].day.localeCompare(y[0].day) || order(x[0].plan_goal) - order(y[0].plan_goal)).map((g) => {
+    const counted = g.filter((r) => r.success != null);
+    const codes = ['I', 'M', 'P', 'F'].map((c) => [c, g.filter((r) => r.support_code === c).length]).filter(([, n]) => n).map(([c, n]) => `${c}×${n}`).join(' ');
+    const aids = [...new Set(g.flatMap((r) => r.visual_aids || []))];
+    const ex = g.find((r) => r.success) || g.find((r) => r.sam_response) || g[0];
+    return [
+      goalLabel(g[0].plan_goal), g[0].day, "Sam's Buddy app (practice with Buddy)",
+      counted.length ? `${counted.filter((r) => r.success).length}/${counted.length}` : `practice only (${g.length})`,
+      codes, aids.length ? aids : 'None', clip(`${ex.item_label}: ${ex.sam_response}`),
+    ];
+  });
+  res.set('content-type', 'text/csv; charset=utf-8').set('content-disposition', 'attachment; filename="sams-buddy-weekly-record.csv"')
+    .send(toCsv(['Goal', 'Date', 'Setting/person', 'Success out of opportunities', 'Support code', 'Visual aid', 'Brief example'], rows));
+}));
+
+// Every practice item, for anyone who wants the detail behind the weekly record.
+adult.get('/export/items.csv', wrap(requireRecordAccess), wrap(async (req, res) => {
+  const recs = await recordsForExport(req.learnerId, tzOf(req));
+  const rows = recs.map((r) => [
+    r.day, r.time, goalLabel(r.plan_goal), r.activity_title, r.item_label,
+    r.success == null ? 'not counted' : r.success ? 'yes' : 'no', r.support_code || '', r.visual_aids || [], r.sam_turns ?? '',
+    r.sam_response, r.independent, r.after_support, r.support_provided, r.help_requests, r.review_note,
+  ]);
+  res.set('content-type', 'text/csv; charset=utf-8').set('content-disposition', 'attachment; filename="sams-buddy-all-practice.csv"')
+    .send(toCsv(['Date', 'Time', 'Goal', 'Activity', 'Item', 'Met target', 'Support code', 'Visual aids', "Sam's relevant turns", "Sam's response",
+      'Independently', 'After support', 'Support given', 'Asked for help', 'Note'], rows));
+}));
+
 adult.delete('/records', requireOwner, wrap(async (req, res) => {
   await q('delete from practice_sessions where learner_id=$1', [req.learnerId]);
   res.json({ ok: true });
@@ -232,8 +310,9 @@ adult.delete('/records', requireOwner, wrap(async (req, res) => {
 async function exportFor(learnerId) {
   return {
     exported_at: new Date().toISOString(),
-    note: 'Practice records describe what happened during practice. They are not assessments or diagnoses.',
-    records: await many('select activity_title, mode, item_label, goal, sam_response, independent, support_provided, after_support, help_requests, review_note, created_at from practice_records where learner_id=$1 order by created_at', [learnerId]),
+    note: 'Practice records describe what happened during practice with Buddy, using the support codes from Sam\'s Functional Communication Plan. They are not assessments or diagnoses; the team sets baselines and decides what counts.',
+    records: await many('select activity_title, mode, plan_goal, item_label, goal, success, support_code, visual_aids, sam_turns, sam_response, independent, support_provided, after_support, help_requests, review_note, created_at from practice_records where learner_id=$1 order by created_at', [learnerId]),
+    support_codes: SUPPORT_CODES,
     observations: await many('select setting, skill, note, created_at from observations where learner_id=$1 order by created_at', [learnerId]),
   };
 }
@@ -310,9 +389,11 @@ async function saveRecords(sid, learnerId, state, reason) {
   const { records } = finish(state, reason);
   await q('delete from practice_records where session_id=$1', [sid]);
   for (const r of records) {
-    await q(`insert into practice_records(learner_id, session_id, activity_id, activity_title, mode, item_label, goal, sam_response, independent, support_provided, after_support, help_requests, review_note)
-      values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
-    [learnerId, sid, state.activity.id, state.activity.title, state.mode, r.item_label, r.goal, r.sam_response, JSON.stringify(r.independent), JSON.stringify(r.support_provided), JSON.stringify(r.after_support), JSON.stringify(r.help_requests), r.review_note]);
+    await q(`insert into practice_records(learner_id, session_id, activity_id, activity_title, mode, item_label, goal, sam_response, independent, support_provided, after_support, help_requests, review_note,
+        plan_goal, support_code, success, visual_aids, sam_turns)
+      values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)`,
+    [learnerId, sid, state.activity.id, state.activity.title, state.mode, r.item_label, r.goal, r.sam_response, JSON.stringify(r.independent), JSON.stringify(r.support_provided), JSON.stringify(r.after_support), JSON.stringify(r.help_requests), r.review_note,
+      r.plan_goal || 'other', r.support_code || null, r.success ?? null, JSON.stringify(r.visual_aids || []), r.sam_turns ?? null]);
   }
   await q('update practice_sessions set state=$1, ended_at=now(), ended_reason=$2 where id=$3', [state, reason, sid]);
   return records;
@@ -323,7 +404,7 @@ device.post('/practice/start', wrap(async (req, res) => {
   if (!consent?.agreed_at) return res.status(403).json({ error: 'Choose your privacy settings first.' });
   const l = await one('select name, settings, current_activity_id from learners where id=$1', [req.learnerId]);
   const id = req.body?.activityId || l.current_activity_id;
-  const act = id && await one("select id, mode, title, goal, content from activities where id=$1 and learner_id=$2 and status='active'", [id, req.learnerId]);
+  const act = id && await one("select id, mode, title, goal, plan_goal, content from activities where id=$1 and learner_id=$2 and status='active'", [id, req.learnerId]);
   if (!act) return res.status(404).json({ error: 'Your team has not chosen a practice yet.' });
   const { state, turn } = createSession({ activity: act, settings: settingsOf(l), learnerName: l.name });
   const s = await one('insert into practice_sessions(learner_id, activity_id, activity_snapshot, state) values ($1,$2,$3,$4) returning id', [req.learnerId, act.id, act, state]);

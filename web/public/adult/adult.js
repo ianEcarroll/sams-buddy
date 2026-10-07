@@ -4,6 +4,7 @@ const TOKEN_KEY = 'buddy.adult';
 let token = sessionStorage.getItem(TOKEN_KEY);
 let me = null;
 let modes = null;
+let goals = null;   // { goals: {key: {n,label,short,target,cue,allowed}}, codes: {I,M,P,F} }
 let tab = 'plan';
 
 function h(tag, attrs = {}, ...kids) {
@@ -45,6 +46,7 @@ async function boot() {
   }
   me = await api('/adult/me');
   modes = modes || await api('/adult/modes');
+  goals = goals || await api('/adult/goals');
   renderShell();
 }
 
@@ -129,9 +131,9 @@ async function renderPlan(root) {
 async function renderActivities(root) {
   const acts = await api('/adult/activities');
   root.append(
-    h('div', { class: 'row-actions', style: 'margin-top:16px' }, Object.entries(modes).map(([m, d]) => h('button', { class: 'btn', onclick: () => editActivity(root, { mode: m, title: '', goal: d.defaultGoal, status: 'active', content: { items: [{}] }, image_urls: {} }) }, `New: ${d.label}`))),
+    h('div', { class: 'row-actions', style: 'margin-top:16px' }, Object.entries(modes).map(([m, d]) => h('button', { class: 'btn', onclick: () => editActivity(root, { mode: m, title: '', goal: d.defaultGoal, plan_goal: DEFAULT_GOAL[m], status: 'active', content: { items: [{}] }, image_urls: {} }) }, `New: ${d.label}`))),
     acts.length ? h('ul', { class: 'list panel' }, acts.map((a) => h('li', {},
-      h('div', {}, h('strong', {}, a.title), h('br'), h('span', { class: 'muted' }, `${modes[a.mode].label} · ${a.content.items.length} item${a.content.items.length === 1 ? '' : 's'}${a.status === 'draft' ? ' · draft' : ''}`)),
+      h('div', {}, goalPill(a.plan_goal), ' ', h('strong', {}, a.title), h('br'), h('span', { class: 'muted' }, `${modes[a.mode].label} · ${a.content.items.length} item${a.content.items.length === 1 ? '' : 's'}${a.status === 'draft' ? ' · draft' : ''}`)),
       h('div', { class: 'row-actions' },
         h('button', { class: 'btn', onclick: () => editActivity(root, a) }, 'Edit'),
         h('button', { class: 'btn btn-danger', onclick: run(async () => { if (confirm(`Archive "${a.title}"?`)) { await api(`/adult/activities/${a.id}`, { method: 'DELETE' }); renderShell(); } }) }, 'Archive'))))) :
@@ -152,6 +154,18 @@ function editActivity(root, a) {
   const urls = { ...(a.image_urls || {}) };
   const title = h('input', { value: a.title });
   const goal = h('input', { value: a.goal });
+  const planGoal = h('select', {}, Object.entries(goals.goals).map(([k, g]) => h('option', { value: k, selected: (a.plan_goal || 'other') === k }, g.n < 5 ? `${g.n}. ${g.label}` : g.label)));
+  const goalHint = h('div', { class: 'goal-hint' });
+  const drawHint = () => {
+    const g = goals.goals[planGoal.value];
+    goalHint.replaceChildren(...[
+      h('p', {}, h('strong', {}, 'Target: '), g.target),
+      g.cue ? h('p', {}, h('strong', {}, 'Team cue: '), g.cue) : null,
+      g.allowed ? h('p', { class: 'muted' }, `Counts as meeting the target when every part is given with support code ${g.allowed.join(' or ')}.`) : null,
+      !g.modes.includes(a.mode) ? h('p', { class: 'warn' }, `This goal is usually practised with ${g.modes.map((m) => modes[m].label).join(' or ')}.`) : null].filter(Boolean));
+  };
+  planGoal.addEventListener('change', drawHint);
+  drawHint();
   const status = h('select', {}, h('option', { value: 'active', selected: a.status === 'active' }, 'Ready for Sam'), h('option', { value: 'draft', selected: a.status === 'draft' }, 'Draft'));
   const reviewFocus = h('textarea', { rows: 2 }, content.review_focus || '');
   const practiseQ = h('input', { type: 'checkbox', checked: !!content.practise_questions });
@@ -171,6 +185,7 @@ function editActivity(root, a) {
 
   root.replaceChildren(
     h('h2', {}, `${a.id ? 'Edit' : 'New'}: ${modes[a.mode].label}`),
+    h('div', { class: 'panel' }, field('Which goal in Sam\u2019s Communication Plan does this practise?', planGoal), goalHint),
     h('div', { class: 'panel grid2' }, field('Title', title), field('Skill / goal being practised', goal), field('Status', status),
       a.mode === 'conversation' ? h('label', { class: 'switch' }, practiseQ, 'Also practise asking follow-up questions') : null),
     h('h3', {}, a.mode === 'conversation' ? 'Topics, in the order Buddy moves between them' : 'Items'),
@@ -187,7 +202,7 @@ function editActivity(root, a) {
           const vals = inputs.map((i) => i.value.trim());
           if (vals.join('|') !== modes[a.mode].defaultCues[key].join('|')) content.cues[key] = vals;
         }
-        const body = { mode: a.mode, title: title.value, goal: goal.value, status: status.value, content };
+        const body = { mode: a.mode, title: title.value, goal: goal.value, plan_goal: planGoal.value, status: status.value, content };
         if (a.id) await api(`/adult/activities/${a.id}`, { method: 'PUT', body }); else await api('/adult/activities', { method: 'POST', body });
         toast('Activity saved.'); renderShell();
       }) }, 'Save activity'),
@@ -269,38 +284,126 @@ function itemEditor(mode, it, i, urls, remove) {
 }
 
 // ------------------------------------------------------------ review
+const DEFAULT_GOAL = { story: 'narrative', conversation: 'conversation', task: 'instructions', object: 'other' };
+const TZ = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+const goalPill = (k) => {
+  const g = goals?.goals[k] || goals?.goals.other;
+  return h('span', { class: `goal-pill g-${k || 'other'}` }, g.n < 5 ? `${g.n} · ${g.short}` : g.short);
+};
+const dayKey = (d) => new Date(d).toLocaleDateString('en-CA', { timeZone: TZ }); // YYYY-MM-DD
+const dayTitle = (k) => new Date(`${k}T12:00:00`).toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' });
+const dayShort = (k) => new Date(`${k}T12:00:00`).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
+const timeOf = (d) => new Date(d).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+const daysAgo = (n) => dayKey(Date.now() - n * 86400000);
+
+const review = { goal: '', period: '30', activity: '' };
+
+function resultBadge(r) {
+  if (r.success === true) return h('span', { class: 'result met' }, 'Met target');
+  if (r.success === false) return h('span', { class: 'result notyet' }, 'Not yet');
+  return h('span', { class: 'result none', title: r.plan_goal === 'other' ? 'Not linked to a plan goal' : 'Stopped before the end' }, r.plan_goal === 'other' ? 'Practice' : 'Not counted');
+}
+function codeBadge(code) {
+  if (!code) return null;
+  return h('span', { class: `code-badge c-${code}`, title: goals.codes[code] }, h('b', {}, code), ` ${goals.codes[code]}`);
+}
+
 async function renderReview(root) {
-  let records;
-  try { records = await api('/adult/records'); }
+  let records, summary;
+  try { [records, summary] = await Promise.all([api('/adult/records'), api(`/adult/summary?tz=${encodeURIComponent(TZ)}`)]); }
   catch (e) { root.append(h('p', { class: 'panel' }, e.message)); return; }
   const acts = await api('/adult/activities');
   const focus = Object.fromEntries(acts.map((a) => [a.id, a.content.review_focus]));
-  const filter = h('select', {}, h('option', { value: '' }, 'All activities'), [...new Set(records.map((r) => r.activity_title))].map((t) => h('option', { value: t }, t)));
-  const tableWrap = h('div', { class: 'table-wrap' });
-  const cell = (arr, cls) => h('td', {}, (arr || []).map((x) => h('div', {}, h('span', { class: `tag ${cls || ''}` }, x))));
-  const draw = () => {
-    const rows = records.filter((r) => !filter.value || r.activity_title === filter.value);
-    tableWrap.replaceChildren(rows.length ? h('table', { class: 'records' },
-      h('thead', {}, h('tr', {}, ['When', 'Activity', 'Goal', 'Sam\u2019s response', 'Independent', 'Support given', 'After support', 'Review note', ''].map((t) => h('th', {}, t)))),
-      h('tbody', {}, rows.map((r) => h('tr', {},
-        h('td', {}, fmt(r.created_at)),
-        h('td', {}, h('strong', {}, r.activity_title), h('br'), r.item_label, focus[r.activity_id] ? h('div', { class: 'muted' }, `Look at: ${focus[r.activity_id]}`) : null),
-        h('td', {}, r.goal),
-        h('td', {}, r.sam_response),
-        cell(r.independent),
-        cell([...r.support_provided, ...r.help_requests], 'supported'),
-        cell(r.after_support, 'supported'),
-        h('td', {}, r.review_note),
-        h('td', {}, h('button', { class: 'btn btn-quiet', onclick: () => showTranscript(root, r.session_id) }, 'Transcript')))))) :
-      h('p', { class: 'panel' }, 'No practice yet. Records appear here after Sam finishes an activity.'));
-  };
-  filter.addEventListener('change', draw);
+
+  // ---- goal summary cards
+  const since7 = daysAgo(6);
+  const cards = h('div', { class: 'goal-cards' }, Object.entries(goals.goals).filter(([k]) => k !== 'other').map(([k, g]) => {
+    const days = summary.days.filter((d) => d.plan_goal === k);
+    const week = days.filter((d) => d.day >= since7);
+    const opp = week.reduce((n, d) => n + d.opportunities, 0);
+    const met = week.reduce((n, d) => n + d.successes, 0);
+    const codes = ['I', 'M', 'P', 'F'].map((c) => [c, week.reduce((n, d) => n + d[c], 0)]);
+    const total = codes.reduce((n, [, v]) => n + v, 0);
+    const recent = days.filter((d) => d.opportunities).slice(0, 4);
+    return h('button', { class: 'goal-card', 'aria-pressed': String(review.goal === k), onclick: () => { review.goal = review.goal === k ? '' : k; draw(); syncCards(); } },
+      h('div', { class: 'gc-head' }, goalPill(k), h('span', { class: 'muted' }, 'Last 7 days')),
+      h('div', { class: 'gc-big' }, opp ? h('span', {}, h('strong', {}, String(met)), ` of ${opp}`) : h('span', { class: 'muted' }, 'No practice yet')),
+      opp ? h('div', { class: 'gc-sub' }, 'met the target') : null,
+      total ? h('div', { class: 'code-bar', 'aria-label': codes.map(([c, v]) => `${c}: ${v}`).join(', ') },
+        codes.filter(([, v]) => v).map(([c, v]) => h('span', { class: `c-${c}`, style: `flex:${v}` }, `${c} ${v}`))) : null,
+      recent.length ? h('div', { class: 'gc-days' }, recent.map((d) => h('span', {}, `${dayShort(d.day)}: ${d.successes}/${d.opportunities}`))) : null);
+  }));
+  const syncCards = () => cards.querySelectorAll('.goal-card').forEach((b, i) => b.setAttribute('aria-pressed', String(review.goal === Object.keys(goals.goals)[i])));
+
+  // ---- filters
+  const goalSel = h('select', { 'aria-label': 'Goal' }, h('option', { value: '' }, 'All goals'),
+    Object.entries(goals.goals).map(([k, g]) => h('option', { value: k, selected: review.goal === k }, g.n < 5 ? `${g.n}. ${g.label}` : g.label)));
+  const periodSel = h('select', { 'aria-label': 'Period' }, [['7', 'Last 7 days'], ['30', 'Last 30 days'], ['all', 'All practice']].map(([v, l]) => h('option', { value: v, selected: review.period === v }, l)));
+  const actSel = h('select', { 'aria-label': 'Activity' }, h('option', { value: '' }, 'All activities'),
+    [...new Set(records.map((r) => r.activity_title))].map((t) => h('option', { value: t, selected: review.activity === t }, t)));
+  goalSel.addEventListener('change', () => { review.goal = goalSel.value; draw(); syncCards(); });
+  periodSel.addEventListener('change', () => { review.period = periodSel.value; draw(); });
+  actSel.addEventListener('change', () => { review.activity = actSel.value; draw(); });
+
+  // ---- record list, grouped by day
+  const listWrap = h('div', {});
+  function draw() {
+    goalSel.value = review.goal;
+    const from = review.period === 'all' ? '' : daysAgo(Number(review.period) - 1);
+    const rows = records.filter((r) => (!review.goal || r.plan_goal === review.goal) && (!review.activity || r.activity_title === review.activity) && (!from || dayKey(r.created_at) >= from));
+    if (!rows.length) { listWrap.replaceChildren(h('p', { class: 'panel' }, records.length ? 'No practice matches these filters.' : 'No practice yet. Records appear here after Sam finishes an activity.')); return; }
+    const byDay = new Map();
+    for (const r of rows) { const k = dayKey(r.created_at); if (!byDay.has(k)) byDay.set(k, []); byDay.get(k).push(r); }
+    listWrap.replaceChildren(...[...byDay].map(([k, rs]) => {
+      const counted = rs.filter((r) => r.success != null);
+      return h('section', { class: 'day' },
+        h('h3', { class: 'day-head' }, dayTitle(k), h('span', { class: 'muted' }, `${rs.length} item${rs.length === 1 ? '' : 's'}${counted.length ? ` · ${counted.filter((r) => r.success).length} of ${counted.length} met target` : ''}`)),
+        rs.map((r) => recordCard(r, focus[r.activity_id], root)));
+    }));
+  }
   draw();
+
   root.append(
-    h('p', { class: 'muted', style: 'margin-top:14px' }, 'Independent responses are kept separate from responses after a cue or model. Words in [brackets?] were unclear to speech recognition. These records describe practice; they are not scores or assessments.'),
-    h('div', { class: 'row-actions' }, filter, h('button', { class: 'btn', onclick: run(downloadExport) }, 'Export records')),
-    tableWrap,
+    h('div', { class: 'review-top' },
+      h('h2', {}, 'Progress on the plan goals'),
+      h('div', { class: 'row-actions' },
+        h('button', { class: 'btn', onclick: run(() => download('/adult/export/weekly.csv', 'sams-buddy-weekly-record.csv')) }, 'Weekly record (CSV)'),
+        h('button', { class: 'btn btn-quiet', onclick: run(() => download('/adult/export/items.csv', 'sams-buddy-all-practice.csv')) }, 'All practice (CSV)'),
+        h('button', { class: 'btn btn-quiet', onclick: run(() => download('/adult/export', 'sams-buddy-records.json')) }, 'Full backup (JSON)'))),
+    cards,
+    h('details', { class: 'codes-key' }, h('summary', {}, 'How practice is counted'),
+      h('p', {}, 'Each item Sam finishes is one opportunity. It meets the target when he gives every part with the support the plan allows for that goal (goals 1 and 2: no prompt; goals 3 and 4: one cue at most). Items he stopped early, and practice not linked to a plan goal, are shown but not counted.'),
+      h('ul', {}, Object.entries(goals.codes).map(([c, l]) => h('li', {}, codeBadge(c), c === 'M' ? ' — Buddy gave one cue (reminder, question or sentence starter)' : c === 'P' ? ' — Buddy gave two or more cues' : c === 'F' ? ' — Buddy modelled the answer' : ' — Sam did it without a cue'))),
+      h('p', { class: 'muted' }, 'These are practice counts with Buddy, using the team’s codes. The team sets baselines and decides what counts; use Observations for school, work and home.')),
+    h('div', { class: 'review-filters' }, goalSel, periodSel, actSel),
+    listWrap,
   );
+}
+
+function recordCard(r, lookAt, root) {
+  const answers = String(r.sam_response || '').split(' / ').filter(Boolean);
+  const box = (title, items, cls) => (items?.length ? h('div', { class: `rc-col ${cls}` }, h('h4', {}, title), h('ul', {}, items.map((x) => h('li', {}, x)))) : null);
+  return h('article', { class: 'rec-card' },
+    h('header', { class: 'rc-head' },
+      h('div', { class: 'rc-title' }, goalPill(r.plan_goal), h('strong', {}, r.item_label), h('span', { class: 'muted' }, ` · ${r.activity_title}`)),
+      h('div', { class: 'rc-meta' }, resultBadge(r), codeBadge(r.support_code), h('span', { class: 'muted rc-time' }, timeOf(r.created_at)))),
+    answers.length ? h('div', { class: 'rc-said' }, h('h4', {}, 'Sam said'),
+      answers.map((a) => a.startsWith('[after support] ')
+        ? h('p', { class: 'after' }, h('span', { class: 'tag supported' }, 'after support'), ' ', a.slice(16))
+        : h('p', {}, a))) : h('p', { class: 'muted' }, 'No spoken answer recorded.'),
+    h('div', { class: 'rc-cols' },
+      box('On his own', r.independent, 'own'),
+      box('After support', r.after_support, 'after'),
+      box('Asked for help', r.help_requests, 'own')),
+    h('details', { class: 'rc-more' },
+      h('summary', {}, 'Details'),
+      box('Buddy’s support', r.support_provided, 'support'),
+      r.review_note ? h('p', {}, h('strong', {}, 'Note: '), r.review_note) : null,
+      r.sam_turns != null ? h('p', {}, h('strong', {}, 'Sam’s relevant turns: '), String(r.sam_turns)) : null,
+      h('p', {}, h('strong', {}, 'Visual aids: '), (r.visual_aids || []).join(', ') || 'none'),
+      h('p', {}, h('strong', {}, 'Activity goal: '), r.goal),
+      lookAt ? h('p', {}, h('strong', {}, 'Team asked reviewers to look at: '), lookAt) : null,
+      h('button', { class: 'btn', onclick: () => showTranscript(root, r.session_id) }, 'Open transcript')));
 }
 
 async function showTranscript(root, sessionId) {
@@ -319,11 +422,12 @@ async function showTranscript(root, sessionId) {
   );
 }
 
-async function downloadExport() {
-  const r = await fetch('/api/adult/export', { headers: { authorization: `Bearer ${token}` } });
-  if (!r.ok) throw new Error((await r.json()).error);
-  const a = h('a', { href: URL.createObjectURL(await r.blob()), download: 'sams-buddy-records.json' });
-  a.click();
+async function download(path, name) {
+  const sep = path.includes('?') ? '&' : '?';
+  const r = await fetch(`/api${path}${sep}tz=${encodeURIComponent(TZ)}`, { headers: { authorization: `Bearer ${token}` } });
+  if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || 'Download failed.');
+  const a = h('a', { href: URL.createObjectURL(await r.blob()), download: name });
+  document.body.append(a); a.click(); a.remove();
 }
 
 // ------------------------------------------------------------ observations
@@ -358,18 +462,18 @@ async function renderTeam(root) {
     h('h2', {}, `${me.learner.name}'s privacy choices`),
     h('div', { class: 'panel' },
       c?.agreed_at ? h('div', {},
-        h('p', { style: 'margin-top:0' }, `${me.learner.name} chose who can see his practice records. Only he can change this, in My settings on his phone.`),
+        h('p', { style: 'margin-top:0' }, `${me.learner.name} chose who can see his practice records. Only he can change this, in My settings on his iPad.`),
         h('ul', {}, Object.entries(ROLE).map(([k, l]) => h('li', {}, `${l}: ${c.can_view?.[k] ? 'can see records' : 'cannot see records'}`))),
         h('p', {}, `Voice recordings: ${c.save_audio ? 'saved' : 'not saved'}.`))
         : h('p', { style: 'margin:0' }, `${me.learner.name} has not made his privacy choices yet. He will be asked the first time he opens the app.`)),
 
-    h('h2', {}, "Sam's phone"),
+    h('h2', {}, `${me.learner.name}'s iPad and test devices`),
     h('div', { class: 'panel' },
-      h('p', { style: 'margin-top:0' }, `Open this site on ${me.learner.name}'s phone, add it to the home screen, then enter a connection code.`),
+      h('p', { style: 'margin-top:0' }, `Open this site on ${me.learner.name}'s iPad (or a phone for testing), add it to the home screen, then enter a connection code. Each device needs its own code.`),
       h('button', { class: 'btn btn-primary', onclick: run(async () => { const r = await api('/adult/pairing-code', { method: 'POST' }); codeBox.replaceChildren(h('p', { class: 'code' }, r.code), h('p', { class: 'muted' }, `Works once, for ${r.expiresInMinutes} minutes.`)); }) }, 'Create a connection code'),
       codeBox,
       devices.length ? h('ul', { class: 'list' }, devices.map((d) => h('li', {}, h('span', {}, `${d.label} · last used ${d.last_seen_at ? fmt(d.last_seen_at) : 'never'}`),
-        h('button', { class: 'btn btn-danger', onclick: run(async () => { if (confirm('Disconnect this phone?')) { await api(`/adult/devices/${d.id}`, { method: 'DELETE' }); renderShell(); } }) }, 'Disconnect')))) : null),
+        h('button', { class: 'btn btn-danger', onclick: run(async () => { if (confirm(`Disconnect ${d.label}?`)) { await api(`/adult/devices/${d.id}`, { method: 'DELETE' }); renderShell(); } }) }, 'Disconnect')))) : null),
 
     h('h2', {}, 'Support team'),
     h('ul', { class: 'list panel' }, team.map((t) => h('li', {}, h('span', {}, `${t.name} · ${ROLE[t.role]}${t.is_owner ? ' (main account)' : ''} · ${t.email}`),

@@ -3,6 +3,7 @@
 // Pure state machine: no I/O except the injected `judge`. State is JSON so it can live in Postgres.
 
 import { MODES, LEVELS, TEAM_PHRASE, DEFAULT_CLARIFY_PHRASES, cueLadder, describe, labelFor } from './modes.js';
+import { PLAN_GOALS, supportCode, successFor } from './goals.js';
 
 const DEFAULTS = {
   think_seconds: 8,        // quiet time after "Make a movie in your mind" before the prompt
@@ -24,7 +25,7 @@ export function createSession({ activity, settings = {}, learnerName = 'Sam', no
   const state = {
     v: 1,
     mode: activity.mode,
-    activity: { id: activity.id, title: activity.title, goal: activity.goal, content: activity.content },
+    activity: { id: activity.id, title: activity.title, goal: activity.goal, plan_goal: activity.plan_goal || 'other', content: activity.content },
     settings: { ...DEFAULTS, ...settings },
     itemIndex: 0,
     item: null,
@@ -460,7 +461,34 @@ export function buildRecord(state, it, stopNote = null) {
   }
   if (help.length) notes.push('Asked for help, which counts as a successful response.');
 
+  // Plan tracking: support code, whether this opportunity met the goal's criterion, visual aids.
+  const planGoal = PLAN_GOALS[state.activity.plan_goal] ? state.activity.plan_goal : 'other';
+  let code = supportCode(it.supportGiven);
+  let complete;
+  let samTurns = null;
+  if (planGoal === 'unexpected' && it.elements.includes('clarify')) {
+    // Goal 1 is about noticing and asking; retelling the clear steps afterwards isn't part of it.
+    code = supportCode(it.supportGiven.filter((s) => s.el === 'clarify'));
+    complete = !!it.met.clarify;
+  } else if (state.mode === 'conversation') {
+    // The plan counts each speaker's contribution as one turn, so 2 relevant turns from Sam
+    // (alternating with Buddy's) make 4 conversational turns.
+    samTurns = it.conv.validTurns;
+    complete = samTurns >= 2 && it.conv.questionAsked;
+  } else {
+    complete = it.elements.length > 0 && it.elements.every((e) => it.met[e]);
+  }
+  const visualAids = [];
+  if (state.settings.cue_cards) visualAids.push('Cue card');
+  if ((item.image_ids || []).length || item.image_id) visualAids.push('Pictures');
+  if (state.settings.captions) visualAids.push('Captions');
+
   return {
+    plan_goal: planGoal,
+    support_code: code,
+    success: successFor(planGoal, { complete, code, stopped: !!stopNote }),
+    visual_aids: visualAids,
+    sam_turns: samTurns,
     item_label: m.itemLabel(item),
     goal: state.activity.goal || m.defaultGoal,
     sam_response: it.responses.map((r) => (r.afterSupport ? `[after support] ${r.text}` : r.text)).join(' / '),

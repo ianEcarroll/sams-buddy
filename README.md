@@ -82,7 +82,7 @@ Add a custom domain in the Cloudflare dashboard if you want one.
 - Open `https://<your-domain>/adult/`, enter the `SETUP_TOKEN` from Render, create the main parent account.
 - Team & privacy → add the speech therapist, teachers, job coach (each gets a role).
 - Activities → add the therapist's pictures, words and cues. Practice plan → choose what Start My Practice opens.
-- Team & privacy → Create a connection code. On Sam's phone: open the site, Add to Home Screen, enter the code.
+- Team & privacy → Create a connection code. On Sam's iPad: open the site, Add to Home Screen, enter the code.
 - Sam makes his own privacy choices on first launch.
 
 ## Privacy model
@@ -101,6 +101,6 @@ Add a custom domain in the Cloudflare dashboard if you want one.
 
 ## Before going live
 
-- Test recording on Sam's actual phone (iOS Safari records `audio/mp4`; Scribe accepts it).
+- Test recording on Sam's actual iPad and on the phone used for testing (iOS Safari records `audio/mp4`; Scribe accepts it).
 - Tune `STT_WORD_THRESHOLD` / `STT_AVG_THRESHOLD` with Sam's real speech so the "Did you say…?" check is helpful, not frequent.
 - Pick a calm ElevenLabs voice with Sam and set its ID in Practice plan.

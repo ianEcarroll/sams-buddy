@@ -57,9 +57,9 @@ export function requireOwner(req, res, next) {
 
 export async function requireDevice(req, res, next) {
   const p = verify(bearer(req));
-  if (!p || p.kind !== 'device') return res.status(401).json({ error: 'This phone is not connected. Ask your support team for a new code.' });
+  if (!p || p.kind !== 'device') return res.status(401).json({ error: 'This device is not connected. Ask your support team for a new code.' });
   const d = await one('update devices set last_seen_at=now() where id=$1 and revoked_at is null returning id, learner_id', [p.sub]);
-  if (!d) return res.status(401).json({ error: 'This phone was disconnected. Ask your support team for a new code.' });
+  if (!d) return res.status(401).json({ error: 'This device was disconnected. Ask your support team for a new code.' });
   req.device = d;
   req.learnerId = d.learner_id;
   next();
