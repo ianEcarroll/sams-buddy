@@ -138,7 +138,7 @@ function convReplyRules(inviteQuestion) {
   return `Also write "reply": Buddy's next conversational line. Rules: 1–2 short sentences, plain friendly English for an 18-year-old, stay on the topic, acknowledge what Sam said (if he shared a personal connection, show you noticed it), add one brief comment of your own. ${inviteQuestion ? 'You may end with one simple question.' : 'Do NOT ask a question.'} If Sam asked you a question, answer it briefly first. Never give advice about safety, strangers, travel or work. Never pretend to be a person; you are Buddy, a practice app.`;
 }
 
-export function makeClaudeJudge({ apiKey, model, fetchImpl = fetch }) {
+export function makeClaudeJudge({ apiKey, model, workspaceId, fetchImpl = fetch }) {
   return async function claudeJudge({ mode, item, elements, text, activity, history = [], inviteQuestion = true }) {
     const quickHelp = detectHelp(text, item.clarify_phrases || DEFAULT_CLARIFY_PHRASES);
     const tool = {
@@ -178,7 +178,7 @@ export function makeClaudeJudge({ apiKey, model, fetchImpl = fetch }) {
 
     const res = await fetchImpl('https://api.anthropic.com/v1/messages', {
       method: 'POST',
-      headers: { 'content-type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
+      headers: { 'content-type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', ...(workspaceId ? { 'anthropic-workspace-id': workspaceId } : {}) },
       body: JSON.stringify({ model, max_tokens: 700, system: SYSTEM, tools: [tool], tool_choice: { type: 'tool', name: 'report' }, messages: [{ role: 'user', content: user }] }),
     });
     if (!res.ok) throw new Error(`Claude ${res.status}: ${(await res.text()).slice(0, 300)}`);
@@ -206,7 +206,7 @@ export function makeClaudeJudge({ apiKey, model, fetchImpl = fetch }) {
 // Pick the judge from the environment. Keyword judge keeps the app usable without a model key.
 export function judgeFromEnv(env = process.env) {
   if (env.ANTHROPIC_API_KEY && env.JUDGE !== 'keyword') {
-    const claude = makeClaudeJudge({ apiKey: env.ANTHROPIC_API_KEY, model: env.ANTHROPIC_MODEL || 'claude-sonnet-5-5' });
+    const claude = makeClaudeJudge({ apiKey: env.ANTHROPIC_API_KEY, model: env.ANTHROPIC_MODEL || 'claude-sonnet-5-5', workspaceId: env.ANTHROPIC_WORKSPACE_ID });
     return async (args) => {
       try { return await claude(args); }
       catch (err) { console.error('[judge] falling back to keyword judge:', err.message); return keywordJudge(args); }
