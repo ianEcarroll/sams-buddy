@@ -179,7 +179,8 @@ export function makeClaudeJudge({ apiKey, model, workspaceId, fetchImpl = fetch 
     const res = await fetchImpl('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', ...(workspaceId ? { 'anthropic-workspace-id': workspaceId } : {}) },
-      body: JSON.stringify({ model, max_tokens: 700, system: SYSTEM, tools: [tool], tool_choice: { type: 'tool', name: 'report' }, messages: [{ role: 'user', content: user }] }),
+      // tool_choice "auto" works on every model (some reject a forced tool); the system prompt requires the call.
+      body: JSON.stringify({ model, max_tokens: 2000, system: `${SYSTEM}\nAlways answer by calling the report tool exactly once. Do not reply with plain text.`, tools: [tool], tool_choice: { type: 'auto' }, messages: [{ role: 'user', content: user }] }),
     });
     if (!res.ok) throw new Error(`Claude ${res.status}: ${(await res.text()).slice(0, 300)}`);
     const data = await res.json();
