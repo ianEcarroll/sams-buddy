@@ -91,6 +91,12 @@ button { cursor: pointer; }
 .talk svg { width: 38px; height: 38px; }
 .talk[data-state="recording"] { background: var(--listen); color: var(--paper); }
 .talk[data-state="busy"] { background: var(--sky-soft); color: var(--ink); }
+.talk[data-state="speaking"] { background: var(--sky-soft); color: var(--ink-soft); }
+.talk:disabled { cursor: default; }
+.talk-text { display: grid; text-align: left; line-height: 1.15; }
+.talk-text small { font-size: 1rem; font-weight: 400; opacity: .85; margin-top: 4px; }
+.talk[data-state="recording"] .dot { animation: pulse 1.2s ease-in-out infinite; }
+@keyframes pulse { 50% { transform: scale(1.5); opacity: .6; } }
 .talk[data-state="recording"] .dot { width: 14px; height: 14px; border-radius: 50%; background: var(--sun); }
 .controls { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
 .controls .btn { flex-direction: column; gap: 4px; padding: 10px 6px; font-size: .95rem; min-height: 82px; }

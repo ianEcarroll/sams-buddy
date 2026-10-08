@@ -171,7 +171,7 @@ async function startPractice(activityId) {
   unlockAudio();
   try {
     const t = await api('/practice/start', { method: 'POST', body: { activityId } });
-    P = { id: t.sessionId, title: t.title, mode: t.mode, turn: t, shown: [], talk: 'idle', thinking: false, help: false };
+    P = { id: t.sessionId, title: t.title, mode: t.mode, turn: t, shown: [], talk: 'idle', speaking: false, thinking: false, help: false };
     drawPractice();
     playLines(t.lines);
   } catch (e) { toast(e.message); }
@@ -199,10 +199,19 @@ function drawPractice() {
       h('button', { class: 'btn btn-primary', onclick: () => sendConfirm(true) }, 'Yes, that\u2019s right'),
       h('button', { class: 'btn', onclick: () => sendConfirm(false) }, 'Say it again'))) : null;
 
-  const talkLabel = { idle: 'Talk', recording: 'I\u2019m done', busy: 'Buddy is listening\u2026' }[P.talk];
+  // One clear state for each moment of the turn:
+  //   Buddy talking → wait (button off) · your turn → "Press to talk" · recording → "I'm done" · sent → "Buddy is thinking…"
+  const state = P.talk === 'idle' && P.speaking ? 'speaking' : P.talk;
+  const TALK = {
+    speaking: { icon: 'speaker', label: 'Buddy is talking\u2026', sub: 'Wait for Buddy to finish' },
+    idle: { icon: 'mic', label: 'Press to talk', sub: 'Your turn' },
+    recording: { icon: null, label: 'I\u2019m done', sub: 'Listening \u2014 press when you have finished' },
+    busy: { icon: 'wait', label: 'Buddy is thinking\u2026', sub: 'Got it' },
+  }[state];
   const talk = canRecord()
-    ? h('button', { class: 'talk', 'data-state': P.talk, disabled: P.talk === 'busy' || turn.expect === 'confirm', onclick: onTalk, 'aria-label': talkLabel },
-      P.talk === 'recording' ? h('span', { class: 'dot', 'aria-hidden': 'true' }) : icon('mic'), talkLabel)
+    ? h('button', { class: 'talk', 'data-state': state, disabled: state === 'speaking' || state === 'busy' || turn.expect === 'confirm', onclick: onTalk, 'aria-label': TALK.label },
+      TALK.icon ? icon(TALK.icon) : h('span', { class: 'dot', 'aria-hidden': 'true' }),
+      h('span', { class: 'talk-text' }, h('span', {}, TALK.label), h('small', {}, TALK.sub)))
     : typedInput();
 
   const controls = h('div', { class: 'controls' },
@@ -216,7 +225,7 @@ function drawPractice() {
     h('div', { class: 'p-top' }, h('p', { class: 'p-title' }, P.title), h('button', { class: 'btn', onclick: finishPractice }, icon('stop'), 'Finish')),
     h('div', { class: 'stage' }, stage),
     bubble,
-    P.thinking ? h('p', { class: 'thinking' }, 'Thinking time. Press Talk whenever you are ready.') : null,
+    P.thinking ? h('p', { class: 'thinking' }, 'Thinking time. Press to talk whenever you are ready.') : null,
     cue,
     confirmBox,
     talk,
@@ -248,9 +257,10 @@ function helpSheet() {
 // Play Buddy's lines in order. Any new action interrupts it.
 async function playLines(lines) {
   const gen = ++playGen;
+  const done = () => { if (gen === playGen && P) { P.speaking = false; drawPractice(); } };
   for (const l of lines) {
     if (gen !== playGen) return;
-    P.shown.push(l); P.thinking = false; drawPractice();
+    P.shown.push(l); P.thinking = false; P.speaking = true; drawPractice();
     if (l.audio) {
       try {
         const r = await fetch(l.audio, { headers: { authorization: `Bearer ${token}` } });
@@ -266,16 +276,18 @@ async function playLines(lines) {
       await wait(Math.min(3500, 300 * l.text.split(' ').length), gen);
     }
     if (l.pauseAfter && gen === playGen) {
-      P.thinking = true; drawPractice();
+      // Thinking time is Sam's: he can press to talk as soon as he is ready.
+      P.speaking = false; P.thinking = true; drawPractice();
       await wait(l.pauseAfter * 1000, gen);
       if (P) P.thinking = false;
     }
   }
+  done();
 }
 function wait(ms, gen) {
   return new Promise((res) => { const t = setInterval(() => { if (gen !== playGen) { clearInterval(t); res(); } }, 100); setTimeout(() => { clearInterval(t); res(); }, ms); });
 }
-function stopVoice() { playGen++; $voice.pause(); if (P) P.thinking = false; }
+function stopVoice() { playGen++; $voice.pause(); if (P) { P.thinking = false; P.speaking = false; } }
 
 async function onTalk() {
   if (P.talk === 'idle') {
@@ -357,6 +369,8 @@ const ICONS = {
   picture: S('<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M21 17l-5-5-9 8"/>'),
   chat: S('<path d="M4 5h11a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2H9l-4 3v-3H4a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2z"/><path d="M19 9h1a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-1v3l-3-3h-3"/>'),
   task: S('<rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4V3h6v1M9 10l1.5 1.5L14 8M9 16h6"/>'),
+  speaker: S('<path d="M4 9v6h4l5 4V5L8 9H4z"/><path d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12"/>'),
+  wait: S('<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>'),
 };
 
 // ------------------------------------------------------------ start
