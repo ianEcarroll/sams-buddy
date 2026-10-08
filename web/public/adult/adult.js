@@ -105,6 +105,8 @@ async function renderPlan(root) {
     h('div', { class: 'panel' }, field('When Sam presses Start My Practice, open:', current, 'Pick one activity so Sam has fewer decisions to make.')),
     h('h2', {}, 'Practice types Sam can see'),
     h('div', { class: 'panel grid2' }, modeBoxes),
+    h('h2', {}, 'Buddy\u2019s voice'),
+    voicePicker(f.voice_id),
     h('h2', {}, 'Pace and support'),
     h('div', { class: 'panel grid2' },
       field('Thinking time after "Make a movie in your mind" (seconds)', f.think_seconds),
@@ -112,7 +114,6 @@ async function renderPlan(root) {
       field('Session length (minutes, checked between items)', f.session_minutes),
       field('Attempts per item before Buddy moves on', f.max_attempts),
       field('Conversation turns per topic', f.turns_per_topic),
-      field('ElevenLabs voice ID', f.voice_id),
       h('label', { class: 'switch' }, f.fade_support, 'Reduce support on later items'),
       h('label', { class: 'switch' }, f.cue_cards, 'Show visual cue cards'),
       h('label', { class: 'switch' }, f.captions, 'Show captions'),
@@ -125,6 +126,52 @@ async function renderPlan(root) {
       toast('Practice plan saved.');
     }) }, 'Save practice plan'),
   );
+}
+
+// Voice picker: listen to each voice saying a typical Buddy line, then choose one. No ElevenLabs account needed.
+function voicePicker(idInput) {
+  const box = h('div', { class: 'panel voice-picker' });
+  let player = null;
+  const stopPlayer = () => { if (player) { player.pause(); player = null; } };
+  async function load() {
+    box.replaceChildren(h('p', { class: 'muted' }, 'Loading voices\u2026'));
+    let data;
+    try { data = await api('/adult/voices'); } catch (e) { box.replaceChildren(h('p', {}, e.message)); return; }
+    const chosen = () => idInput.value || data.current || data.defaultId;
+    const draw = () => {
+      const cur = data.voices.find((v) => v.id === chosen());
+      box.replaceChildren(
+        h('p', { style: 'margin-top:0' }, 'Current voice: ', h('strong', {}, cur ? cur.name : 'Default voice'),
+          '. Press ', h('strong', {}, 'Listen'), ' to hear each voice say a typical Buddy line, then ', h('strong', {}, 'Use this voice'), '. It\u2019s a good choice to make with Sam.'),
+        h('ul', { class: 'voice-list' }, data.voices.map((v) => {
+          const on = v.id === chosen();
+          const listen = h('button', { class: 'btn', onclick: run(async () => {
+            stopPlayer();
+            listen.disabled = true; listen.textContent = 'Loading\u2026';
+            try {
+              const r = await fetch(`/api/adult/voices/${v.id}/sample`, { headers: { authorization: `Bearer ${token}` } });
+              if (!r.ok) throw new Error('Could not play this voice.');
+              player = new Audio(URL.createObjectURL(await r.blob()));
+              await player.play();
+            } finally { listen.disabled = false; listen.textContent = '\u25B6 Listen'; }
+          }) }, '\u25B6 Listen');
+          return h('li', { 'aria-current': on ? 'true' : null },
+            h('div', {}, h('strong', {}, v.name), on ? h('span', { class: 'tag', style: 'margin-left:8px' }, 'In use') : null,
+              h('div', { class: 'muted' }, [v.gender, v.age, v.accent, v.description].filter(Boolean).join(' \u00B7 '))),
+            h('div', { class: 'row-actions' }, listen,
+              on ? null : h('button', { class: 'btn btn-primary', onclick: run(async () => {
+                await api('/adult/settings', { method: 'PUT', body: { settings: { voice_id: v.id } } });
+                idInput.value = v.id; data.current = v.id; stopPlayer(); draw();
+                toast(`Buddy now speaks with ${v.name}\u2019s voice.`);
+              }) }, 'Use this voice')));
+        })),
+        h('details', {}, h('summary', {}, 'Voice ID (advanced)'), field('ElevenLabs voice ID', idInput, 'Only needed for a voice not listed here. Press Save practice plan after changing it.')),
+      );
+    };
+    draw();
+  }
+  box.append(h('button', { class: 'btn', onclick: run(load) }, 'Choose Buddy\u2019s voice'));
+  return box;
 }
 
 // ------------------------------------------------------------ activities

@@ -50,3 +50,23 @@ export async function speak(text, { voiceId, speed = 1 } = {}) {
   if (cache.size > 300) cache.delete(cache.keys().next().value);
   return buf;
 }
+
+// The voices available to this ElevenLabs account (premade ones plus any added from the Voice Library).
+let voiceList = null;
+export async function listVoices() {
+  if (voiceList && Date.now() - voiceList.at < 10 * 60_000) return voiceList.voices;
+  const res = await fetch('https://api.elevenlabs.io/v1/voices', { headers: { 'xi-api-key': KEY() } });
+  if (!res.ok) throw new Error(`Could not load voices (${res.status})`);
+  const data = await res.json();
+  const voices = (data.voices || []).map((v) => ({
+    id: v.voice_id,
+    name: v.name,
+    gender: v.labels?.gender || '',
+    age: v.labels?.age || '',
+    accent: v.labels?.accent || '',
+    description: v.labels?.description || v.description || '',
+  })).sort((a, b) => a.name.localeCompare(b.name));
+  voiceList = { at: Date.now(), voices };
+  return voices;
+}
+export const defaultVoiceId = () => DEFAULT_VOICE();

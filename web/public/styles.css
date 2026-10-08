@@ -215,3 +215,9 @@ details > summary { cursor: pointer; font-weight: 700; padding: 6px 0; }
   .rec-card { padding: 12px 14px; }
   .review-filters select { flex: 1 1 140px; }
 }
+
+/* ---------- Adult: voice picker ---------- */
+.voice-list { list-style: none; padding: 0; margin: 10px 0; display: grid; gap: 8px; }
+.voice-list li { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; }
+.voice-list li[aria-current="true"] { border-color: var(--talk); box-shadow: inset 0 0 0 1px var(--talk); }
+.voice-list .muted { font-size: .9rem; }

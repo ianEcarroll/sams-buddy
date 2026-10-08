@@ -4,7 +4,7 @@ import crypto from 'node:crypto';
 import { q, one, many, pool } from './db.js';
 import { migrate } from './migrate.js';
 import { sign, hmac, hashPassword, checkPassword, requireAdult, requireOwner, requireDevice, requireRecordAccess, rateLimit } from './auth.js';
-import { transcribe, speak, voiceEnabled } from './voice.js';
+import { transcribe, speak, voiceEnabled, listVoices, defaultVoiceId } from './voice.js';
 import { createSession, respond, confirmHeard, control, finish, ENGINE_DEFAULTS } from './coach/engine.js';
 import { judgeFromEnv } from './coach/judge.js';
 import { MODES } from './coach/modes.js';
@@ -186,6 +186,20 @@ adult.delete('/activities/:id', wrap(async (req, res) => {
 adult.get('/modes', (req, res) => {
   res.json(Object.fromEntries(Object.entries(MODES).map(([k, m]) => [k, { label: m.label, defaultGoal: m.defaultGoal, defaultCues: m.defaultCues }])));
 });
+// Voice picker: the account's ElevenLabs voices, and a short sample in Buddy's own words.
+const VOICE_SAMPLE = "Hi Sam, I'm Buddy. Make a movie in your mind. When you're ready, press to talk.";
+adult.get('/voices', wrap(async (req, res) => {
+  if (!voiceEnabled()) return res.status(503).json({ error: 'Voice is not set up yet (ELEVENLABS_API_KEY).' });
+  const l = await one('select settings from learners where id=$1', [req.learnerId]);
+  res.json({ voices: await listVoices(), current: settingsOf(l).voice_id || null, defaultId: defaultVoiceId() });
+}));
+adult.get('/voices/:id/sample', wrap(async (req, res) => {
+  if (!voiceEnabled()) return res.status(503).json({ error: 'Voice is not set up yet.' });
+  const id = String(req.params.id).replace(/[^A-Za-z0-9]/g, '').slice(0, 64);
+  const l = await one('select settings from learners where id=$1', [req.learnerId]);
+  const audio = await speak(VOICE_SAMPLE, { voiceId: id, speed: settingsOf(l).speech_speed });
+  res.set('content-type', 'audio/mpeg').set('cache-control', 'private, max-age=86400').send(audio);
+}));
 adult.get('/goals', (req, res) => res.json({ goals: PLAN_GOALS, codes: SUPPORT_CODES }));
 
 adult.post('/images', upload.single('image'), wrap(async (req, res) => {
