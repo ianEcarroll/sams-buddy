@@ -151,7 +151,25 @@ const conversation = {
   simplePrompt: (item) => item.simple_prompt || `We're talking about ${item.topic}. What do you think about it?`,
   defaultCues: {
     turn: ["Let's keep talking about {topic}.", 'What do you think about {topic}?', 'I think ___.', '{example}'],
-    question: ['You could ask me something too.', 'What could you ask me about {topic}?', 'Do you ___?', 'You could ask: "{exampleQuestion}"'],
+    // Levels 0–1 hold several wordings; one is picked at random each time so the invitation doesn't sound repetitive.
+    question: [
+      [
+        'You could ask me something too.',
+        'Your turn. What would you like to know?',
+        'Is there anything you want to find out from me?',
+        "I wonder what you'd like to know about me.",
+        'Anything you are curious about?',
+        "I'd love to hear your question.",
+      ],
+      [
+        'What could you ask me about {topic}?',
+        'What would you like to know about my {topic}?',
+        'Is there something about {topic} you want to ask me?',
+        'You could find out what I think about {topic}.',
+      ],
+      'Do you ___?',
+      'You could ask: "{exampleQuestion}"',
+    ],
   },
   vars: (item) => ({
     topic: item.topic,
@@ -169,9 +187,21 @@ export function cueLadder(mode, activity, item, el) {
   const m = MODES[mode];
   const key = m.cueKey ? m.cueKey(el) : el;
   const custom = activity?.content?.cues?.[key];
-  const ladder = (Array.isArray(custom) && custom.filter(Boolean).length === 4) ? custom : m.defaultCues[key];
+  const ladder = (Array.isArray(custom) && custom.filter((c) => (Array.isArray(c) ? c.some(Boolean) : c)).length === 4) ? custom : m.defaultCues[key];
   const vars = m.vars(item, el);
-  return ladder.map((t) => fill(t, vars));
+  return ladder.map((t) => fill(pickWording(t, key), vars));
+}
+
+// A cue can be a single string or a list of alternative wordings. Pick one, avoiding the wording used last time.
+const lastWording = {};
+function pickWording(t, key) {
+  if (!Array.isArray(t)) return t;
+  const opts = t.filter(Boolean);
+  if (opts.length <= 1) return opts[0] || '';
+  const fresh = opts.filter((o) => o !== lastWording[key]);
+  const pick = fresh[Math.floor(Math.random() * fresh.length)];
+  lastWording[key] = pick;
+  return pick;
 }
 
 export function achievedPhrase(mode, el, item) {

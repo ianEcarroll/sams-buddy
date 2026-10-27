@@ -359,8 +359,9 @@ function conversationTurn(state, j, text) {
   c.turns.push({ text, connection: !!j.connection, question: !!j.question, independent: !afterCue, reply: j.reply });
   if (afterCue) { it.focus = null; it.focusLevel = -1; it.anySupport = false; }
 
-  if (j.connection && !c.noted.connection) { lines.push(line('You connected it to your own experience.', 'feedback')); c.noted.connection = true; }
-  if (j.question && !c.questionAsked) { c.questionAsked = true; if (practiseQ) lines.push(line('You asked me a question.', 'feedback')); }
+  // Progress is recorded silently for the parent dashboard — Buddy never announces it during the chat.
+  if (j.connection && !c.noted.connection) c.noted.connection = true;
+  if (j.question && !c.questionAsked) c.questionAsked = true;
 
   const turnsDone = c.validTurns >= state.settings.turns_per_topic;
   const questionDone = !practiseQ || c.questionAsked || it.skipped.question;

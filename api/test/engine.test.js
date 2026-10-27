@@ -38,7 +38,8 @@ test('2. gives ONE cue for ONE missing element, then escalates one step at a tim
 test('3. recognises a relevant personal connection as a valid conversational turn', async () => {
   let { state } = createSession({ activity: convActivity });
   const { turn } = await say(state, 'I watched that film too with my brother.');
-  assert.ok(texts(turn).includes('You connected it to your own experience.'));
+  assert.ok(!turn.lines.some((l) => l.kind === 'feedback'), 'progress is recorded silently, not announced to Sam');
+  assert.equal(state.item.conv.noted.connection, true);
   assert.equal(state.item.conv.validTurns, 1);
   assert.ok(!turn.lines.some((l) => l.kind === 'cue'), 'a comment/connection is enough — no question demanded');
 });
