@@ -64,7 +64,7 @@ app.post('/api/setup', rateLimit(5), wrap(async (req, res) => {
 
 app.post('/api/adult/login', rateLimit(10), wrap(async (req, res) => {
   const { email, password } = req.body || {};
-  const a = await one('select id, pass_hash from adults where email=lower($1)', [email || '']);
+  const a = await one('select id, pass_hash from adults where email=lower($1)', [String(email || '').trim()]);
   if (!a || !checkPassword(password || '', a.pass_hash)) return res.status(401).json({ error: 'That email and password do not match.' });
   res.json({ token: sign({ kind: 'adult', sub: a.id }, 12 * 3600) });
 }));
@@ -82,8 +82,10 @@ adult.get('/team', wrap(async (req, res) => {
   res.json(await many('select id, name, email, role, is_owner, created_at from adults where learner_id=$1 order by created_at', [req.learnerId]));
 }));
 adult.post('/team', requireOwner, wrap(async (req, res) => {
-  const { name, email, role, password } = req.body || {};
-  if (!name || !email || !ROLES.includes(role) || !password || password.length < 10) return res.status(400).json({ error: 'Add a name, email, role and a temporary password of at least 10 characters.' });
+  const { name, role, password } = req.body || {};
+  // Accept a pasted contact like "Ian Carroll <ian@example.com>" by keeping just the address.
+  const email = (String(req.body?.email || '').match(/[^\s<>"]+@[^\s<>"]+\.[^\s<>"]+/) || [''])[0];
+  if (!name || !email || !ROLES.includes(role) || !password || password.length < 10) return res.status(400).json({ error: 'Add a name, a valid email address, a role and a temporary password of at least 10 characters.' });
   const a = await one('insert into adults(learner_id, name, email, role, pass_hash) values ($1,$2,lower($3),$4,$5) on conflict (email) do nothing returning id', [req.learnerId, name, email, role, hashPassword(password)]);
   if (!a) return res.status(409).json({ error: 'That email already has an account.' });
   res.json({ id: a.id });

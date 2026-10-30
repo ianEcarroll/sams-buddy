@@ -501,7 +501,7 @@ async function renderTeam(root) {
   const codeBox = h('div', {});
   const owner = me.adult.is_owner;
 
-  const add = { name: h('input'), email: h('input', { type: 'email' }), role: h('select', {}, Object.entries(ROLE).map(([k, l]) => h('option', { value: k }, l))), password: h('input', { type: 'text', placeholder: 'Temporary password' }) };
+  const add = { name: h('input'), email: h('input', { type: 'email', autocomplete: 'off', name: 'member-email' }), role: h('select', {}, Object.entries(ROLE).map(([k, l]) => h('option', { value: k }, l))), password: h('input', { type: 'text', placeholder: 'Temporary password', autocomplete: 'new-password', name: 'temp-password' }) };
   const cur = h('input', { type: 'password', autocomplete: 'current-password' });
   const nxt = h('input', { type: 'password', autocomplete: 'new-password' });
 
