@@ -28,7 +28,7 @@ export const PLAN_GOALS = {
     target: 'Retell an activity with who/where, two events in order and one detail or outcome — 4/5 retellings on two dates, no more than one general cue.',
     cue: 'Picture it → Who/where? → First/next → Detail',
     allowed: ['I', 'M'],
-    modes: ['story'],
+    modes: ['story', 'listen'],
   },
   conversation: {
     n: 4,
@@ -46,7 +46,7 @@ export const PLAN_GOALS = {
     target: 'Not counted towards the four plan goals.',
     cue: '',
     allowed: null, // no success rule — shown as practice only
-    modes: ['object', 'story', 'task', 'conversation'],
+    modes: ['object', 'story', 'task', 'conversation', 'listen'],
   },
 };
 export const GOAL_KEYS = Object.keys(PLAN_GOALS);

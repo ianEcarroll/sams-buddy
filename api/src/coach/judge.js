@@ -85,6 +85,10 @@ export function keywordJudge({ mode, item, elements, text, activity }) {
     if (positions.length >= 2) out.inOrder = positions.every((p, i) => i === 0 || p > positions[i - 1]);
   }
 
+  if (mode === 'listen') {
+    out.met.answer = findAny(text, item.answers || []);
+  }
+
   if (mode === 'conversation') {
     const topicWords = [...keyWords(item.topic), ...(item.keywords || [])];
     out.relevant = !!findAny(text, topicWords) || /\b(me too|i did|i do|i have|i went|i like|i love|i saw|i watched|my )/i.test(text);
@@ -113,6 +117,7 @@ function answerKey(mode, item, activity) {
   };
   if (mode === 'task') return { steps_in_order: item.steps, instruction_given: MODES.task.instruction(item) };
   if (mode === 'conversation') return { topic: item.topic, buddy_last_said: null, practise_questions: !!c.practise_questions };
+  if (mode === 'listen') return { story: item.story, question: item.question, accepted_answers: item.answers || [] };
   return {};
 }
 
@@ -120,6 +125,7 @@ const ELEMENT_GUIDE = {
   object: 'name = he named the object (approved name or obvious variant e.g. plural, "a"/"the"). category = he named its group (approved group only, or an obvious synonym of it). use = he said what it is used for, in any wording with the same meaning.',
   story: 'where = he said where it happens. event_N = he described event N (meaning, not exact words). order = only judge in events_in_order. vocabulary = he used one of the target words or approved alternatives AND it fits the picture/action.',
   task: 'step_N = his retelling includes step N (meaning, not exact words). order = only judge in events_in_order.',
+  listen: 'answer = his response correctly answers the question, judged against the story and the accepted answers. Accept any wording, synonym or partial answer with the same meaning (e.g. "a bird" for "crow" only if bird is accepted; "Peter" for "Peter Pan"). A wrong or unrelated answer, or "I don\'t know", is not supplied. Evidence = his answer words.',
   conversation: 'turn = he made a relevant comment, a personal connection, or a question on the topic. Any of these is a valid turn.',
 };
 

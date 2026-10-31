@@ -221,3 +221,18 @@ details > summary { cursor: pointer; font-weight: 700; padding: 6px 0; }
 .voice-list li { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; }
 .voice-list li[aria-current="true"] { border-color: var(--talk); box-shadow: inset 0 0 0 1px var(--talk); }
 .voice-list .muted { font-size: .9rem; }
+
+/* ---------- Adult: story editor + score ---------- */
+.q-head { margin: 8px 0 0; font-size: 1rem; }
+.q-list { display: grid; gap: 10px; }
+.q-row { display: grid; grid-template-columns: auto 1fr auto; gap: 10px; align-items: start; padding: 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--paper); }
+.q-num { font-weight: 700; color: var(--ink-soft); padding-top: 34px; font-variant-numeric: tabular-nums; }
+.q-fields { display: grid; gap: 8px; min-width: 0; }
+.score-badge { font-size: .82rem; font-weight: 700; padding: 3px 10px; border-radius: 999px; background: var(--sky-soft); color: var(--ink); font-variant-numeric: tabular-nums; }
+@media (max-width: 560px) { .q-row { grid-template-columns: 1fr; } .q-num { padding-top: 0; } }
+
+/* ---------- Sam: listen to a story ---------- */
+.bubble[data-kind="story"] { font-size: 1.15rem; line-height: 1.55; max-height: 38vh; overflow-y: auto; }
+.choice { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.choice .btn { min-height: 88px; font-size: 1.15rem; flex-direction: column; }
+.cards > .card:first-child:nth-last-child(odd) { grid-column: 1 / -1; min-height: 110px; }

@@ -106,11 +106,12 @@ const MODE_INFO = {
   object: { label: 'Describe a Picture', icon: 'picture' },
   conversation: { label: 'Have a Conversation', icon: 'chat' },
   task: { label: 'Practise a Task', icon: 'task' },
+  listen: { label: 'Listen to a Story', icon: 'listen' },
 };
 
 function renderHome() {
   const current = home.activities.find((a) => a.id === home.current_activity_id);
-  const cards = ['story', 'object', 'conversation', 'task'].map((mode) => {
+  const cards = ['listen', 'story', 'object', 'conversation', 'task'].map((mode) => {
     const list = home.activities.filter((a) => a.mode === mode);
     const on = home.modes.includes(mode) && list.length > 0;
     return h('button', { class: 'card', 'aria-disabled': on ? 'false' : 'true', onclick: () => on ? (list.length === 1 ? startPractice(list[0].id) : renderPicker(mode, list)) : toast('Nothing here yet. Your team will add it.') },
@@ -208,11 +209,23 @@ function drawPractice() {
     recording: { icon: null, label: 'I\u2019m done', sub: 'Listening \u2014 press when you have finished' },
     busy: { icon: 'wait', label: 'Buddy is thinking\u2026', sub: 'Got it' },
   }[state];
-  const talk = canRecord()
+  // Listen to a Story: after the story Sam presses "I'm ready"; after a round with misses he chooses to try again or finish.
+  const speakingNow = P.talk === 'idle' && P.speaking;
+  const readyBtn = turn.expect === 'ready'
+    ? h('button', { class: 'talk', 'data-state': speakingNow ? 'speaking' : 'idle', disabled: speakingNow, onclick: () => sendControl('start_questions'), 'aria-label': "I'm ready" },
+      icon(speakingNow ? 'speaker' : 'play'),
+      h('span', { class: 'talk-text' }, h('span', {}, speakingNow ? 'Buddy is reading\u2026' : 'I\u2019m ready'), h('small', {}, speakingNow ? 'Listen to the story' : 'Start the questions')))
+    : null;
+  const choice = turn.expect === 'choice'
+    ? h('div', { class: 'choice' },
+      h('button', { class: 'btn btn-primary', disabled: speakingNow, onclick: () => sendControl('listen_retry') }, icon('repeat'), 'Yes, try again'),
+      h('button', { class: 'btn', disabled: speakingNow, onclick: () => sendControl('listen_finish') }, icon('stop'), 'No, I\u2019m finished'))
+    : null;
+  const talk = readyBtn || choice || (canRecord()
     ? h('button', { class: 'talk', 'data-state': state, disabled: state === 'speaking' || state === 'busy' || turn.expect === 'confirm', onclick: onTalk, 'aria-label': TALK.label },
       TALK.icon ? icon(TALK.icon) : h('span', { class: 'dot', 'aria-hidden': 'true' }),
       h('span', { class: 'talk-text' }, h('span', {}, TALK.label), h('small', {}, TALK.sub)))
-    : typedInput();
+    : typedInput());
 
   const controls = h('div', { class: 'controls' },
     h('button', { class: 'btn', onclick: () => sendControl('repeat') }, icon('repeat'), 'Repeat'),
@@ -369,6 +382,8 @@ const ICONS = {
   picture: S('<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M21 17l-5-5-9 8"/>'),
   chat: S('<path d="M4 5h11a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2H9l-4 3v-3H4a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2z"/><path d="M19 9h1a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-1v3l-3-3h-3"/>'),
   task: S('<rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4V3h6v1M9 10l1.5 1.5L14 8M9 16h6"/>'),
+  listen: S('<path d="M4 14v-2a8 8 0 0 1 16 0v2"/><rect x="3" y="14" width="5" height="7" rx="2"/><rect x="16" y="14" width="5" height="7" rx="2"/>'),
+  play: S('<path d="M7 4.5v15l12-7.5z"/>'),
   speaker: S('<path d="M4 9v6h4l5 4V5L8 9H4z"/><path d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12"/>'),
   wait: S('<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>'),
 };

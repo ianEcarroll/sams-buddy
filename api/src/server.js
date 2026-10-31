@@ -7,7 +7,7 @@ import { sign, hmac, hashPassword, checkPassword, requireAdult, requireOwner, re
 import { transcribe, speak, voiceEnabled, listVoices, defaultVoiceId } from './voice.js';
 import { createSession, respond, confirmHeard, control, finish, ENGINE_DEFAULTS } from './coach/engine.js';
 import { judgeFromEnv } from './coach/judge.js';
-import { MODES } from './coach/modes.js';
+import { MODES, STARTER_STORIES } from './coach/modes.js';
 import { PLAN_GOALS, GOAL_KEYS, SUPPORT_CODES } from './coach/goals.js';
 
 const app = express();
@@ -34,7 +34,7 @@ export const SETTING_DEFAULTS = {
   speech_speed: 0.9,
   captions: true,
   voice_id: null,
-  enabled_modes: ['story', 'object', 'task'],
+  enabled_modes: ['story', 'object', 'task', 'listen'],
 };
 const SETTING_KEYS = Object.keys(SETTING_DEFAULTS);
 const settingsOf = (learner) => ({ ...SETTING_DEFAULTS, ...(learner?.settings || {}) });
@@ -143,6 +143,7 @@ adult.put('/settings', wrap(async (req, res) => {
 }));
 
 adult.get('/activities', wrap(async (req, res) => {
+  await ensureStarterStories(req.learnerId);
   const rows = await many("select id, mode, title, goal, plan_goal, status, content, updated_at from activities where learner_id=$1 and status<>'archived' order by mode, updated_at desc", [req.learnerId]);
   for (const r of rows) {
     const ids = (r.content.items || []).flatMap((it) => [it.image_id, ...(it.image_ids || [])]).filter(Boolean);
@@ -151,6 +152,17 @@ adult.get('/activities', wrap(async (req, res) => {
   res.json(rows);
 }));
 const planGoalOf = (b) => (GOAL_KEYS.includes(b.plan_goal) ? b.plan_goal : 'other');
+// Every learner starts with two stories for "Listen to a Story". Added once; the team can edit or archive them.
+async function ensureStarterStories(learnerId) {
+  const l = await one('select settings from learners where id=$1', [learnerId]);
+  if (!l || l.settings?.listen_seeded) return;
+  for (const st of STARTER_STORIES) {
+    await q("insert into activities(learner_id, mode, title, goal, plan_goal, status, content) values ($1,'listen',$2,$3,'other','active',$4)", [learnerId, st.title, st.goal, { items: st.items }]);
+  }
+  const modes = settingsOf(l).enabled_modes;
+  await q('update learners set settings = settings || $1::jsonb where id=$2', [{ listen_seeded: true, enabled_modes: modes.includes('listen') ? modes : [...modes, 'listen'] }, learnerId]);
+}
+
 function validateActivity(b) {
   if (!MODES[b.mode]) return 'Choose a practice type.';
   if (b.plan_goal && !GOAL_KEYS.includes(b.plan_goal)) return 'Choose which plan goal this activity practises.';
@@ -163,6 +175,13 @@ function validateActivity(b) {
     if (b.mode === 'story' && !(it.image_ids || []).length && !it.intro?.trim()) return `Story ${i + 1}: add pictures, or a line for Buddy to say first, so Sam knows which story to tell.`;
     if (b.mode === 'task' && ((it.steps || []).filter(Boolean).length < 1)) return `Task ${i + 1}: add the steps.`;
     if (b.mode === 'conversation' && (!it.topic || !it.opener)) return `Topic ${i + 1}: add the topic and Buddy's opening line.`;
+    if (b.mode === 'listen') {
+      if (!it.story?.trim()) return `Story ${i + 1}: write the story Buddy will read.`;
+      const qs = (it.questions || []).filter((x) => x?.question?.trim());
+      if (!qs.length) return `Story ${i + 1}: add at least one question.`;
+      const noAns = qs.findIndex((x) => !(x.answers || []).filter(Boolean).length);
+      if (noAns >= 0) return `Story ${i + 1}, question ${noAns + 1}: add at least one accepted answer.`;
+    }
   }
   return null;
 }
@@ -310,11 +329,11 @@ adult.get('/export/items.csv', wrap(requireRecordAccess), wrap(async (req, res) 
   const recs = await recordsForExport(req.learnerId, tzOf(req));
   const rows = recs.map((r) => [
     r.day, r.time, goalLabel(r.plan_goal), r.activity_title, r.item_label,
-    r.success == null ? 'not counted' : r.success ? 'yes' : 'no', r.support_code || '', r.visual_aids || [], r.sam_turns ?? '',
+    r.success == null ? 'not counted' : r.success ? 'yes' : 'no', r.support_code || '', r.visual_aids || [], r.sam_turns ?? '', r.score_total != null ? `${r.score_first}/${r.score_total}` : '', r.score_total != null ? `${r.score_correct}/${r.score_total}` : '',
     r.sam_response, r.independent, r.after_support, r.support_provided, r.help_requests, r.review_note,
   ]);
   res.set('content-type', 'text/csv; charset=utf-8').set('content-disposition', 'attachment; filename="sams-buddy-all-practice.csv"')
-    .send(toCsv(['Date', 'Time', 'Goal', 'Activity', 'Item', 'Met target', 'Support code', 'Visual aids', "Sam's relevant turns", "Sam's response",
+    .send(toCsv(['Date', 'Time', 'Goal', 'Activity', 'Item', 'Met target', 'Support code', 'Visual aids', "Sam's relevant turns", 'Score (first try)', 'Score (final)', "Sam's response",
       'Independently', 'After support', 'Support given', 'Asked for help', 'Note'], rows));
 }));
 
@@ -327,7 +346,7 @@ async function exportFor(learnerId) {
   return {
     exported_at: new Date().toISOString(),
     note: 'Practice records describe what happened during practice with Buddy, using the support codes from Sam\'s Functional Communication Plan. They are not assessments or diagnoses; the team sets baselines and decides what counts.',
-    records: await many('select activity_title, mode, plan_goal, item_label, goal, success, support_code, visual_aids, sam_turns, sam_response, independent, support_provided, after_support, help_requests, review_note, created_at from practice_records where learner_id=$1 order by created_at', [learnerId]),
+    records: await many('select activity_title, mode, plan_goal, item_label, goal, success, support_code, visual_aids, sam_turns, score_first, score_correct, score_total, sam_response, independent, support_provided, after_support, help_requests, review_note, created_at from practice_records where learner_id=$1 order by created_at', [learnerId]),
     support_codes: SUPPORT_CODES,
     observations: await many('select setting, skill, note, created_at from observations where learner_id=$1 order by created_at', [learnerId]),
   };
@@ -341,6 +360,7 @@ const device = express.Router();
 device.use(wrap(requireDevice));
 
 device.get('/home', wrap(async (req, res) => {
+  await ensureStarterStories(req.learnerId);
   const l = await one('select name, settings, current_activity_id from learners where id=$1', [req.learnerId]);
   const s = settingsOf(l);
   const consent = await one('select agreed_at, can_view, save_audio from consent where learner_id=$1', [req.learnerId]);
@@ -406,10 +426,10 @@ async function saveRecords(sid, learnerId, state, reason) {
   await q('delete from practice_records where session_id=$1', [sid]);
   for (const r of records) {
     await q(`insert into practice_records(learner_id, session_id, activity_id, activity_title, mode, item_label, goal, sam_response, independent, support_provided, after_support, help_requests, review_note,
-        plan_goal, support_code, success, visual_aids, sam_turns)
-      values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)`,
+        plan_goal, support_code, success, visual_aids, sam_turns, score_correct, score_first, score_total)
+      values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)`,
     [learnerId, sid, state.activity.id, state.activity.title, state.mode, r.item_label, r.goal, r.sam_response, JSON.stringify(r.independent), JSON.stringify(r.support_provided), JSON.stringify(r.after_support), JSON.stringify(r.help_requests), r.review_note,
-      r.plan_goal || 'other', r.support_code || null, r.success ?? null, JSON.stringify(r.visual_aids || []), r.sam_turns ?? null]);
+      r.plan_goal || 'other', r.support_code || null, r.success ?? null, JSON.stringify(r.visual_aids || []), r.sam_turns ?? null, r.score_correct ?? null, r.score_first ?? null, r.score_total ?? null]);
   }
   await q('update practice_sessions set state=$1, ended_at=now(), ended_reason=$2 where id=$3', [state, reason, sid]);
   return records;

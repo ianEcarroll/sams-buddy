@@ -181,7 +181,58 @@ const conversation = {
   itemLabel: (item) => item.topic || 'conversation',
 };
 
-export const MODES = { object, story, task, conversation };
+// ---------- LISTEN (story read aloud, then questions) ----------
+const listen = {
+  label: 'Listen to a Story',
+  defaultGoal: 'Listen to a story and answer questions about it',
+  cueCard: () => null,
+  elements: (item) => (item.questions || []).map((_, i) => `q_${i}`),
+  elementLabel: new Proxy({}, { get: (t, k) => (String(k).startsWith('q_') ? `Question ${Number(String(k).slice(2)) + 1}` : k) }),
+  cueCardIndex: () => null,
+  prompt: () => "When you're ready to answer some questions about the story, press I'm ready.",
+  simplePrompt: (item) => item.simple_prompt || 'Think back to the story.',
+  defaultCues: {},
+  vars: () => ({}),
+  achieved: {},
+  evidenceLabel: {},
+  itemLabel: (item) => item.title || 'story',
+};
+
+export const MODES = { object, story, task, conversation, listen };
+
+// Two stories every learner starts with. The team can edit them or add more in Activities.
+export const STARTER_STORIES = [
+  {
+    title: 'Tinker Bell and the lost thimble',
+    goal: 'Listen to a story and answer questions about it',
+    items: [{
+      title: 'Tinker Bell and the lost thimble',
+      story: "It was a windy evening in Neverland. Tinker Bell, the tiny fairy whose voice sounds like a little bell, woke up in her bedroom inside a tree. She stretched her wings and looked for her favourite thing, a shiny silver thimble that Wendy had given her. But the thimble was gone! Tinker Bell flew straight to Peter Pan. \"Someone has taken my thimble,\" she jingled crossly. Peter and Tinker Bell searched the Lost Boys' home under the ground, but they found nothing. Then they heard a splash down by the lagoon. A big black crow was sitting on a rock with something shiny in its beak. Tinker Bell sprinkled a little fairy dust, and the crow sneezed. The thimble dropped into Peter's hand. Tinker Bell glowed bright gold, which is what she does when she is happy, and she hung the thimble by her bed so she could see it every morning.",
+      questions: [
+        { question: 'Where does the story happen?', answers: ['Neverland', 'Never land'], clue: 'It is the magical island where Peter Pan lives.' },
+        { question: "What was Tinker Bell's favourite thing?", answers: ['thimble'], clue: 'Wendy gave it to her. It was shiny and silver.' },
+        { question: 'Who did Tinker Bell ask for help?', answers: ['Peter Pan', 'Peter'], clue: 'He is the boy who never grows up.' },
+        { question: 'What animal had the thimble?', answers: ['crow', 'bird', 'blackbird'], clue: 'It was big and black, and it was sitting on a rock.' },
+        { question: 'What does Tinker Bell do when she is happy?', answers: ['glow', 'glowed', 'gold', 'lit up', 'light up', 'shine', 'shines'], clue: 'Think about the colour she turned at the end.' },
+      ],
+    }],
+  },
+  {
+    title: "Leo's first day at the café",
+    goal: 'Listen to a story and answer questions about it',
+    items: [{
+      title: "Leo's first day at the café",
+      story: "On Saturday morning, Leo started his new job at the Corner Café. His manager, Maria, showed him where to hang his coat and gave him a green apron. Leo's first job was to wipe the tables and put out the menus. At ten o'clock, a family came in with a little girl holding a red balloon. The girl asked for a hot chocolate with marshmallows, and Leo carried it carefully to the table. Later, a man knocked over a glass of orange juice. Leo stayed calm, said \"Don't worry, I'll clean it up,\" and fetched a cloth. At the end of the day, Maria told Leo he had done a brilliant job and gave him a blueberry muffin to take home.",
+      questions: [
+        { question: 'What was the name of the café?', answers: ['Corner Café', 'Corner Cafe', 'Corner'], clue: 'It is named after where it is on the street.' },
+        { question: "What colour was Leo's apron?", answers: ['green'], clue: 'It is the colour of grass.' },
+        { question: 'What did the little girl ask for?', answers: ['hot chocolate', 'chocolate'], clue: 'It was a hot drink with marshmallows.' },
+        { question: 'What did the man knock over?', answers: ['orange juice', 'juice', 'glass'], clue: 'It was a drink made from fruit.' },
+        { question: 'What did Maria give Leo at the end of the day?', answers: ['muffin', 'blueberry muffin', 'cake'], clue: 'It was something to eat, with blueberries in it.' },
+      ],
+    }],
+  },
+];
 
 export function cueLadder(mode, activity, item, el) {
   const m = MODES[mode];

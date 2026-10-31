@@ -39,7 +39,7 @@ export function createSession({ activity, settings = {}, learnerName = 'Sam', no
     learnerName,
   };
   const lines = openItem(state);
-  return { state, turn: makeTurn(state, lines) };
+  return { state, turn: state.mode === 'listen' ? listenTurn(state, lines) : makeTurn(state, lines) };
 }
 
 function newItemState(state) {
@@ -63,6 +63,7 @@ function newItemState(state) {
   };
   if (state.mode === 'task' && item.unclear_instruction) { st.phase = 'clarify'; st.elements.unshift('clarify'); }
   if (state.mode === 'conversation') st.conv = { validTurns: 0, questionAsked: false, turns: [], noted: {} };
+  if (state.mode === 'listen') st.listen = { phase: 'story', round: 1, queue: [], pos: 0, results: {}, helped: false };
   return st;
 }
 
@@ -94,6 +95,8 @@ function openItem(state) {
     }
   } else if (state.mode === 'conversation') {
     lines.push(line(item.opener || `Let's talk about ${item.topic}.`, 'prompt'));
+  } else if (state.mode === 'listen') {
+    return storyLines(state);
   }
   state.lastLines = lines;
   return lines;
@@ -108,6 +111,8 @@ export async function respond(state, input, { judge }) {
   if (state.done) return { state, turn: makeTurn(state, []) };
   state.paused = false;
   const text = String(input.text || '').trim();
+  if (state.mode === 'listen' && state.item.listen.phase === 'story') return { state, turn: listenTurn(state, startQuestions(state)) };
+  if (state.mode === 'listen' && state.item.listen.phase === 'offer') return listenOfferSpoken(state, text);
   if (!text) {
     return { state, turn: makeTurn(state, [line("I didn't hear anything. Take your time, and press Talk when you're ready.", 'clarify')]) };
   }
@@ -135,6 +140,8 @@ async function process_(state, { text, displayText, confirmed }, judge) {
   const m = MODES[state.mode];
   const it = state.item;
   const item = curItem(state);
+
+  if (state.mode === 'listen') return listenAnswer(state, { text, displayText, confirmed }, judge);
 
   const conv = it.conv;
   const practiseQ = !!state.activity.content.practise_questions;
@@ -258,6 +265,7 @@ function clearInstructionLines(state) {
 // ---------------------------------------------------------------- help (spoken or button)
 
 function handleHelp(state, kind, text, source) {
+  if (state.mode === 'listen') return listenHelp(state, kind, text, source);
   const it = state.item;
   const item = curItem(state);
   const m = MODES[state.mode];
@@ -286,12 +294,14 @@ function handleHelp(state, kind, text, source) {
 }
 
 function hintLine(state, by) {
+  if (state.mode === 'listen') return listenHelp(state, 'need_help', 'Give me a hint', by === 'sam' ? 'button' : 'spoken')[0];
   const el = state.mode === 'conversation' ? convFocus(state) : (state.item.phase === 'clarify' ? 'clarify' : nextMissing(state));
   if (!el) return line('You have already done everything for this one.', 'feedback');
   return giveCue(state, el, by);
 }
 
 function exampleLine(state, by) {
+  if (state.mode === 'listen') return listenHelp(state, 'need_help', 'Show me an example', 'button')[0];
   const el = state.mode === 'conversation' ? convFocus(state) : (state.item.phase === 'clarify' ? 'clarify' : nextMissing(state));
   if (!el) return line('You have already done everything for this one.', 'feedback');
   return giveCue(state, el, by, 3);
@@ -321,7 +331,17 @@ export function control(state, action) {
       return { state, turn: makeTurn(state, []) };
     case 'try_again':
       state.paused = false;
+      if (state.mode === 'listen') return { state, turn: listenTurn(state, [line('Okay. Here is the question again.', 'ack'), ...state.lastLines]) };
       return { state, turn: makeTurn(state, [line('Okay. Have another go whenever you are ready.', 'ack')]) };
+    case 'start_questions':
+      if (state.mode !== 'listen' || it.listen.phase !== 'story') return { state, turn: makeTurn(state, []) };
+      return { state, turn: listenTurn(state, startQuestions(state)) };
+    case 'listen_retry':
+      if (state.mode !== 'listen' || it.listen.phase !== 'offer') return { state, turn: makeTurn(state, []) };
+      return { state, turn: listenTurn(state, retryRound(state)) };
+    case 'listen_finish':
+      if (state.mode !== 'listen' || it.listen.phase !== 'offer') return { state, turn: makeTurn(state, []) };
+      return { state, turn: listenTurn(state, finishListen(state, [line("Okay. Thanks for listening so carefully.", 'feedback')])) };
     default:
       throw new Error(`Unknown control: ${action}`);
   }
@@ -390,6 +410,135 @@ function completeConversationItem(state, lines) {
   return lines.concat(advance(state, []));
 }
 
+// ---------------------------------------------------------------- listen to a story
+// Buddy reads the story → Sam presses "I'm ready" → questions one at a time → score.
+// If any were missed, Buddy offers to read the story again and ask only those (up to MAX_LISTEN_ROUNDS rounds).
+
+const MAX_LISTEN_ROUNDS = 3;
+const ACKS = ['Thank you.', 'Okay.', 'Thanks.', 'Got it.'];
+const questionsOf = (state) => curItem(state).questions || [];
+
+function listenTurn(state, lines) {
+  const ph = state.item.listen.phase;
+  return makeTurn(state, lines, ph === 'story' ? 'ready' : ph === 'offer' ? 'choice' : null);
+}
+
+function storyLines(state) {
+  const item = curItem(state);
+  const L = state.item.listen;
+  L.phase = 'story';
+  const lines = [];
+  if (L.round === 1 && item.intro) lines.push(line(item.intro, 'intro'));
+  if (L.round === 1) lines.push(line(item.title ? `This story is called: ${item.title}.` : 'Here is a story. Listen carefully.', 'intro'));
+  else lines.push(line('Here is the story again. Listen carefully.', 'intro'));
+  lines.push(line(item.story || '', 'story'));
+  lines.push(line(MODES.listen.prompt(item), 'prompt'));
+  state.lastLines = lines;
+  return lines;
+}
+
+function askLines(state) {
+  const L = state.item.listen;
+  const qi = L.queue[L.pos];
+  const q = questionsOf(state)[qi];
+  const lines = [line(`Question ${L.pos + 1} of ${L.queue.length}. ${q.question}`, 'prompt')];
+  state.lastLines = lines;
+  L.helped = false;
+  return lines;
+}
+
+function startQuestions(state) {
+  const L = state.item.listen;
+  const all = questionsOf(state).map((_, i) => i);
+  L.queue = L.round === 1 ? all : all.filter((i) => !L.results[i]?.correct);
+  L.pos = 0;
+  L.phase = 'question';
+  return [line(L.round === 1 ? "Here are the questions. Take your time with each one." : "Let's try the ones you missed.", 'intro'), ...askLines(state)];
+}
+
+async function listenAnswer(state, { text, displayText, confirmed }, judge) {
+  const it = state.item;
+  const L = it.listen;
+  if (L.phase !== 'question') return { state, turn: listenTurn(state, state.lastLines) };
+  const item = curItem(state);
+  const qi = L.queue[L.pos];
+  const q = questionsOf(state)[qi];
+  const j = await judge({ mode: 'listen', item: { ...q, story: item.story, clarify_phrases: [] }, elements: ['answer'], text, activity: state.activity, history: [] });
+  if (j.garbled && !confirmed) return askToConfirm(state, { text, displayText });
+  if (j.help && j.help !== 'none') return { state, turn: listenTurn(state, listenHelp(state, j.help, text, 'spoken')) };
+
+  it.responses.push({ text: `Q${qi + 1}: ${displayText}`, afterSupport: L.round > 1 || L.helped });
+  it.attempts += 1;
+  const correct = !!j.met.answer;
+  const prev = L.results[qi];
+  L.results[qi] = {
+    correct,
+    answer: displayText,
+    round: L.round,
+    helped: L.helped,
+    firstTry: prev ? prev.firstTry : (correct && !L.helped),
+  };
+  const lines = [line(ACKS[(L.pos + L.round) % ACKS.length], 'ack')];
+  L.pos += 1;
+  if (L.pos < L.queue.length) return { state, turn: listenTurn(state, lines.concat(askLines(state))) };
+  return endRound(state, lines);
+}
+
+function endRound(state, lines) {
+  const L = state.item.listen;
+  const total = questionsOf(state).length;
+  const right = Object.values(L.results).filter((r) => r.correct).length;
+  const missed = total - right;
+  if (!missed) {
+    lines.push(line(L.round === 1 ? `You got all ${total} right. Well done!` : `That's all ${total} right now. Well done!`, 'feedback'));
+    return { state, turn: listenTurn(state, finishListen(state, lines)) };
+  }
+  lines.push(line(`You got ${right} out of ${total} right.`, 'feedback'));
+  if (L.round >= MAX_LISTEN_ROUNDS) {
+    lines.push(line('Thanks for listening so carefully.', 'feedback'));
+    return { state, turn: listenTurn(state, finishListen(state, lines)) };
+  }
+  L.phase = 'offer';
+  const offer = line(`Would you like to hear the story again and try the ${missed === 1 ? 'one' : missed} you missed?`, 'prompt');
+  lines.push(offer);
+  state.lastLines = [offer];
+  return { state, turn: listenTurn(state, lines) };
+}
+
+function retryRound(state) {
+  const it = state.item;
+  const L = it.listen;
+  L.round += 1;
+  it.supportGiven.push({ el: 'story', level: 1, text: 'Heard the story again', by: 'sam' });
+  it.anySupport = true;
+  return storyLines(state);
+}
+
+function listenOfferSpoken(state, text) {
+  if (/\b(yes|yeah|yep|ok|okay|sure|please|again|try)\b/i.test(text)) return { state, turn: listenTurn(state, retryRound(state)) };
+  if (/\b(no|nope|finish|finished|stop|done)\b/i.test(text)) return { state, turn: listenTurn(state, finishListen(state, [line('Okay. Thanks for listening so carefully.', 'feedback')])) };
+  return { state, turn: listenTurn(state, [line('Press Yes to hear the story again, or No to finish.', 'clarify')]) };
+}
+
+function listenHelp(state, kind, text, source) {
+  const it = state.item;
+  const L = it.listen;
+  it.help.push({ kind, text, source });
+  if (L.phase !== 'question') return state.lastLines.length ? state.lastLines : [line('Take your time.', 'ack')];
+  const q = questionsOf(state)[L.queue[L.pos]];
+  if (kind === 'repeat') return [line('Sure.', 'ack'), ...state.lastLines];
+  L.helped = true;
+  it.anySupport = true;
+  it.supportGiven.push({ el: `q_${L.queue[L.pos]}`, level: 1, text: q.clue || 'Think back to the story.', by: source === 'button' ? 'sam' : 'buddy' });
+  if (kind === 'dont_understand') return [line('Thanks for telling me. Think back to the story.', 'ack'), line(q.question, 'prompt')];
+  return [line(q.clue ? `Here's a clue. ${q.clue}` : 'Think back to the story.', 'cue', { level: 'specific cue' }), line(q.question, 'prompt')];
+}
+
+function finishListen(state, lines) {
+  state.item.listen.phase = 'done';
+  return advance(state, lines);
+}
+
 // ---------------------------------------------------------------- finishing items and sessions
 
 function completeItem(state, newly) {
@@ -435,7 +584,49 @@ export function finish(state, reason = 'finished') {
 
 // ---------------------------------------------------------------- practice record (no scores, no diagnoses)
 
+function buildListenRecord(state, it, stopNote) {
+  const item = curItem(state);
+  const qs = item.questions || [];
+  const L = it.listen;
+  const label = (i) => `Q${i + 1} "${qs[i]?.question || ''}"`;
+  const res = qs.map((_, i) => L.results[i]);
+  const first = res.filter((r) => r?.firstTry).length;
+  const right = res.filter((r) => r?.correct).length;
+  const independent = res.flatMap((r, i) => (r?.firstTry ? [`${label(i)}: "${r.answer}"`] : []));
+  const after = res.flatMap((r, i) => (r?.correct && !r.firstTry ? [`${label(i)}: "${r.answer}"`] : []));
+  const wrong = res.flatMap((r, i) => (r && !r.correct ? [`${label(i)}: "${r.answer}" (answer: ${(qs[i].answers || [])[0] || '?'})`] : []));
+  const notes = [];
+  if (stopNote) notes.push(stopNote);
+  notes.push(`${first} of ${qs.length} right first time${right !== first ? `; ${right} of ${qs.length} by the end` : ''}.`);
+  if (L.round > 1) notes.push(`Heard the story ${L.round} times.`);
+  if (wrong.length) notes.push(`Still to get: ${wrong.join('; ')}.`);
+  const planGoal = PLAN_GOALS[state.activity.plan_goal] ? state.activity.plan_goal : 'other';
+  const code = supportCode(it.supportGiven);
+  const visualAids = [];
+  if (item.image_id) visualAids.push('Pictures');
+  if (state.settings.captions) visualAids.push('Captions');
+  return {
+    plan_goal: planGoal,
+    support_code: code,
+    success: successFor(planGoal, { complete: right === qs.length, code, stopped: !!stopNote }),
+    visual_aids: visualAids,
+    sam_turns: null,
+    score_correct: right,
+    score_first: first,
+    score_total: qs.length,
+    item_label: item.title || 'story',
+    goal: state.activity.goal || MODES.listen.defaultGoal,
+    sam_response: it.responses.map((r) => (r.afterSupport ? `[after support] ${r.text}` : r.text)).join(' / '),
+    independent,
+    support_provided: it.supportGiven.map((s) => `${s.el === 'story' ? 'Story read again' : `Clue for ${label(Number(s.el.slice(2)))}`}: "${s.text}"`),
+    after_support: after,
+    help_requests: it.help.filter((h) => h.kind !== 'repeat').map((h) => `${h.source === 'button' ? 'Pressed' : 'Said'} "${h.text}"`),
+    review_note: notes.join(' '),
+  };
+}
+
 export function buildRecord(state, it, stopNote = null) {
+  if (state.mode === 'listen') return buildListenRecord(state, it, stopNote);
   const m = MODES[state.mode];
   const item = curItem(state);
   const label = (el) => (el.startsWith('turn_') ? 'Comment' : labelFor(state.mode, el));
@@ -508,8 +699,8 @@ function makeTurn(state, lines, expect = null) {
   const item = curItem(state);
   const it = state.item;
   let cueCard = null;
-  if (state.settings.cue_cards) {
-    const labels = m.cueCard(item, state.activity);
+  const labels = state.settings.cue_cards ? m.cueCard(item, state.activity) : null;
+  if (labels) {
     const lit = labels.map(() => false);
     for (const el of Object.keys(it?.met || {})) {
       const i = m.cueCardIndex(el);

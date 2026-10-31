@@ -178,7 +178,7 @@ function voicePicker(idInput) {
 async function renderActivities(root) {
   const acts = await api('/adult/activities');
   root.append(
-    h('div', { class: 'row-actions', style: 'margin-top:16px' }, Object.entries(modes).map(([m, d]) => h('button', { class: 'btn', onclick: () => editActivity(root, { mode: m, title: '', goal: d.defaultGoal, plan_goal: DEFAULT_GOAL[m], status: 'active', content: { items: [{}] }, image_urls: {} }) }, `New: ${d.label}`))),
+    h('div', { class: 'row-actions', style: 'margin-top:16px' }, Object.entries(modes).map(([m, d]) => h('button', { class: 'btn', onclick: () => editActivity(root, { mode: m, title: '', goal: d.defaultGoal, plan_goal: DEFAULT_GOAL[m], status: 'active', content: { items: [m === 'listen' ? blankStory() : {}] }, image_urls: {} }) }, `New: ${d.label}`))),
     acts.length ? h('ul', { class: 'list panel' }, acts.map((a) => h('li', {},
       h('div', {}, goalPill(a.plan_goal), ' ', h('strong', {}, a.title), h('br'), h('span', { class: 'muted' }, `${modes[a.mode].label} · ${a.content.items.length} item${a.content.items.length === 1 ? '' : 's'}${a.status === 'draft' ? ' · draft' : ''}`)),
       h('div', { class: 'row-actions' },
@@ -193,6 +193,7 @@ const CUE_NAMES = {
   story: { where: 'Where', event: 'Each event', order: 'Order', vocabulary: 'Target words' },
   task: { step: 'Each step', order: 'Order', clarify: 'Asking for clarification' },
   conversation: { turn: 'Comment', question: 'Follow-up question' },
+  listen: {},
 };
 const LEVEL_NAMES = ['1. Reminder', '2. Specific cue', '3. Sentence starter', '4. Model'];
 
@@ -235,10 +236,10 @@ function editActivity(root, a) {
     h('div', { class: 'panel' }, field('Which goal in Sam\u2019s Communication Plan does this practise?', planGoal), goalHint),
     h('div', { class: 'panel grid2' }, field('Title', title), field('Skill / goal being practised', goal), field('Status', status),
       a.mode === 'conversation' ? h('label', { class: 'switch' }, practiseQ, 'Also practise asking follow-up questions') : null),
-    h('h3', {}, a.mode === 'conversation' ? 'Topics, in the order Buddy moves between them' : 'Items'),
+    h('h3', {}, a.mode === 'conversation' ? 'Topics, in the order Buddy moves between them' : a.mode === 'listen' ? 'Stories' : 'Items'),
     itemsBox,
-    h('button', { class: 'btn', onclick: () => { content.items.push({}); drawItems(); } }, a.mode === 'conversation' ? 'Add a topic' : 'Add an item'),
-    h('div', { class: 'panel' }, cues),
+    h('button', { class: 'btn', onclick: () => { content.items.push(a.mode === 'listen' ? blankStory() : {}); drawItems(); } }, a.mode === 'conversation' ? 'Add a topic' : a.mode === 'listen' ? 'Add another story' : 'Add an item'),
+    Object.keys(CUE_NAMES[a.mode]).length ? h('div', { class: 'panel' }, cues) : '',
     h('div', { class: 'panel' }, field('What should reviewers look at?', reviewFocus, 'Shown with the practice records, e.g. "Is he using group words without a cue?"')),
     h('div', { class: 'row-actions' },
       h('button', { class: 'btn btn-primary', onclick: run(async () => {
@@ -288,7 +289,7 @@ const multi = (it, k, rows = 3) => bind(it, k, h('textarea', { rows }), lines, (
 
 function itemEditor(mode, it, i, urls, remove) {
   const box = h('div', { class: 'item-box' });
-  const head = h('div', { class: 'row-actions', style: 'justify-content:space-between' }, h('strong', {}, `${mode === 'conversation' ? 'Topic' : 'Item'} ${i + 1}`), h('button', { class: 'btn btn-quiet', onclick: remove }, 'Remove'));
+  const head = h('div', { class: 'row-actions', style: 'justify-content:space-between' }, h('strong', {}, `${mode === 'conversation' ? 'Topic' : mode === 'listen' ? 'Story' : 'Item'} ${i + 1}`), h('button', { class: 'btn btn-quiet', onclick: remove }, 'Remove'));
   let body;
   if (mode === 'object') body = [
     field('Picture', imagePicker(it, 'image_id', urls, false)),
@@ -326,12 +327,43 @@ function itemEditor(mode, it, i, urls, remove) {
     field("Buddy's opening line", txt(it, 'opener'), 'A comment works well, e.g. "I watched Toy Story at the weekend."'),
     h('div', { class: 'grid2' }, field('Example comment (for the model cue)', txt(it, 'example_comment')), field('Example question (for the model cue)', txt(it, 'example_question'))),
   ];
+  if (mode === 'listen') body = storyEditor(it, urls);
   box.append(head, ...body);
   return box;
 }
 
+// ------------------------------------------------------------ listen: story editor
+const blankStory = () => ({ questions: Array.from({ length: 5 }, () => ({ question: '', answers: [], clue: '' })) });
+
+function storyEditor(it, urls) {
+  it.questions = it.questions?.length ? it.questions : blankStory().questions;
+  const qBox = h('div', { class: 'q-list' });
+  const drawQs = () => qBox.replaceChildren(...it.questions.map((q, i) => h('div', { class: 'q-row' },
+    h('div', { class: 'q-num' }, `Q${i + 1}`),
+    h('div', { class: 'q-fields' },
+      field('Question', txt(q, 'question')),
+      h('div', { class: 'grid2' },
+        field('Accepted answers', csv(q, 'answers'), 'Comma separated, e.g. crow, bird'),
+        field('Clue (optional)', txt(q, 'clue'), 'Buddy says this if Sam asks for help')),
+    ),
+    h('button', { class: 'btn btn-quiet', onclick: () => { it.questions.splice(i, 1); drawQs(); } }, 'Remove'))));
+  drawQs();
+  const words = h('small', { class: 'muted' });
+  const story = bind(it, 'story', h('textarea', { rows: 9, placeholder: 'Write the story Buddy will read aloud. 100–200 words works well.' }));
+  const count = () => { const n = (story.value.match(/\S+/g) || []).length; words.textContent = `${n} words \u00B7 about ${Math.max(1, Math.round(n / 2.3 / 60 * 10) / 10)} min to listen`; };
+  story.addEventListener('input', count); count();
+  return [
+    h('div', { class: 'grid2' }, field('Story title', txt(it, 'title'), 'Buddy says "This story is called\u2026" first'), field('Picture (optional)', imagePicker(it, 'image_id', urls, false))),
+    field('The story', story), words,
+    h('h4', { class: 'q-head' }, 'Questions Buddy asks afterwards'),
+    h('p', { class: 'muted', style: 'margin:0' }, 'Five works well. Sam\u2019s answer counts as right if it matches the meaning of one of the accepted answers.'),
+    qBox,
+    h('button', { class: 'btn', onclick: () => { it.questions.push({ question: '', answers: [], clue: '' }); drawQs(); } }, 'Add a question'),
+  ];
+}
+
 // ------------------------------------------------------------ review
-const DEFAULT_GOAL = { story: 'narrative', conversation: 'conversation', task: 'instructions', object: 'other' };
+const DEFAULT_GOAL = { story: 'narrative', conversation: 'conversation', task: 'instructions', object: 'other', listen: 'other' };
 const TZ = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
 const goalPill = (k) => {
   const g = goals?.goals[k] || goals?.goals.other;
@@ -433,7 +465,7 @@ function recordCard(r, lookAt, root) {
   return h('article', { class: 'rec-card' },
     h('header', { class: 'rc-head' },
       h('div', { class: 'rc-title' }, goalPill(r.plan_goal), h('strong', {}, r.item_label), h('span', { class: 'muted' }, ` · ${r.activity_title}`)),
-      h('div', { class: 'rc-meta' }, resultBadge(r), codeBadge(r.support_code), h('span', { class: 'muted rc-time' }, timeOf(r.created_at)))),
+      h('div', { class: 'rc-meta' }, r.score_total != null ? h('span', { class: 'score-badge', title: `First try: ${r.score_first}/${r.score_total}` }, `${r.score_correct}/${r.score_total} correct`) : null, resultBadge(r), codeBadge(r.support_code), h('span', { class: 'muted rc-time' }, timeOf(r.created_at)))),
     answers.length ? h('div', { class: 'rc-said' }, h('h4', {}, 'Sam said'),
       answers.map((a) => a.startsWith('[after support] ')
         ? h('p', { class: 'after' }, h('span', { class: 'tag supported' }, 'after support'), ' ', a.slice(16))
