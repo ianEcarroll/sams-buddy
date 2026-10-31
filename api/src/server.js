@@ -212,7 +212,8 @@ const VOICE_SAMPLE = "Hi Sam, I'm Buddy. Make a movie in your mind. When you're 
 adult.get('/voices', wrap(async (req, res) => {
   if (!voiceEnabled()) return res.status(503).json({ error: 'Voice is not set up yet (ELEVENLABS_API_KEY).' });
   const l = await one('select settings from learners where id=$1', [req.learnerId]);
-  res.json({ voices: await listVoices(), current: settingsOf(l).voice_id || null, defaultId: defaultVoiceId() });
+  const list = await listVoices();
+  res.json({ voices: list.voices, fallback: list.fallback, reason: list.reason || null, current: settingsOf(l).voice_id || null, defaultId: defaultVoiceId() });
 }));
 adult.get('/voices/:id/sample', wrap(async (req, res) => {
   if (!voiceEnabled()) return res.status(503).json({ error: 'Voice is not set up yet.' });

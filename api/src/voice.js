@@ -54,9 +54,14 @@ export async function speak(text, { voiceId, speed = 1 } = {}) {
 // The voices available to this ElevenLabs account (premade ones plus any added from the Voice Library).
 let voiceList = null;
 export async function listVoices() {
-  if (voiceList && Date.now() - voiceList.at < 10 * 60_000) return voiceList.voices;
+  if (voiceList && Date.now() - voiceList.at < 10 * 60_000) return { voices: voiceList.voices, fallback: false };
   const res = await fetch('https://api.elevenlabs.io/v1/voices', { headers: { 'xi-api-key': KEY() } });
-  if (!res.ok) throw new Error(`Could not load voices (${res.status})`);
+  if (!res.ok) {
+    const detail = (await res.text()).slice(0, 300);
+    console.error('[voices] ElevenLabs list failed', res.status, detail);
+    // A restricted API key can speak but not list voices: fall back to ElevenLabs' standard voices.
+    return { voices: STANDARD_VOICES, fallback: true, reason: res.status === 401 ? 'missing_permission' : `status_${res.status}` };
+  }
   const data = await res.json();
   const voices = (data.voices || []).map((v) => ({
     id: v.voice_id,
@@ -67,6 +72,16 @@ export async function listVoices() {
     description: v.labels?.description || v.description || '',
   })).sort((a, b) => a.name.localeCompare(b.name));
   voiceList = { at: Date.now(), voices };
-  return voices;
+  return { voices, fallback: false };
 }
 export const defaultVoiceId = () => DEFAULT_VOICE();
+
+// ElevenLabs' standard (premade) voices, used when the key isn't allowed to list voices.
+const STANDARD_VOICES = [
+  { id: 'JBFqnCBsd6RMkjVDRZzb', name: 'George', gender: 'male', age: 'middle aged', accent: 'british', description: 'warm' },
+  { id: 'EXAVITQu4vr4xnSDxMaL', name: 'Sarah', gender: 'female', age: 'young', accent: 'american', description: 'soft' },
+  { id: 'XB0fDUnXU5powFXDhCwa', name: 'Charlotte', gender: 'female', age: 'young', accent: 'swedish', description: 'calm' },
+  { id: 'pNInz6obpgDQGcFmaJgB', name: 'Adam', gender: 'male', age: 'middle aged', accent: 'american', description: 'deep' },
+  { id: 'TxGEqnHWrfWFTfGW9XjX', name: 'Josh', gender: 'male', age: 'young', accent: 'american', description: 'friendly' },
+  { id: '21m00Tcm4TlvDq8ikWAM', name: 'Rachel', gender: 'female', age: 'young', accent: 'american', description: 'calm' },
+];

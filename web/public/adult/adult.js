@@ -76,6 +76,8 @@ function renderSetup() {
 const TABS = [['plan', 'Practice plan'], ['activities', 'Activities'], ['review', 'Review practice'], ['notes', 'Observations'], ['team', 'Team & privacy']];
 function renderShell() {
   const body = h('div', {});
+  // Sections that don't apply (e.g. owner-only panels) come through as null: skip them rather than print "null".
+  body.append = (...kids) => HTMLElement.prototype.append.apply(body, kids.filter((k) => k != null && k !== false));
   $app.replaceChildren(
     h('header', { class: 'adult-head' },
       h('div', {}, h('h1', {}, `${me.learner.name}'s Buddy`), h('span', { class: 'muted' }, `${me.adult.name} · ${ROLE[me.adult.role]}`)),
@@ -131,6 +133,7 @@ async function renderPlan(root) {
 // Voice picker: listen to each voice saying a typical Buddy line, then choose one. No ElevenLabs account needed.
 function voicePicker(idInput) {
   const box = h('div', { class: 'panel voice-picker' });
+  box.replaceChildren = (...kids) => Element.prototype.replaceChildren.apply(box, kids.filter((k) => k != null && k !== false));
   let player = null;
   const stopPlayer = () => { if (player) { player.pause(); player = null; } };
   async function load() {
@@ -141,6 +144,7 @@ function voicePicker(idInput) {
     const draw = () => {
       const cur = data.voices.find((v) => v.id === chosen());
       box.replaceChildren(
+        data.fallback ? h('p', { class: 'muted', style: 'margin-top:0' }, 'Showing ElevenLabs\u2019 standard voices. To list every voice on the account, give the ElevenLabs API key the \u201cVoices: Read\u201d permission.') : null,
         h('p', { style: 'margin-top:0' }, 'Current voice: ', h('strong', {}, cur ? cur.name : 'Default voice'),
           '. Press ', h('strong', {}, 'Listen'), ' to hear each voice say a typical Buddy line, then ', h('strong', {}, 'Use this voice'), '. It\u2019s a good choice to make with Sam.'),
         h('ul', { class: 'voice-list' }, data.voices.map((v) => {
