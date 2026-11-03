@@ -108,6 +108,7 @@ async function renderPlan(root) {
     max_attempts: num('max_attempts', 2, 10), turns_per_topic: num('turns_per_topic', 1, 10),
     fade_support: chk('fade_support'), cue_cards: chk('cue_cards'), captions: chk('captions'),
     voice_id: h('input', { value: settings.voice_id || '', placeholder: 'Default voice' }),
+    reminder_time: h('input', { type: 'time', value: settings.reminder_time || '' }),
   };
   const modeBoxes = Object.keys(modes).map((m) => h('label', { class: 'switch' }, h('input', { type: 'checkbox', value: m, checked: settings.enabled_modes.includes(m) }), modes[m].label));
   root.append(
@@ -124,6 +125,7 @@ async function renderPlan(root) {
       field('Session length (minutes, checked between items)', f.session_minutes),
       field('Attempts per item before Buddy moves on', f.max_attempts),
       field('Conversation turns per topic', f.turns_per_topic),
+      field('Practice reminder time', f.reminder_time, `Sam's iPad shows a reminder at this time on days he hasn't practised. Leave blank for none. Sam turns reminders on in My settings.`),
       h('label', { class: 'switch' }, f.fade_support, 'Reduce support on later items'),
       h('label', { class: 'switch' }, f.cue_cards, 'Show visual cue cards'),
       h('label', { class: 'switch' }, f.captions, 'Show captions'),
@@ -131,6 +133,8 @@ async function renderPlan(root) {
     h('button', { class: 'btn btn-primary', onclick: run(async () => {
       const s = {};
       for (const [k, el] of Object.entries(f)) s[k] = el.type === 'checkbox' ? el.checked : el.type === 'number' ? Number(el.value) : (el.value || null);
+      s.reminder_time = f.reminder_time.value || '';
+      s.timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
       s.enabled_modes = modeBoxes.map((b) => b.querySelector('input')).filter((i) => i.checked).map((i) => i.value);
       await api('/adult/settings', { method: 'PUT', body: { settings: s, current_activity_id: current.value } });
       toast('Practice plan saved.');

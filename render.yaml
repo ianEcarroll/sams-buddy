@@ -37,3 +37,9 @@ services:
         sync: false
       - key: APP_URL             # e.g. https://divine-bird-d627.ian-d13.workers.dev, for the link in emails
         sync: false
+      - key: VAPID_PUBLIC_KEY    # practice reminders: make both with  npx web-push generate-vapid-keys
+        sync: false
+      - key: VAPID_PRIVATE_KEY
+        sync: false
+      - key: VAPID_SUBJECT       # e.g. mailto:ian@pinpointed.dev
+        sync: false

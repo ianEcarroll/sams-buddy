@@ -25,6 +25,39 @@ function brand(name) {
   el.append(h('span', { class: 'brand-text' }, name ? h('small', {}, `${name}'s`) : null, 'Buddy'));
   return el;
 }
+// ---------- installing on the home screen, and staying calm when the internet drops
+const isStandalone = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+const isIOS = () => /iPad|iPhone|iPod/.test(navigator.userAgent) || (/Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 1);
+let installPrompt = null;
+addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); installPrompt = e; });
+const SHARE_ICON = '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-4px"><path d="M12 3v12M8 7l4-4 4 4"/><path d="M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7"/></svg>';
+function installHelp() {
+  if (isStandalone()) return null;
+  const box = h('div', { class: 'install-help' }, h('strong', {}, 'Add Buddy to your home screen'));
+  if (isIOS()) {
+    const p = h('p', {}, 'In Safari, tap the Share button ');
+    p.insertAdjacentHTML('beforeend', SHARE_ICON);
+    p.append(', then choose \u201cAdd to Home Screen\u201d. Open Buddy from its new icon.');
+    box.append(p);
+  } else if (installPrompt) {
+    box.append(h('p', {}, 'Buddy works best as an app on this device.'), h('button', { class: 'btn', onclick: async () => {
+      installPrompt.prompt(); const r = await installPrompt.userChoice; installPrompt = null;
+      if (r.outcome === 'accepted') box.remove();
+    } }, 'Install Buddy'));
+  } else {
+    box.append(h('p', {}, 'Open your browser menu and choose \u201cInstall app\u201d or \u201cAdd to Home screen\u201d.'));
+  }
+  return box;
+}
+function offlineScreen(on) {
+  document.getElementById('offline')?.remove();
+  if (!on) return;
+  document.body.append(h('div', { id: 'offline', class: 'pause', role: 'alert' }, h('div', {},
+    h('p', {}, 'Buddy needs the internet'), h('span', { class: 'hello-sub' }, 'Check the Wi-Fi is on. Buddy will carry on when it is back.'))));
+}
+addEventListener('offline', () => offlineScreen(true));
+addEventListener('online', () => offlineScreen(false));
+
 const icon = (name) => h('span', { 'aria-hidden': 'true', html: ICONS[name] || '' }).firstChild || '';
 function mount(...nodes) { $app.replaceChildren(...nodes.flat().filter((n) => n != null && n !== false)); window.scrollTo(0, 0); }
 function toast(msg) {
@@ -81,6 +114,7 @@ function renderPair(message) {
         boot();
       } catch (e) { toast(e.message); }
     } }, 'Connect'),
+    installHelp(),
   );
 }
 
@@ -152,6 +186,7 @@ function renderSettings() {
     h('label', { class: 'switch' }, captions, 'Show Buddy\u2019s words on screen'),
     h('div', { class: 'field' }, h('label', {}, 'How fast Buddy talks'), speed),
     ...pc.nodes,
+    reminderBox(),
     h('button', { class: 'btn btn-primary', onclick: async () => {
       try {
         await api('/settings', { method: 'PUT', body: { captions: captions.checked, speech_speed: Number(speed.value) } });
@@ -170,6 +205,43 @@ function renderSettings() {
     } }, 'Delete my practice notes'),
   );
 }
+
+// Practice reminders: Sam turns them on for this device; his team picks the time.
+function urlB64ToBytes(b64) {
+  const s = atob((b64 + '='.repeat((4 - (b64.length % 4)) % 4)).replace(/-/g, '+').replace(/_/g, '/'));
+  return Uint8Array.from(s, (c) => c.charCodeAt(0));
+}
+function reminderBox() {
+  const box = h('fieldset', { class: 'reminders', style: 'border:0;padding:0;margin:0;display:grid;gap:8px' }, h('legend', { style: 'font-weight:700;margin-bottom:6px' }, 'Practice reminder'));
+  const say = (...kids) => box.replaceChildren(box.firstChild, ...kids);
+  (async () => {
+    const info = await api('/push');
+    if (!info.configured) return say(h('p', { style: 'margin:0' }, 'Reminders are not set up yet.'));
+    if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+      return say(h('p', { style: 'margin:0' }, isIOS() && !isStandalone() ? 'To get reminders, add Buddy to your home screen first, then open it from there.' : 'This device cannot show reminders.'));
+    }
+    const when = info.reminder_time ? `at ${info.reminder_time}` : 'when your team sets a time';
+    if (info.subscribed) {
+      return say(h('p', { style: 'margin:0' }, `Buddy will remind you ${when} on days you have not practised.`),
+        h('button', { class: 'btn', onclick: async () => {
+          const reg = await navigator.serviceWorker.ready; const sub = await reg.pushManager.getSubscription(); if (sub) await sub.unsubscribe();
+          await api('/push', { method: 'DELETE' }); toast('Reminders turned off.'); reminderRefresh(box);
+        } }, 'Turn off reminders'));
+    }
+    say(h('p', { style: 'margin:0' }, `Buddy can remind you ${when} on days you have not practised.`),
+      h('button', { class: 'btn', onclick: async () => {
+        try {
+          if ((await Notification.requestPermission()) !== 'granted') return toast('Reminders need permission. You can allow them in Settings.');
+          const reg = await navigator.serviceWorker.ready;
+          const sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlB64ToBytes(info.publicKey) });
+          await api('/push', { method: 'POST', body: { subscription: sub.toJSON() } });
+          toast('Reminders are on.'); reminderRefresh(box);
+        } catch (e) { toast(e.message || 'Could not turn on reminders.'); }
+      } }, 'Turn on reminders'));
+  })().catch(() => say(h('p', { style: 'margin:0' }, 'Could not load reminder settings.')));
+  return box;
+}
+function reminderRefresh(old) { old.replaceWith(reminderBox()); }
 
 // ------------------------------------------------------------ practice
 let P = null;          // current practice view-state
