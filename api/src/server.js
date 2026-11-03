@@ -9,6 +9,7 @@ import { createSession, respond, confirmHeard, control, finish, ENGINE_DEFAULTS 
 import { judgeFromEnv } from './coach/judge.js';
 import { MODES, STARTER_STORIES } from './coach/modes.js';
 import { PLAN_GOALS, GOAL_KEYS, SUPPORT_CODES } from './coach/goals.js';
+import { emailEnabled, sendEmail, recipientsFor, practiceEmail } from './email.js';
 
 const app = express();
 app.set('trust proxy', true);
@@ -75,7 +76,13 @@ adult.use(wrap(requireAdult));
 adult.get('/me', wrap(async (req, res) => {
   const learner = await one('select id, name, settings, current_activity_id from learners where id=$1', [req.learnerId]);
   const consent = await one('select agreed_at, can_view, save_audio from consent where learner_id=$1', [req.learnerId]);
-  res.json({ adult: req.adult, learner: { ...learner, settings: settingsOf(learner) }, consent, voice: voiceEnabled() });
+  res.json({ adult: req.adult, learner: { ...learner, settings: settingsOf(learner) }, consent, voice: voiceEnabled(), email: emailEnabled() });
+}));
+
+// Each team member chooses for themselves whether to get an email after every practice.
+adult.put('/me/notifications', wrap(async (req, res) => {
+  await q('update adults set email_after_practice=$1 where id=$2', [!!req.body?.email_after_practice, req.adult.id]);
+  res.json({ ok: true });
 }));
 
 adult.get('/team', wrap(async (req, res) => {
@@ -433,7 +440,20 @@ async function saveRecords(sid, learnerId, state, reason) {
       r.plan_goal || 'other', r.support_code || null, r.success ?? null, JSON.stringify(r.visual_aids || []), r.sam_turns ?? null, r.score_correct ?? null, r.score_first ?? null, r.score_total ?? null]);
   }
   await q('update practice_sessions set state=$1, ended_at=now(), ended_reason=$2 where id=$3', [state, reason, sid]);
+  // Emails go out in the background: a slow or failed send never holds up Sam's practice.
+  if (records.length) notifyPractice(learnerId, state, records, reason).catch((e) => console.error('[email]', e.message));
   return records;
+}
+
+async function notifyPractice(learnerId, state, records, reason) {
+  if (!emailEnabled()) return;
+  const consent = await one('select agreed_at, can_view from consent where learner_id=$1', [learnerId]);
+  const adults = await many('select name, email, role, email_after_practice from adults where learner_id=$1', [learnerId]);
+  const learner = await one('select name from learners where id=$1', [learnerId]);
+  for (const a of recipientsFor(adults, consent)) {
+    const mail = practiceEmail({ learnerName: learner.name, adultName: a.name, activityTitle: state.activity.title, records, reason, appUrl: process.env.APP_URL });
+    await sendEmail({ to: a.email, ...mail });
+  }
 }
 
 device.post('/practice/start', wrap(async (req, res) => {

@@ -31,3 +31,9 @@ services:
         sync: false
       - key: ELEVENLABS_VOICE_ID
         sync: false
+      - key: RESEND_API_KEY      # optional: practice emails to the team
+        sync: false
+      - key: EMAIL_FROM          # e.g. Buddy <buddy@yourdomain.com>, on a domain verified in Resend
+        sync: false
+      - key: APP_URL             # e.g. https://divine-bird-d627.ian-d13.workers.dev, for the link in emails
+        sync: false
