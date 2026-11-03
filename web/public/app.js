@@ -17,6 +17,14 @@ function h(tag, attrs = {}, ...kids) {
   for (const k of kids.flat()) if (k != null && k !== false) el.append(k.nodeType ? k : document.createTextNode(k));
   return el;
 }
+const MARK = '<svg viewBox="0 0 128 112" aria-hidden="true"><rect class="b1" x="6" y="22" width="90" height="64" rx="28"/><path class="b1" d="M26 80 L18 104 L50 84 Z"/><rect class="b2" x="54" y="6" width="68" height="50" rx="24" stroke-width="6"/><path class="b2" d="M106 50 L118 66 L96 54 Z" stroke="none"/></svg>';
+// Logo lockup: the mark, then "<Name>'s" over a bold "Buddy". Name left out before we know who the app is for.
+function brand(name) {
+  const el = h('span', { class: 'brand' });
+  el.innerHTML = MARK; // trusted constant
+  el.append(h('span', { class: 'brand-text' }, name ? h('small', {}, `${name}'s`) : null, 'Buddy'));
+  return el;
+}
 const icon = (name) => h('span', { 'aria-hidden': 'true', html: ICONS[name] || '' }).firstChild || '';
 function mount(...nodes) { $app.replaceChildren(...nodes.flat().filter((n) => n != null && n !== false)); window.scrollTo(0, 0); }
 function toast(msg) {
@@ -60,7 +68,8 @@ function deviceLabel() {
 function renderPair(message) {
   const input = h('input', { id: 'code', inputmode: 'text', autocomplete: 'one-time-code', maxlength: '8', style: 'text-transform:uppercase;font-size:1.6rem;letter-spacing:.15em' });
   mount(
-    h('h1', { class: 'hello' }, "Sam's Buddy"),
+    brand(),
+    h('h1', { class: 'hello' }, 'Connect this device'),
     h('p', { class: 'hello-sub' }, message || 'Ask someone on your support team for a code to connect this device.'),
     h('div', { class: 'field' }, h('label', { for: 'code' }, 'Code'), input),
     h('button', { class: 'btn btn-primary', onclick: async () => {
@@ -118,6 +127,7 @@ function renderHome() {
       icon(MODE_INFO[mode].icon), h('span', {}, MODE_INFO[mode].label, h('br'), h('small', {}, on ? `${list.length} to practise` : 'Not yet')));
   });
   mount(
+    brand(home.name),
     h('div', {}, h('h1', { class: 'hello' }, `Hi ${home.name}`), h('p', { class: 'hello-sub' }, 'Ready when you are.')),
     h('button', { class: 'start', disabled: !current, onclick: () => startPractice(current.id) },
       h('strong', {}, 'Start My Practice'), h('span', {}, current ? current.title : 'Your team has not picked one yet')),

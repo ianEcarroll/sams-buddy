@@ -18,6 +18,14 @@ function h(tag, attrs = {}, ...kids) {
   for (const k of kids.flat()) if (k != null && k !== false) el.append(k.nodeType ? k : document.createTextNode(k));
   return el;
 }
+const MARK = '<svg viewBox="0 0 128 112" aria-hidden="true"><rect class="b1" x="6" y="22" width="90" height="64" rx="28"/><path class="b1" d="M26 80 L18 104 L50 84 Z"/><rect class="b2" x="54" y="6" width="68" height="50" rx="24" stroke-width="6"/><path class="b2" d="M106 50 L118 66 L96 54 Z" stroke="none"/></svg>';
+// Logo lockup: the mark, then "<Name>'s" over a bold "Buddy". Name left out before we know who the app is for.
+function brand(name) {
+  const el = h('span', { class: 'brand' });
+  el.innerHTML = MARK; // trusted constant
+  el.append(h('span', { class: 'brand-text' }, name ? h('small', {}, `${name}'s`) : null, 'Buddy'));
+  return el;
+}
 const field = (label, input, hint) => h('label', { class: 'field' }, h('span', {}, label), input, hint ? h('small', { class: 'muted' }, hint) : null);
 const toast = (msg) => { const t = h('div', { class: 'toast', role: 'status' }, msg); document.body.append(t); setTimeout(() => t.remove(), 4000); };
 const list = (s) => String(s || '').split(',').map((x) => x.trim()).filter(Boolean);
@@ -55,15 +63,15 @@ function renderLogin() {
   const pw = h('input', { type: 'password', autocomplete: 'current-password' });
   const go = run(async () => { const r = await api('/adult/login', { method: 'POST', body: { email: email.value, password: pw.value } }); token = r.token; sessionStorage.setItem(TOKEN_KEY, token); boot(); });
   pw.addEventListener('keydown', (e) => e.key === 'Enter' && go());
-  $app.replaceChildren(h('h1', {}, "Sam's Buddy support team"), h('div', { class: 'panel', style: 'max-width:420px;display:grid;gap:12px' }, field('Email', email), field('Password', pw), h('button', { class: 'btn btn-primary', onclick: go }, 'Sign in')));
+  $app.replaceChildren(brand(), h('h1', {}, 'Support team sign in'), h('div', { class: 'panel', style: 'max-width:420px;display:grid;gap:18px' }, field('Email', email), field('Password', pw), h('button', { class: 'btn btn-primary', onclick: go }, 'Sign in')));
 }
 
 function renderSetup() {
   const f = { setupToken: h('input'), learnerName: h('input', { value: 'Sam' }), ownerName: h('input'), email: h('input', { type: 'email' }), password: h('input', { type: 'password' }) };
   $app.replaceChildren(
-    h('h1', {}, "Set up Sam's Buddy"),
+    brand(), h('h1', {}, 'Set up Buddy'),
     h('p', { class: 'muted' }, 'This creates the main parent account. You can add the speech therapist, teachers and job coach afterwards.'),
-    h('div', { class: 'panel', style: 'max-width:460px;display:grid;gap:12px' },
+    h('div', { class: 'panel', style: 'max-width:460px;display:grid;gap:18px' },
       field('Setup code', f.setupToken, 'The SETUP_TOKEN value from the server settings.'),
       field("Learner's first name", f.learnerName), field('Your name', f.ownerName), field('Your email', f.email), field('Password (10+ characters)', f.password),
       h('button', { class: 'btn btn-primary', onclick: run(async () => {
@@ -80,7 +88,7 @@ function renderShell() {
   body.append = (...kids) => HTMLElement.prototype.append.apply(body, kids.filter((k) => k != null && k !== false));
   $app.replaceChildren(
     h('header', { class: 'adult-head' },
-      h('div', {}, h('h1', {}, `${me.learner.name}'s Buddy`), h('span', { class: 'muted' }, `${me.adult.name} · ${ROLE[me.adult.role]}`)),
+      h('div', {}, h('h1', {}, brand(me.learner.name)), h('span', { class: 'muted' }, `${me.adult.name} · ${ROLE[me.adult.role]}`)),
       h('button', { class: 'btn btn-quiet', onclick: () => { sessionStorage.removeItem(TOKEN_KEY); token = null; boot(); } }, 'Sign out')),
     h('nav', { class: 'tabs', role: 'tablist' }, TABS.map(([k, l]) => h('button', { role: 'tab', 'aria-selected': String(tab === k), onclick: () => { tab = k; renderShell(); } }, l))),
     body,
