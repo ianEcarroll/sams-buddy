@@ -1,4 +1,4 @@
-/* Sam's Buddy — one typeface chosen for legibility: Atkinson Hyperlegible. */
+/* Buddy — one typeface chosen for legibility: Lexend (built to reduce visual crowding). */
 :root {
   --ink: #14305a;
   --ink-soft: #4d5f78;
@@ -10,11 +10,12 @@
   --listen: #14305a;
   --sun: #f4b63f;
   --sun-soft: #fff4d8;
+  --accent: #de9b7c;
   --sky-soft: #e3eefa;
   --danger: #b3261e;
   --radius-lg: 28px;
   --radius: 16px;
-  --font: 'Atkinson Hyperlegible', 'Segoe UI', system-ui, -apple-system, sans-serif;
+  --font: 'Lexend', 'Segoe UI', system-ui, -apple-system, sans-serif;
   color-scheme: light dark;
   box-sizing: border-box;
   padding-top: env(safe-area-inset-top, 0px);
@@ -48,8 +49,16 @@ button { cursor: pointer; }
 .btn-quiet { border-color: transparent; background: transparent; text-decoration: underline; text-underline-offset: 4px; min-height: 48px; }
 .btn-danger { color: var(--danger); border-color: currentColor; }
 .btn:disabled { opacity: .45; cursor: not-allowed; }
-.field { display: grid; gap: 6px; }
-.field input, .field select, .field textarea { border: 2px solid var(--line); border-radius: 12px; padding: 12px 14px; background: var(--surface); min-height: 52px; }
+.field { display: grid; gap: 8px; align-content: start; min-width: 0; }
+.field input, .field select, .field textarea { border: 2px solid var(--line); border-radius: 12px; padding: 12px 14px; background: var(--surface); min-height: 52px; width: 100%; max-width: 100%; min-width: 0; }
+.field > small { font-size: .9rem; line-height: 1.4; margin-top: -2px; }
+
+/* ---------- Logo lockup: mark + "<Name>'s / Buddy" ---------- */
+.brand { display: inline-flex; align-items: center; gap: 10px; }
+.brand svg { width: 44px; height: 39px; flex: none; }
+.brand-text { display: grid; line-height: 1.05; font-weight: 700; font-size: 1.5rem; }
+.brand-text small { font-size: .55em; font-weight: 400; color: var(--ink-soft); }
+.brand .b1 { fill: var(--talk); } .brand .b2 { fill: var(--accent); stroke: var(--paper); }
 .toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(18px + env(safe-area-inset-bottom, 0px)); background: var(--ink); color: var(--paper); padding: 12px 18px; border-radius: 12px; max-width: 92vw; z-index: 50; }
 
 /* ---------- Sam: home ---------- */
@@ -119,17 +128,28 @@ button { cursor: pointer; }
 .adult h3 { font-size: 1.05rem; margin: 16px 0 6px; }
 .adult .btn { min-height: 44px; padding: 8px 14px; font-size: .98rem; }
 .adult .field input, .adult .field select, .adult .field textarea { min-height: 44px; padding: 8px 12px; }
+.adult .field > span { font-weight: 600; }
+.adult-head .brand-text { font-size: 1.6rem; }
 .adult-head { display: flex; justify-content: space-between; align-items: end; flex-wrap: wrap; gap: 10px; border-bottom: 2px solid var(--line); padding-bottom: 12px; }
 .tabs { display: flex; gap: 4px; flex-wrap: wrap; margin: 14px 0 6px; }
 .tabs button { border: 0; background: none; padding: 10px 14px; border-radius: 10px; font-weight: 700; color: var(--ink-soft); }
 .tabs button[aria-selected="true"] { background: var(--surface); color: var(--ink); box-shadow: inset 0 -3px 0 var(--talk); }
 .panel { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; margin: 12px 0; }
-.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 18px 16px; }
+/* Line up inputs across a row even when one label wraps or one field has a hint. */
+@supports (grid-template-rows: subgrid) {
+  .grid2 > .field { grid-row: span 3; grid-template-rows: subgrid; row-gap: 8px; }
+  .grid2 > .field > span { align-self: end; }
+  .grid2:has(> .field) > .switch { grid-row: span 3; align-self: center; }
+  .grid2 > .btn { grid-row: span 2; align-self: end; justify-self: start; }
+}
+.panel.list { padding: 2px 16px; }
+.list li:last-child { border-bottom: 0; }
 .muted { color: var(--ink-soft); }
 .row-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 .list { list-style: none; padding: 0; margin: 0; }
 .list li { display: flex; justify-content: space-between; gap: 12px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--line); }
-.item-box { border: 2px dashed var(--line); border-radius: 12px; padding: 12px; margin: 10px 0; display: grid; gap: 10px; }
+.item-box { border: 2px dashed var(--line); border-radius: 12px; padding: 16px; margin: 10px 0; display: grid; gap: 18px; }
 .thumbs { display: flex; gap: 8px; flex-wrap: wrap; }
 .thumbs img { width: 84px; height: 84px; object-fit: cover; border-radius: 8px; border: 1px solid var(--line); }
 .ladder { display: grid; grid-template-columns: 140px 1fr; gap: 6px 10px; align-items: center; }
