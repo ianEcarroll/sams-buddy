@@ -539,6 +539,23 @@ async function renderNotes(root) {
 }
 
 // ------------------------------------------------------------ team, devices, privacy
+// Each team member decides for themselves whether to get an email after every practice.
+function emailPanel(c) {
+  const name = me.learner.name;
+  if (!me.email) return h('div', { class: 'panel' }, h('p', { style: 'margin:0' }, 'Practice emails are not switched on for this app yet.'));
+  const box = h('input', { type: 'checkbox', checked: !!me.adult.email_after_practice });
+  box.addEventListener('change', run(async () => {
+    await api('/adult/me/notifications', { method: 'PUT', body: { email_after_practice: box.checked } });
+    me.adult.email_after_practice = box.checked;
+    toast(box.checked ? `You'll get an email after each practice.` : 'Practice emails turned off.');
+  }));
+  const blocked = !c?.agreed_at || !c.can_view?.[me.adult.role];
+  return h('div', { class: 'panel' },
+    h('label', { class: 'switch' }, box, `Email me after each practice (${me.adult.email})`),
+    h('p', { class: 'muted', style: 'margin:6px 0 0' }, `A short note when ${name} finishes: what he practised, how it went and the support he needed.`),
+    blocked ? h('p', { style: 'margin:8px 0 0' }, `${name} hasn't chosen to share his practice records with ${ROLE[me.adult.role].toLowerCase()}s, so no emails will be sent until he does.`) : null);
+}
+
 async function renderTeam(root) {
   const [team, devices] = await Promise.all([api('/adult/team'), api('/adult/devices')]);
   const c = me.consent;
@@ -565,6 +582,9 @@ async function renderTeam(root) {
       codeBox,
       devices.length ? h('ul', { class: 'list' }, devices.map((d) => h('li', {}, h('span', {}, `${d.label} · last used ${d.last_seen_at ? fmt(d.last_seen_at) : 'never'}`),
         h('button', { class: 'btn btn-danger', onclick: run(async () => { if (confirm(`Disconnect ${d.label}?`)) { await api(`/adult/devices/${d.id}`, { method: 'DELETE' }); renderShell(); } }) }, 'Disconnect')))) : null),
+
+    h('h2', {}, 'Practice emails'),
+    emailPanel(c),
 
     h('h2', {}, 'Support team'),
     h('ul', { class: 'list panel' }, team.map((t) => h('li', {}, h('span', {}, `${t.name} · ${ROLE[t.role]}${t.is_owner ? ' (main account)' : ''} · ${t.email}`),

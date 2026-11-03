@@ -43,7 +43,7 @@ const bearer = (req) => (req.headers.authorization || '').replace(/^Bearer\s+/i,
 export async function requireAdult(req, res, next) {
   const p = verify(bearer(req));
   if (!p || p.kind !== 'adult') return res.status(401).json({ error: 'Please sign in again.' });
-  const adult = await one('select id, learner_id, name, email, role, is_owner from adults where id=$1', [p.sub]);
+  const adult = await one('select id, learner_id, name, email, role, is_owner, email_after_practice from adults where id=$1', [p.sub]);
   if (!adult) return res.status(401).json({ error: 'This account no longer exists.' });
   req.adult = adult;
   req.learnerId = adult.learner_id;
