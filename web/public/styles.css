@@ -256,3 +256,11 @@ details > summary { cursor: pointer; font-weight: 700; padding: 6px 0; }
 .choice { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .choice .btn { min-height: 88px; font-size: 1.15rem; flex-direction: column; }
 .cards > .card:first-child:nth-last-child(odd) { grid-column: 1 / -1; min-height: 110px; }
+
+/* ---------- Install guide and offline page ---------- */
+.install-help { background: var(--surface); border: 2px solid var(--line); border-radius: var(--radius); padding: 14px 16px; display: grid; gap: 6px; }
+.install-help p { margin: 0; color: var(--ink-soft); }
+.install-help .btn { justify-self: start; }
+.offline-page { justify-content: center; }
+.offline-page .btn { align-self: flex-start; text-decoration: none; }
+#offline .hello-sub { display: block; font-size: 1.1rem; }

@@ -10,6 +10,7 @@ import { judgeFromEnv } from './coach/judge.js';
 import { MODES, STARTER_STORIES } from './coach/modes.js';
 import { PLAN_GOALS, GOAL_KEYS, SUPPORT_CODES } from './coach/goals.js';
 import { emailEnabled, sendEmail, recipientsFor, practiceEmail } from './email.js';
+import { pushEnabled, pushPublicKey, sendPush, reminderDue, reminderMessage } from './push.js';
 
 const app = express();
 app.set('trust proxy', true);
@@ -34,6 +35,8 @@ export const SETTING_DEFAULTS = {
   ...ENGINE_DEFAULTS,
   speech_speed: 0.9,
   captions: true,
+  reminder_time: '',          // 'HH:MM' in the learner's time zone; '' = no reminder
+  timezone: 'Europe/Paris',
   voice_id: null,
   enabled_modes: ['story', 'object', 'task', 'listen'],
 };
@@ -144,6 +147,8 @@ adult.put('/settings', wrap(async (req, res) => {
   const clean = {};
   for (const k of SETTING_KEYS) if (k in (body.settings || {})) clean[k] = body.settings[k];
   if (clean.enabled_modes) clean.enabled_modes = clean.enabled_modes.filter((m) => MODES[m]);
+  if ('reminder_time' in clean && !/^([01]\d|2[0-3]):[0-5]\d$/.test(clean.reminder_time || '')) clean.reminder_time = '';
+  if ('timezone' in clean) { try { new Intl.DateTimeFormat('en', { timeZone: clean.timezone }); } catch { delete clean.timezone; } }
   await q('update learners set settings = settings || $1::jsonb, current_activity_id = coalesce($2, current_activity_id) where id=$3', [clean, body.current_activity_id || null, req.learnerId]);
   if (body.current_activity_id === '') await q('update learners set current_activity_id=null where id=$1', [req.learnerId]);
   res.json({ ok: true });
@@ -527,6 +532,26 @@ device.post('/practice/:sid/finish', wrap(async (req, res) => {
   res.json({ ok: true, records });
 }));
 
+// ---------- practice reminders (web push)
+device.get('/push', wrap(async (req, res) => {
+  const n = await one('select count(*)::int n from push_subscriptions where device_id=$1', [req.device.id]);
+  const l = await one('select settings from learners where id=$1', [req.learnerId]);
+  res.json({ configured: pushEnabled(), publicKey: pushPublicKey(), subscribed: n.n > 0, reminder_time: settingsOf(l).reminder_time });
+}));
+device.post('/push', wrap(async (req, res) => {
+  const sub = req.body?.subscription;
+  if (!pushEnabled()) return res.status(503).json({ error: 'Reminders are not set up yet.' });
+  if (!sub?.endpoint || !sub?.keys?.p256dh || !sub?.keys?.auth || !/^https:\/\//.test(sub.endpoint)) return res.status(400).json({ error: 'That reminder subscription is not valid.' });
+  await q(`insert into push_subscriptions(learner_id, device_id, endpoint, p256dh, auth) values ($1,$2,$3,$4,$5)
+    on conflict (endpoint) do update set learner_id=excluded.learner_id, device_id=excluded.device_id, p256dh=excluded.p256dh, auth=excluded.auth`,
+  [req.learnerId, req.device.id, sub.endpoint, sub.keys.p256dh, sub.keys.auth]);
+  res.json({ ok: true });
+}));
+device.delete('/push', wrap(async (req, res) => {
+  await q('delete from push_subscriptions where device_id=$1', [req.device.id]);
+  res.json({ ok: true });
+}));
+
 device.get('/practice/:sid/speech/:eid', wrap(async (req, res) => {
   const e = await one(`select e.text from practice_events e join practice_sessions s on s.id=e.session_id
     where e.id=$1 and e.session_id=$2 and s.learner_id=$3 and e.who='buddy'`, [req.params.eid, req.params.sid, req.learnerId]);
@@ -547,9 +572,37 @@ app.use((err, req, res, next) => {
   res.status(err.status || 500).json({ error: err.status ? err.message : 'Something went wrong on the server. Try again.' });
 });
 
+// ------------------------------------------------------------------ reminder schedule
+
+// Once a minute: send today's reminder to any learner whose chosen time has passed and who hasn't practised yet.
+export async function sendDueReminders(now = new Date()) {
+  if (!pushEnabled()) return 0;
+  let sent = 0;
+  const learners = await many(`select l.id, l.name, l.settings, l.last_reminder_on::text as last_reminder_on,
+      (select max(started_at) from practice_sessions s where s.learner_id=l.id) as last_practice_at
+    from learners l where coalesce(l.settings->>'reminder_time','') <> ''
+      and exists (select 1 from push_subscriptions p where p.learner_id=l.id)`);
+  for (const l of learners) {
+    const st = settingsOf(l);
+    if (!reminderDue({ now, timeZone: st.timezone, reminderTime: st.reminder_time, lastReminderOn: l.last_reminder_on, lastPracticeAt: l.last_practice_at })) continue;
+    const date = new Intl.DateTimeFormat('en-CA', { timeZone: st.timezone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(now);
+    await q('update learners set last_reminder_on=$1 where id=$2', [date, l.id]);
+    for (const sub of await many('select id, endpoint, p256dh, auth from push_subscriptions where learner_id=$1', [l.id])) {
+      try {
+        if ((await sendPush(sub, reminderMessage(l.name))) === 'gone') await q('delete from push_subscriptions where id=$1', [sub.id]);
+        else sent++;
+      } catch (e) { console.error('[push]', e.message); }
+    }
+  }
+  return sent;
+}
+
 const port = Number(process.env.PORT || 8787);
 migrate()
-  .then(() => app.listen(port, () => console.log(`[sams-buddy] API on :${port}`)))
+  .then(() => app.listen(port, () => {
+    console.log(`[sams-buddy] API on :${port}`);
+    setInterval(() => sendDueReminders().catch((e) => console.error('[push]', e.message)), 60_000);
+  }))
   .catch((e) => { console.error('Migration failed', e); process.exit(1); });
 
 process.on('SIGTERM', () => pool.end().finally(() => process.exit(0)));

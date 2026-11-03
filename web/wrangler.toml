@@ -1,7 +1,10 @@
-# Deploys to the existing worker: https://divine-bird-d627.ian-d13.workers.dev
+# Deploys to the existing worker. Served at https://app.growwithbuddy.com and, while devices move over,
+# still at https://divine-bird-d627.ian-d13.workers.dev
 name = "divine-bird-d627"
 main = "worker.js"
 compatibility_date = "2026-09-01"
+workers_dev = true
+routes = [{ pattern = "app.growwithbuddy.com", custom_domain = true }]
 
 [assets]
 directory = "./public"
