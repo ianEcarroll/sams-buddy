@@ -19,7 +19,7 @@ const cap = (s) => (s ? s[0].toUpperCase() + s.slice(1) : s);
 
 // ---------------------------------------------------------------- session lifecycle
 
-export function createSession({ activity, settings = {}, learnerName = 'Sam', now = Date.now() }) {
+export function createSession({ activity, settings = {}, learnerName = 'Sam', learnerAge = null, now = Date.now() }) {
   const items = activity.content?.items || [];
   if (!items.length) throw new Error('This activity has no items yet.');
   const state = {
@@ -37,6 +37,7 @@ export function createSession({ activity, settings = {}, learnerName = 'Sam', no
     done: false,
     startedAt: now,
     learnerName,
+    learnerAge,
   };
   const lines = openItem(state);
   return { state, turn: state.mode === 'listen' ? listenTurn(state, lines) : makeTurn(state, lines) };
@@ -154,7 +155,7 @@ async function process_(state, { text, displayText, confirmed }, judge) {
     : [];
 
   const judgeElements = state.mode === 'conversation' ? ['turn'] : it.elements.filter((e) => e !== 'order' && e !== 'clarify');
-  const j = await judge({ mode: state.mode, item, elements: judgeElements, text, activity: state.activity, history, inviteQuestion });
+  const j = await judge({ mode: state.mode, item, elements: judgeElements, text, activity: state.activity, history, inviteQuestion, learner: { name: state.learnerName, age: state.learnerAge } });
 
   if (j.garbled && !confirmed) return askToConfirm(state, { text, displayText });
 
@@ -463,7 +464,7 @@ async function listenAnswer(state, { text, displayText, confirmed }, judge) {
   const item = curItem(state);
   const qi = L.queue[L.pos];
   const q = questionsOf(state)[qi];
-  const j = await judge({ mode: 'listen', item: { ...q, story: item.story, clarify_phrases: [] }, elements: ['answer'], text, activity: state.activity, history: [] });
+  const j = await judge({ mode: 'listen', item: { ...q, story: item.story, clarify_phrases: [] }, elements: ['answer'], text, activity: state.activity, history: [], learner: { name: state.learnerName, age: state.learnerAge } });
   if (j.garbled && !confirmed) return askToConfirm(state, { text, displayText });
   if (j.help && j.help !== 'none') return { state, turn: listenTurn(state, listenHelp(state, j.help, text, 'spoken')) };
 
@@ -576,7 +577,7 @@ function advance(state, lines) {
 /** Sam pressed Finish (or the app closed the session). Returns any records not yet produced. */
 export function finish(state, reason = 'finished') {
   if (!state.done && state.item && (state.item.responses.length || state.item.help.length || state.item.supportGiven.length)) {
-    state.completed.push(buildRecord(state, state.item, reason === 'finished' ? 'Sam finished before this item was complete.' : `Practice stopped (${reason}).`));
+    state.completed.push(buildRecord(state, state.item, reason === 'finished' ? `${state.learnerName || 'The learner'} finished before this item was complete.` : `Practice stopped (${reason}).`));
   }
   state.done = true;
   return { state, records: state.completed };
@@ -635,7 +636,7 @@ export function buildRecord(state, it, stopNote = null) {
 
   const independent = metEls.filter((e) => it.met[e].independent).map((e) => `${evLabel(e)}: "${it.met[e].evidence}"`);
   const after = metEls.filter((e) => !it.met[e].independent).map((e) => `${evLabel(e)}: "${it.met[e].evidence}"`);
-  const support = it.supportGiven.map((s) => `${cap(LEVELS[s.level])} for ${label(s.el).toLowerCase()}: "${s.text}"${s.by === 'sam' ? ' (Sam asked)' : ''}`);
+  const support = it.supportGiven.map((s) => `${cap(LEVELS[s.level])} for ${label(s.el).toLowerCase()}: "${s.text}"${s.by === 'sam' ? ' (asked for it)' : ''}`);
   const help = it.help.map((h) => `${h.source === 'button' ? 'Pressed' : 'Said'} "${h.text}" — counted as a successful response`);
 
   const notes = [];

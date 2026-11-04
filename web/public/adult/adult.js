@@ -48,11 +48,18 @@ const run = (fn) => async (...a) => { try { await fn(...a); } catch (e) { if (e.
 
 // ------------------------------------------------------------ sign in / setup
 async function boot() {
+  const invite = new URLSearchParams(location.search).get('invite');
+  if (invite && !token) return renderInvite(invite);
   if (!token) {
     const { needsSetup } = await api('/setup/status');
     return needsSetup ? renderSetup() : renderLogin();
   }
-  me = await api('/adult/me');
+  try {
+    me = await api('/adult/me');
+  } catch (e) {
+    return $app.replaceChildren(brand(), h('h1', {}, 'Buddy'), h('p', { class: 'panel' }, e.message),
+      h('button', { class: 'btn btn-quiet', onclick: () => { sessionStorage.removeItem(TOKEN_KEY); token = null; boot(); } }, 'Sign out'));
+  }
   modes = modes || await api('/adult/modes');
   goals = goals || await api('/adult/goals');
   renderShell();
@@ -67,7 +74,7 @@ function renderLogin() {
 }
 
 function renderSetup() {
-  const f = { setupToken: h('input'), learnerName: h('input', { value: 'Sam' }), ownerName: h('input'), email: h('input', { type: 'email' }), password: h('input', { type: 'password' }) };
+  const f = { setupToken: h('input'), learnerName: h('input'), ownerName: h('input'), email: h('input', { type: 'email' }), password: h('input', { type: 'password' }) };
   $app.replaceChildren(
     brand(), h('h1', {}, 'Set up Buddy'),
     h('p', { class: 'muted' }, 'This creates the main parent account. You can add the speech therapist, teachers and job coach afterwards.'),
@@ -80,8 +87,37 @@ function renderSetup() {
       }) }, 'Create account')));
 }
 
+// ------------------------------------------------------------ joining by invite (a new family)
+async function renderInvite(inviteToken) {
+  const { valid } = await api(`/invite/${encodeURIComponent(inviteToken)}`);
+  const toSignIn = () => { history.replaceState(null, '', '/adult/'); boot(); };
+  if (!valid) {
+    return $app.replaceChildren(brand(), h('h1', {}, 'This invite has expired'),
+      h('p', { class: 'panel' }, 'The link has already been used or is more than 14 days old. Ask the person who sent it for a new one.'),
+      h('button', { class: 'btn', onclick: toSignIn }, 'I already have an account'));
+  }
+  const f = {
+    learnerName: h('input', { autocomplete: 'off' }), birthYear: h('input', { type: 'number', inputmode: 'numeric', min: '1990', max: String(new Date().getFullYear()), placeholder: 'e.g. 2011' }),
+    ownerName: h('input', { autocomplete: 'name' }), email: h('input', { type: 'email', autocomplete: 'email' }), password: h('input', { type: 'password', autocomplete: 'new-password' }),
+  };
+  $app.replaceChildren(
+    brand(), h('h1', {}, 'Welcome to Buddy'),
+    h('p', { class: 'muted', style: 'max-width:60ch' }, 'Set up Buddy for your child. You\u2019ll have the main account, and can add their speech therapist, teachers and job coach afterwards.'),
+    h('div', { class: 'panel', style: 'max-width:460px;display:grid;gap:18px' },
+      field('Your child\u2019s first name', f.learnerName, 'Buddy uses it in the app: \u201cSam\u2019s Buddy\u201d, \u201cHi Sam\u201d.'),
+      field('Year of birth (optional)', f.birthYear, 'Helps Buddy talk at the right level for their age.'),
+      field('Your name', f.ownerName), field('Your email', f.email), field('Password (10+ characters)', f.password),
+      h('button', { class: 'btn btn-primary', onclick: run(async () => {
+        const r = await api(`/invite/${encodeURIComponent(inviteToken)}`, { method: 'POST', body: Object.fromEntries(Object.entries(f).map(([k, v]) => [k, v.value])) });
+        token = r.token; sessionStorage.setItem(TOKEN_KEY, token);
+        history.replaceState(null, '', '/adult/'); tab = 'team'; boot();
+      }) }, 'Create our account')),
+    h('button', { class: 'btn btn-quiet', onclick: toSignIn }, 'I already have an account'));
+}
+
 // ------------------------------------------------------------ shell
 const TABS = [['plan', 'Practice plan'], ['activities', 'Activities'], ['review', 'Review practice'], ['notes', 'Observations'], ['team', 'Team & privacy']];
+const tabsFor = () => (me.admin ? [...TABS, ['families', 'Families']] : TABS);
 function renderShell() {
   const body = h('div', {});
   // Sections that don't apply (e.g. owner-only panels) come through as null: skip them rather than print "null".
@@ -90,11 +126,11 @@ function renderShell() {
     h('header', { class: 'adult-head' },
       h('div', {}, h('h1', {}, brand(me.learner.name)), h('span', { class: 'muted' }, `${me.adult.name} · ${ROLE[me.adult.role]}`)),
       h('button', { class: 'btn btn-quiet', onclick: () => { sessionStorage.removeItem(TOKEN_KEY); token = null; boot(); } }, 'Sign out')),
-    h('nav', { class: 'tabs', role: 'tablist' }, TABS.map(([k, l]) => h('button', { role: 'tab', 'aria-selected': String(tab === k), onclick: () => { tab = k; renderShell(); } }, l))),
+    h('nav', { class: 'tabs', role: 'tablist' }, tabsFor().map(([k, l]) => h('button', { role: 'tab', 'aria-selected': String(tab === k), onclick: () => { tab = k; renderShell(); } }, l))),
     body,
   );
-  if (!me.voice) body.append(h('p', { class: 'panel' }, 'Voice is not connected yet (ELEVENLABS_API_KEY). Sam can still practise by typing.'));
-  ({ plan: renderPlan, activities: renderActivities, review: renderReview, notes: renderNotes, team: renderTeam })[tab](body).catch((e) => toast(e.message));
+  if (!me.voice) body.append(h('p', { class: 'panel' }, `Voice is not connected yet (ELEVENLABS_API_KEY). ${me.learner.name} can still practise by typing.`));
+  ({ plan: renderPlan, activities: renderActivities, review: renderReview, notes: renderNotes, team: renderTeam, families: renderFamilies })[tab](body).catch((e) => toast(e.message));
 }
 
 // ------------------------------------------------------------ practice plan + settings
@@ -113,8 +149,8 @@ async function renderPlan(root) {
   const modeBoxes = Object.keys(modes).map((m) => h('label', { class: 'switch' }, h('input', { type: 'checkbox', value: m, checked: settings.enabled_modes.includes(m) }), modes[m].label));
   root.append(
     h('h2', {}, 'Start My Practice'),
-    h('div', { class: 'panel' }, field('When Sam presses Start My Practice, open:', current, 'Pick one activity so Sam has fewer decisions to make.')),
-    h('h2', {}, 'Practice types Sam can see'),
+    h('div', { class: 'panel' }, field(`When ${me.learner.name} presses Start My Practice, open:`, current, `Pick one activity so ${me.learner.name} has fewer decisions to make.`)),
+    h('h2', {}, `Practice types ${me.learner.name} can see`),
     h('div', { class: 'panel grid2' }, modeBoxes),
     h('h2', {}, 'Buddy\u2019s voice'),
     voicePicker(f.voice_id),
@@ -125,7 +161,7 @@ async function renderPlan(root) {
       field('Session length (minutes, checked between items)', f.session_minutes),
       field('Attempts per item before Buddy moves on', f.max_attempts),
       field('Conversation turns per topic', f.turns_per_topic),
-      field('Practice reminder time', f.reminder_time, `Sam's iPad shows a reminder at this time on days he hasn't practised. Leave blank for none. Sam turns reminders on in My settings.`),
+      field('Practice reminder time', f.reminder_time, `${me.learner.name}'s iPad or phone shows a reminder at this time on days they haven't practised. Leave blank for none. ${me.learner.name} turns reminders on in My settings.`),
       h('label', { class: 'switch' }, f.fade_support, 'Reduce support on later items'),
       h('label', { class: 'switch' }, f.cue_cards, 'Show visual cue cards'),
       h('label', { class: 'switch' }, f.captions, 'Show captions'),
@@ -158,7 +194,7 @@ function voicePicker(idInput) {
       box.replaceChildren(
         data.fallback ? h('p', { class: 'muted', style: 'margin-top:0' }, 'Showing ElevenLabs\u2019 standard voices. To list every voice on the account, give the ElevenLabs API key the \u201cVoices: Read\u201d permission.') : null,
         h('p', { style: 'margin-top:0' }, 'Current voice: ', h('strong', {}, cur ? cur.name : 'Default voice'),
-          '. Press ', h('strong', {}, 'Listen'), ' to hear each voice say a typical Buddy line, then ', h('strong', {}, 'Use this voice'), '. It\u2019s a good choice to make with Sam.'),
+          '. Press ', h('strong', {}, 'Listen'), ' to hear each voice say a typical Buddy line, then ', h('strong', {}, 'Use this voice'), `. It\u2019s a good choice to make with ${me.learner.name}.`),
         h('ul', { class: 'voice-list' }, data.voices.map((v) => {
           const on = v.id === chosen();
           const listen = h('button', { class: 'btn', onclick: run(async () => {
@@ -200,7 +236,7 @@ async function renderActivities(root) {
       h('div', { class: 'row-actions' },
         h('button', { class: 'btn', onclick: () => editActivity(root, a) }, 'Edit'),
         h('button', { class: 'btn btn-danger', onclick: run(async () => { if (confirm(`Archive "${a.title}"?`)) { await api(`/adult/activities/${a.id}`, { method: 'DELETE' }); renderShell(); } }) }, 'Archive'))))) :
-      h('p', { class: 'panel' }, 'No activities yet. Start with one of the practice types above, using the pictures and instructions from Sam\u2019s therapist.'),
+      h('p', { class: 'panel' }, `No activities yet. Start with one of the practice types above, using the pictures and instructions from ${me.learner.name}\u2019s therapist.`),
   );
 }
 
@@ -230,7 +266,7 @@ function editActivity(root, a) {
   };
   planGoal.addEventListener('change', drawHint);
   drawHint();
-  const status = h('select', {}, h('option', { value: 'active', selected: a.status === 'active' }, 'Ready for Sam'), h('option', { value: 'draft', selected: a.status === 'draft' }, 'Draft'));
+  const status = h('select', {}, h('option', { value: 'active', selected: a.status === 'active' }, `Ready for ${me.learner.name}`), h('option', { value: 'draft', selected: a.status === 'draft' }, 'Draft'));
   const reviewFocus = h('textarea', { rows: 2 }, content.review_focus || '');
   const practiseQ = h('input', { type: 'checkbox', checked: !!content.practise_questions });
   const itemsBox = h('div', {});
@@ -249,14 +285,14 @@ function editActivity(root, a) {
 
   root.replaceChildren(
     h('h2', {}, `${a.id ? 'Edit' : 'New'}: ${modes[a.mode].label}`),
-    h('div', { class: 'panel' }, field('Which goal in Sam\u2019s Communication Plan does this practise?', planGoal), goalHint),
+    h('div', { class: 'panel' }, field(`Which goal in ${me.learner.name}\u2019s communication plan does this practise?`, planGoal), goalHint),
     h('div', { class: 'panel grid2' }, field('Title', title), field('Skill / goal being practised', goal), field('Status', status),
       a.mode === 'conversation' ? h('label', { class: 'switch' }, practiseQ, 'Also practise asking follow-up questions') : null),
     h('h3', {}, a.mode === 'conversation' ? 'Topics, in the order Buddy moves between them' : a.mode === 'listen' ? 'Stories' : 'Items'),
     itemsBox,
     h('button', { class: 'btn', onclick: () => { content.items.push(a.mode === 'listen' ? blankStory() : {}); drawItems(); } }, a.mode === 'conversation' ? 'Add a topic' : a.mode === 'listen' ? 'Add another story' : 'Add an item'),
     Object.keys(CUE_NAMES[a.mode]).length ? h('div', { class: 'panel' }, cues) : '',
-    h('div', { class: 'panel' }, field('What should reviewers look at?', reviewFocus, 'Shown with the practice records, e.g. "Is he using group words without a cue?"')),
+    h('div', { class: 'panel' }, field('What should reviewers look at?', reviewFocus, 'Shown with the practice records, e.g. "Are group words used without a cue?"')),
     h('div', { class: 'row-actions' },
       h('button', { class: 'btn btn-primary', onclick: run(async () => {
         content.review_focus = reviewFocus.value.trim();
@@ -318,7 +354,7 @@ function itemEditor(mode, it, i, urls, remove) {
   if (mode === 'story') body = [
     field('Pictures, in order', imagePicker(it, 'image_ids', urls, true)),
     h('div', { class: 'grid2' }, field('Story title', txt(it, 'title')), field('Setting (where)', txt(it, 'setting')), field('Other accepted setting words', csv(it, 'setting_alternatives'))),
-    field('What Buddy says first', txt(it, 'intro'), 'Tells Sam which story this is, e.g. "Let\u2019s tell the story of your trip to Ireland." Needed if there are no pictures.'),
+    field('What Buddy says first', txt(it, 'intro'), `Tells ${me.learner.name} which story this is, e.g. "Let\u2019s tell the story of your trip to Ireland." Needed if there are no pictures.`),
     field("Buddy's question (optional)", txt(it, 'prompt'), 'Leave blank for: "When you are ready, tell me the story. Say where it happens, then what happens first, next and last."'),
     field('Events, one per line, in order', multi(it, 'events'), 'e.g. "the boy builds a kite"'),
     h('div', { class: 'grid2' }, field("Therapist's target words", csv(it, 'target_words'), 'e.g. spin, build, construct'), field('Approved alternative words', csv(it, 'word_alternatives'))),
@@ -328,7 +364,7 @@ function itemEditor(mode, it, i, urls, remove) {
   if (mode === 'task') {
     const unclearOn = h('input', { type: 'checkbox', checked: !!it.unclear_instruction });
     const unclearText = txt(it, 'unclear_instruction');
-    const unclearWrap = h('div', { hidden: !it.unclear_instruction || null }, field('Unclear version Buddy says first', unclearText, 'Sam succeeds by asking for clarification.'));
+    const unclearWrap = h('div', { hidden: !it.unclear_instruction || null }, field('Unclear version Buddy says first', unclearText, `${me.learner.name} succeeds by asking for clarification.`));
     unclearOn.addEventListener('change', () => { unclearWrap.hidden = !unclearOn.checked; if (!unclearOn.checked) delete it.unclear_instruction; });
     body = [
       h('div', { class: 'grid2' }, field('Job / task title', txt(it, 'title')), field('Picture (optional)', imagePicker(it, 'image_id', urls, false))),
@@ -339,7 +375,7 @@ function itemEditor(mode, it, i, urls, remove) {
     ];
   }
   if (mode === 'conversation') body = [
-    h('div', { class: 'grid2' }, field('Topic', txt(it, 'topic'), 'Pick from Sam\u2019s interests'), field('Picture (optional)', imagePicker(it, 'image_id', urls, false))),
+    h('div', { class: 'grid2' }, field('Topic', txt(it, 'topic'), `Pick from ${me.learner.name}\u2019s interests`), field('Picture (optional)', imagePicker(it, 'image_id', urls, false))),
     field("Buddy's opening line", txt(it, 'opener'), 'A comment works well, e.g. "I watched Toy Story at the weekend."'),
     h('div', { class: 'grid2' }, field('Example comment (for the model cue)', txt(it, 'example_comment')), field('Example question (for the model cue)', txt(it, 'example_question'))),
   ];
@@ -360,7 +396,7 @@ function storyEditor(it, urls) {
       field('Question', txt(q, 'question')),
       h('div', { class: 'grid2' },
         field('Accepted answers', csv(q, 'answers'), 'Comma separated, e.g. crow, bird'),
-        field('Clue (optional)', txt(q, 'clue'), 'Buddy says this if Sam asks for help')),
+        field('Clue (optional)', txt(q, 'clue'), `Buddy says this if ${me.learner.name} asks for help`)),
     ),
     h('button', { class: 'btn btn-quiet', onclick: () => { it.questions.splice(i, 1); drawQs(); } }, 'Remove'))));
   drawQs();
@@ -372,7 +408,7 @@ function storyEditor(it, urls) {
     h('div', { class: 'grid2' }, field('Story title', txt(it, 'title'), 'Buddy says "This story is called\u2026" first'), field('Picture (optional)', imagePicker(it, 'image_id', urls, false))),
     field('The story', story), words,
     h('h4', { class: 'q-head' }, 'Questions Buddy asks afterwards'),
-    h('p', { class: 'muted', style: 'margin:0' }, 'Five works well. Sam\u2019s answer counts as right if it matches the meaning of one of the accepted answers.'),
+    h('p', { class: 'muted', style: 'margin:0' }, `Five works well. ${me.learner.name}\u2019s answer counts as right if it matches the meaning of one of the accepted answers.`),
     qBox,
     h('button', { class: 'btn', onclick: () => { it.questions.push({ question: '', answers: [], clue: '' }); drawQs(); } }, 'Add a question'),
   ];
@@ -446,7 +482,7 @@ async function renderReview(root) {
     goalSel.value = review.goal;
     const from = review.period === 'all' ? '' : daysAgo(Number(review.period) - 1);
     const rows = records.filter((r) => (!review.goal || r.plan_goal === review.goal) && (!review.activity || r.activity_title === review.activity) && (!from || dayKey(r.created_at) >= from));
-    if (!rows.length) { listWrap.replaceChildren(h('p', { class: 'panel' }, records.length ? 'No practice matches these filters.' : 'No practice yet. Records appear here after Sam finishes an activity.')); return; }
+    if (!rows.length) { listWrap.replaceChildren(h('p', { class: 'panel' }, records.length ? 'No practice matches these filters.' : `No practice yet. Records appear here after ${me.learner.name} finishes an activity.`)); return; }
     const byDay = new Map();
     for (const r of rows) { const k = dayKey(r.created_at); if (!byDay.has(k)) byDay.set(k, []); byDay.get(k).push(r); }
     listWrap.replaceChildren(...[...byDay].map(([k, rs]) => {
@@ -467,8 +503,8 @@ async function renderReview(root) {
         h('button', { class: 'btn btn-quiet', onclick: run(() => download('/adult/export', 'sams-buddy-records.json')) }, 'Full backup (JSON)'))),
     cards,
     h('details', { class: 'codes-key' }, h('summary', {}, 'How practice is counted'),
-      h('p', {}, 'Each item Sam finishes is one opportunity. It meets the target when he gives every part with the support the plan allows for that goal (goals 1 and 2: no prompt; goals 3 and 4: one cue at most). Items he stopped early, and practice not linked to a plan goal, are shown but not counted.'),
-      h('ul', {}, Object.entries(goals.codes).map(([c, l]) => h('li', {}, codeBadge(c), c === 'M' ? ' — Buddy gave one cue (reminder, question or sentence starter)' : c === 'P' ? ' — Buddy gave two or more cues' : c === 'F' ? ' — Buddy modelled the answer' : ' — Sam did it without a cue'))),
+      h('p', {}, `Each item ${me.learner.name} finishes is one opportunity. It meets the target when every part is given with the support the plan allows for that goal (goals 1 and 2: no prompt; goals 3 and 4: one cue at most). Items stopped early, and practice not linked to a plan goal, are shown but not counted.`),
+      h('ul', {}, Object.entries(goals.codes).map(([c, l]) => h('li', {}, codeBadge(c), c === 'M' ? ' — Buddy gave one cue (reminder, question or sentence starter)' : c === 'P' ? ' — Buddy gave two or more cues' : c === 'F' ? ' — Buddy modelled the answer' : ` — ${me.learner.name} did it without a cue`))),
       h('p', { class: 'muted' }, 'These are practice counts with Buddy, using the team’s codes. The team sets baselines and decides what counts; use Observations for school, work and home.')),
     h('div', { class: 'review-filters' }, goalSel, periodSel, actSel),
     listWrap,
@@ -482,19 +518,19 @@ function recordCard(r, lookAt, root) {
     h('header', { class: 'rc-head' },
       h('div', { class: 'rc-title' }, goalPill(r.plan_goal), h('strong', {}, r.item_label), h('span', { class: 'muted' }, ` · ${r.activity_title}`)),
       h('div', { class: 'rc-meta' }, r.score_total != null ? h('span', { class: 'score-badge', title: `First try: ${r.score_first}/${r.score_total}` }, `${r.score_correct}/${r.score_total} correct`) : null, resultBadge(r), codeBadge(r.support_code), h('span', { class: 'muted rc-time' }, timeOf(r.created_at)))),
-    answers.length ? h('div', { class: 'rc-said' }, h('h4', {}, 'Sam said'),
+    answers.length ? h('div', { class: 'rc-said' }, h('h4', {}, `${me.learner.name} said`),
       answers.map((a) => a.startsWith('[after support] ')
         ? h('p', { class: 'after' }, h('span', { class: 'tag supported' }, 'after support'), ' ', a.slice(16))
         : h('p', {}, a))) : h('p', { class: 'muted' }, 'No spoken answer recorded.'),
     h('div', { class: 'rc-cols' },
-      box('On his own', r.independent, 'own'),
+      box('On their own', r.independent, 'own'),
       box('After support', r.after_support, 'after'),
       box('Asked for help', r.help_requests, 'own')),
     h('details', { class: 'rc-more' },
       h('summary', {}, 'Details'),
       box('Buddy’s support', r.support_provided, 'support'),
       r.review_note ? h('p', {}, h('strong', {}, 'Note: '), r.review_note) : null,
-      r.sam_turns != null ? h('p', {}, h('strong', {}, 'Sam’s relevant turns: '), String(r.sam_turns)) : null,
+      r.sam_turns != null ? h('p', {}, h('strong', {}, `${me.learner.name}’s relevant turns: `), String(r.sam_turns)) : null,
       h('p', {}, h('strong', {}, 'Visual aids: '), (r.visual_aids || []).join(', ') || 'none'),
       h('p', {}, h('strong', {}, 'Activity goal: '), r.goal),
       lookAt ? h('p', {}, h('strong', {}, 'Team asked reviewers to look at: '), lookAt) : null,
@@ -507,7 +543,7 @@ async function showTranscript(root, sessionId) {
     h('div', { class: 'row-actions', style: 'margin-top:14px' }, h('button', { class: 'btn', onclick: renderShell }, 'Back to records')),
     h('h2', {}, 'Practice transcript'),
     h('ul', { class: 'list panel' }, events.map((e) => h('li', {},
-      h('div', {}, h('strong', {}, e.who === 'buddy' ? 'Buddy' : e.who === 'sam' ? 'Sam' : 'System'), ` ${e.kind === 'button' ? `pressed ${e.text.replace('_', ' ')}` : e.text}`,
+      h('div', {}, h('strong', {}, e.who === 'buddy' ? 'Buddy' : e.who === 'sam' ? me.learner.name : 'System'), ` ${e.kind === 'button' ? `pressed ${e.text.replace('_', ' ')}` : e.text}`,
         e.meta?.level ? h('span', { class: 'tag supported', style: 'margin-left:6px' }, e.meta.level) : null,
         e.meta?.uncertain ? h('span', { class: 'tag', style: 'margin-left:6px' }, 'unclear audio') : null),
       e.has_audio ? h('button', { class: 'btn btn-quiet', onclick: run(async () => {
@@ -543,6 +579,49 @@ async function renderNotes(root) {
 }
 
 // ------------------------------------------------------------ team, devices, privacy
+// ------------------------------------------------------------ families (Buddy admin only)
+const money = (n) => `$${Number(n || 0).toFixed(2)}`;
+const day = (d) => (d ? new Date(d).toLocaleDateString(undefined, { day: 'numeric', month: 'short' }) : '—');
+async function renderFamilies(root) {
+  const [families, invites] = await Promise.all([api('/adult/admin/families'), api('/adult/admin/invites')]);
+  const note = h('input', { placeholder: 'e.g. Maya\u2019s family, via her therapist' });
+  const out = h('div', {});
+  const now = Date.now();
+  const inviteStatus = (i) => (i.used_at ? `Used ${day(i.used_at)}${i.learner_name ? ` · ${i.learner_name}` : ''}` : new Date(i.expires_at) < now ? 'Expired' : `Open until ${day(i.expires_at)}`);
+  root.append(
+    h('h2', {}, 'Invite a family'),
+    h('div', { class: 'panel', style: 'display:grid;gap:14px' },
+      field('Note (only you see this)', note),
+      h('div', { class: 'row-actions' }, h('button', { class: 'btn btn-primary', onclick: run(async () => {
+        const r = await api('/adult/admin/invites', { method: 'POST', body: { note: note.value } });
+        const link = h('input', { value: r.url, readonly: true, 'aria-label': 'Invite link', style: 'flex:1 1 320px' });
+        out.replaceChildren(h('div', { class: 'row-actions' }, link, h('button', { class: 'btn', onclick: run(async () => { await navigator.clipboard.writeText(r.url); toast('Link copied.'); }) }, 'Copy link')),
+          h('p', { class: 'muted', style: 'margin:6px 0 0' }, `Send this to the parent. It works once, for ${r.expiresInDays} days.`));
+        note.value = '';
+      }) }, 'Create invite link')),
+      out),
+    h('h2', {}, `Families (${families.length})`),
+    h('div', { class: 'panel table-wrap' }, h('table', { class: 'table' },
+      h('thead', {}, h('tr', {}, ['Child', 'Main account', 'Team', 'Devices', 'Practice 7 / 30 days', 'Last practice', 'AI cost, 30 days', ''].map((t) => h('th', {}, t)))),
+      h('tbody', {}, families.map((f) => h('tr', { class: f.disabled_at ? 'paused' : null },
+        h('td', {}, h('strong', {}, f.name), f.birth_year ? h('span', { class: 'muted' }, ` · born ${f.birth_year}`) : null, f.disabled_at ? h('div', {}, h('span', { class: 'tag' }, 'Paused')) : null),
+        h('td', {}, f.owner ? h('div', {}, f.owner.name, h('br'), h('span', { class: 'muted' }, f.owner.email)) : '—'),
+        h('td', { class: 'num' }, String(f.team)), h('td', { class: 'num' }, String(f.devices)),
+        h('td', { class: 'num' }, `${f.sessions_7d} / ${f.sessions_30d}`), h('td', {}, day(f.last_practice_at)),
+        h('td', { class: 'num' }, money(f.est_cost_30d)),
+        h('td', {}, f.id === me.learner.id ? null : h('button', { class: f.disabled_at ? 'btn' : 'btn btn-danger', onclick: run(async () => {
+          if (!f.disabled_at && !confirm(`Pause ${f.name}\u2019s Buddy? Their team and devices can\u2019t use it until you turn it back on.`)) return;
+          await api(`/adult/admin/families/${f.id}/pause`, { method: 'POST', body: { paused: !f.disabled_at } }); renderShell();
+        }) }, f.disabled_at ? 'Turn back on' : 'Pause'))))))),
+    h('p', { class: 'muted' }, 'AI cost is a rough estimate from list prices (voice, speech-to-text and scoring), for spotting heavy use. It is not a bill.'),
+    h('h2', {}, 'Invites'),
+    invites.length ? h('ul', { class: 'list panel' }, invites.map((i) => h('li', {},
+      h('span', {}, h('strong', {}, i.note || 'Invite'), h('span', { class: 'muted' }, ` · created ${day(i.created_at)} · ${inviteStatus(i)}`)),
+      !i.used_at && new Date(i.expires_at) > now ? h('button', { class: 'btn btn-danger', onclick: run(async () => { await api(`/adult/admin/invites/${i.id}`, { method: 'DELETE' }); renderShell(); }) }, 'Cancel') : null)))
+      : h('p', { class: 'panel' }, 'No invites yet.'),
+  );
+}
+
 // Each team member decides for themselves whether to get an email after every practice.
 function emailPanel(c) {
   const name = me.learner.name;
@@ -556,8 +635,8 @@ function emailPanel(c) {
   const blocked = !c?.agreed_at || !c.can_view?.[me.adult.role];
   return h('div', { class: 'panel' },
     h('label', { class: 'switch' }, box, `Email me after each practice (${me.adult.email})`),
-    h('p', { class: 'muted', style: 'margin:6px 0 0' }, `A short note when ${name} finishes: what he practised, how it went and the support he needed.`),
-    blocked ? h('p', { style: 'margin:8px 0 0' }, `${name} hasn't chosen to share his practice records with ${ROLE[me.adult.role].toLowerCase()}s, so no emails will be sent until he does.`) : null);
+    h('p', { class: 'muted', style: 'margin:6px 0 0' }, `A short note when ${name} finishes: what they practised, how it went and the support they needed.`),
+    blocked ? h('p', { style: 'margin:8px 0 0' }, `${name} hasn't chosen to share their practice records with ${ROLE[me.adult.role].toLowerCase()}s, so no emails will be sent until they do.`) : null);
 }
 
 async function renderTeam(root) {
@@ -574,10 +653,10 @@ async function renderTeam(root) {
     h('h2', {}, `${me.learner.name}'s privacy choices`),
     h('div', { class: 'panel' },
       c?.agreed_at ? h('div', {},
-        h('p', { style: 'margin-top:0' }, `${me.learner.name} chose who can see his practice records. Only he can change this, in My settings on his iPad.`),
+        h('p', { style: 'margin-top:0' }, `${me.learner.name} chose who can see their practice records. Only they can change this, in My settings on their iPad or phone.`),
         h('ul', {}, Object.entries(ROLE).map(([k, l]) => h('li', {}, `${l}: ${c.can_view?.[k] ? 'can see records' : 'cannot see records'}`))),
         h('p', {}, `Voice recordings: ${c.save_audio ? 'saved' : 'not saved'}.`))
-        : h('p', { style: 'margin:0' }, `${me.learner.name} has not made his privacy choices yet. He will be asked the first time he opens the app.`)),
+        : h('p', { style: 'margin:0' }, `${me.learner.name} has not made their privacy choices yet. They will be asked the first time they open the app.`)),
 
     h('h2', {}, `${me.learner.name}'s iPad and test devices`),
     h('div', { class: 'panel' },

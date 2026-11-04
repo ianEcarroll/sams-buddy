@@ -43,3 +43,5 @@ services:
         sync: false
       - key: VAPID_SUBJECT       # e.g. mailto:ian@pinpointed.dev
         sync: false
+      - key: PLATFORM_ADMINS     # emails that see the Families tab (Buddy admin), comma separated
+        sync: false
