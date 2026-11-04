@@ -264,3 +264,13 @@ details > summary { cursor: pointer; font-weight: 700; padding: 6px 0; }
 .offline-page { justify-content: center; }
 .offline-page .btn { align-self: flex-start; text-decoration: none; }
 #offline .hello-sub { display: block; font-size: 1.1rem; }
+
+/* ---------- Adult: families table (Buddy admin) ---------- */
+.table-wrap { overflow-x: auto; padding: 0; }
+.table { width: 100%; border-collapse: collapse; font-size: .95rem; }
+.table th, .table td { text-align: left; padding: 10px 14px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.table th { font-size: .85rem; color: var(--ink-soft); font-weight: 600; white-space: nowrap; }
+.table tr:last-child td { border-bottom: 0; }
+.table td.num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.table tr.paused td { color: var(--ink-soft); }
+.adult .row-actions input { border: 2px solid var(--line); border-radius: 12px; padding: 8px 12px; min-height: 44px; background: var(--surface); min-width: 0; }

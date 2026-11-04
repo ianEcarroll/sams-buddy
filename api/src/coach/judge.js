@@ -122,40 +122,52 @@ function answerKey(mode, item, activity) {
 }
 
 const ELEMENT_GUIDE = {
-  object: 'name = he named the object (approved name or obvious variant e.g. plural, "a"/"the"). category = he named its group (approved group only, or an obvious synonym of it). use = he said what it is used for, in any wording with the same meaning.',
-  story: 'where = he said where it happens. event_N = he described event N (meaning, not exact words). order = only judge in events_in_order. vocabulary = he used one of the target words or approved alternatives AND it fits the picture/action.',
-  task: 'step_N = his retelling includes step N (meaning, not exact words). order = only judge in events_in_order.',
-  listen: 'answer = his response correctly answers the question, judged against the story and the accepted answers. Accept any wording, synonym or partial answer with the same meaning (e.g. "a bird" for "crow" only if bird is accepted; "Peter" for "Peter Pan"). A wrong or unrelated answer, or "I don\'t know", is not supplied. Evidence = his answer words.',
-  conversation: 'turn = he made a relevant comment, a personal connection, or a question on the topic. Any of these is a valid turn.',
+  object: 'name = the learner named the object (approved name or obvious variant e.g. plural, "a"/"the"). category = they named its group (approved group only, or an obvious synonym of it). use = they said what it is used for, in any wording with the same meaning.',
+  story: 'where = the learner said where it happens. event_N = they described event N (meaning, not exact words). order = only judge in events_in_order. vocabulary = they used one of the target words or approved alternatives AND it fits the picture/action.',
+  task: 'step_N = the learner\'s retelling includes step N (meaning, not exact words). order = only judge in events_in_order.',
+  listen: 'answer = the learner\'s response correctly answers the question, judged against the story and the accepted answers. Accept any wording, synonym or partial answer with the same meaning (e.g. "a bird" for "crow" only if bird is accepted; "Peter" for "Peter Pan"). A wrong or unrelated answer, or "I don\'t know", is not supplied. Evidence = their answer words.',
+  conversation: 'turn = the learner made a relevant comment, a personal connection, or a question on the topic. Any of these is a valid turn.',
 };
 
-const SYSTEM = `You assess one spoken practice response from Sam, an 18-year-old practising speech and language skills set by his speech therapist.
-You only report what Sam supplied, measured against the team's answer key. You do not coach, correct grammar, or judge pronunciation.
+// Who Buddy is talking to: first name, and age when the family gave a year of birth.
+const describe = (learner = {}) => {
+  const name = learner.name || 'the learner';
+  const age = Number(learner.age) > 0 ? `a ${learner.age}-year-old` : 'a young person';
+  return { name, age };
+};
+
+export function systemFor(learner) {
+  const { name, age } = describe(learner);
+  return `You assess one spoken practice response from ${name}, ${age} practising speech and language skills set by their speech therapist.
+You only report what ${name} supplied, measured against the team's answer key. You do not coach, correct grammar, or judge pronunciation.
 Rules:
 - Judge meaning, not polish. Short, concise answers are complete if they contain the element.
 - Repetition of a word is fine when it is accurate.
-- Never credit an element Sam did not say. Evidence must be Sam's own words copied from the transcript.
+- Never credit an element ${name} did not say. Evidence must be ${name}'s own words copied from the transcript.
 - Accept approved alternatives from the answer key. Do not invent stricter targets.
 - The transcript comes from speech recognition. If it looks like a recognition error (garbled, wrong-language fragments, words that make no sense in context) set transcript_seems_garbled = true rather than treating it as a language mistake.
-- help_request: classify if Sam is asking for repetition, saying he doesn't understand, asking for help, asking to be shown, or saying he needs to check with his job coach. Otherwise "none".
+- help_request: classify if ${name} is asking for repetition, saying they don't understand, asking for help, asking to be shown, or saying they need to check with their job coach. Otherwise "none".
 Always respond by calling the report tool.`;
+}
 
-function convReplyRules(inviteQuestion) {
-  return `Also write "reply": Buddy's next conversational line. Rules: 1–2 short sentences, plain friendly English for an 18-year-old, stay on the topic, acknowledge what Sam said (if he shared a personal connection, show you noticed it), add one brief comment of your own. ${inviteQuestion ? 'You may end with one simple question.' : 'Do NOT ask a question.'} If Sam asked you a question, answer it briefly first. Never give advice about safety, strangers, travel or work.
+function convReplyRules(inviteQuestion, learner) {
+  const { name, age } = describe(learner);
+  return `Also write "reply": Buddy's next conversational line. Rules: 1–2 short sentences, plain friendly English for ${age}, stay on the topic, acknowledge what ${name} said (if they shared a personal connection, show you noticed it), add one brief comment of your own. ${inviteQuestion ? 'You may end with one simple question.' : 'Do NOT ask a question.'} If ${name} asked you a question, answer it briefly first. Never give advice about safety, strangers, travel or work.
 Staying in the conversation:
-- You are Buddy, a friendly conversation partner. Sam already knows this is practice, so never mention being an app, an AI, a computer or a program, and never talk about what you can or cannot do (seeing, hearing, colours, eating, going places, remembering).
-- Talk like a friendly person on the phone: share simple likes, opinions and everyday comments in character. If Sam asks something you can't really know (e.g. "what colour is my shirt?"), turn it back to him warmly ("Ooh, tell me! Is that your favourite colour?").
-- Only if Sam sincerely asks whether you are a real person, say briefly that you're his practice buddy, then carry on with the topic.
-- Never comment on Sam's progress: no "well done for asking a question", "you made a connection", "task complete", goals, levels or scores. Progress is recorded separately for the adults.
-- Don't tell Sam to ask you a question; the app handles that. Vary your wording and don't reuse phrases from earlier in the conversation.`;
+- You are Buddy, a friendly conversation partner. ${name} already knows this is practice, so never mention being an app, an AI, a computer or a program, and never talk about what you can or cannot do (seeing, hearing, colours, eating, going places, remembering).
+- Talk like a friendly person on the phone: share simple likes, opinions and everyday comments in character. If ${name} asks something you can't really know (e.g. "what colour is my shirt?"), turn it back to them warmly ("Ooh, tell me! Is that your favourite colour?").
+- Only if ${name} sincerely asks whether you are a real person, say briefly that you're their practice buddy, then carry on with the topic.
+- Never comment on ${name}'s progress: no "well done for asking a question", "you made a connection", "task complete", goals, levels or scores. Progress is recorded separately for the adults.
+- Don't tell ${name} to ask you a question; the app handles that. Vary your wording and don't reuse phrases from earlier in the conversation.`;
 }
 
 export function makeClaudeJudge({ apiKey, model, workspaceId, fetchImpl = fetch }) {
-  return async function claudeJudge({ mode, item, elements, text, activity, history = [], inviteQuestion = true }) {
+  return async function claudeJudge({ mode, item, elements, text, activity, history = [], inviteQuestion = true, learner = {} }) {
+    const who = describe(learner).name;
     const quickHelp = detectHelp(text, item.clarify_phrases || DEFAULT_CLARIFY_PHRASES);
     const tool = {
       name: 'report',
-      description: 'Report what Sam supplied in this response.',
+      description: `Report what ${who} supplied in this response.`,
       input_schema: {
         type: 'object',
         properties: {
@@ -163,11 +175,11 @@ export function makeClaudeJudge({ apiKey, model, workspaceId, fetchImpl = fetch 
             type: 'array',
             items: {
               type: 'object',
-              properties: { element: { type: 'string', enum: elements }, supplied: { type: 'boolean' }, evidence: { type: 'string', description: "Sam's exact words, or empty" } },
+              properties: { element: { type: 'string', enum: elements }, supplied: { type: 'boolean' }, evidence: { type: 'string', description: `${who}'s exact words, or empty` } },
               required: ['element', 'supplied', 'evidence'],
             },
           },
-          events_in_order: { type: 'string', enum: ['yes', 'no', 'not_applicable'], description: 'If he mentioned 2+ events/steps in this response, were they in the right order?' },
+          events_in_order: { type: 'string', enum: ['yes', 'no', 'not_applicable'], description: 'If they mentioned 2+ events/steps in this response, were they in the right order?' },
           help_request: { type: 'string', enum: HELP_ENUM },
           relevant_to_topic: { type: 'boolean' },
           personal_connection: { type: 'boolean' },
@@ -184,15 +196,15 @@ export function makeClaudeJudge({ apiKey, model, workspaceId, fetchImpl = fetch 
       `Element guide: ${ELEMENT_GUIDE[mode]}`,
       `Answer key: ${JSON.stringify(answerKey(mode, item, activity))}`,
       history.length ? `Conversation so far (most recent last):\n${history.map((h) => `${h.who}: ${h.text}`).join('\n')}` : '',
-      `Sam's response (speech-to-text): """${text}"""`,
-      mode === 'conversation' ? convReplyRules(inviteQuestion) : 'Set reply to an empty string.',
+      `${who}'s response (speech-to-text): """${text}"""`,
+      mode === 'conversation' ? convReplyRules(inviteQuestion, learner) : 'Set reply to an empty string.',
     ].filter(Boolean).join('\n\n');
 
     const res = await fetchImpl('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', ...(workspaceId ? { 'anthropic-workspace-id': workspaceId } : {}) },
       // tool_choice "auto" works on every model (some reject a forced tool); the system prompt requires the call.
-      body: JSON.stringify({ model, max_tokens: 2000, system: `${SYSTEM}\nAlways answer by calling the report tool exactly once. Do not reply with plain text.`, tools: [tool], tool_choice: { type: 'auto' }, messages: [{ role: 'user', content: user }] }),
+      body: JSON.stringify({ model, max_tokens: 2000, system: `${systemFor(learner)}\nAlways answer by calling the report tool exactly once. Do not reply with plain text.`, tools: [tool], tool_choice: { type: 'auto' }, messages: [{ role: 'user', content: user }] }),
     });
     if (!res.ok) throw new Error(`Claude ${res.status}: ${(await res.text()).slice(0, 300)}`);
     const data = await res.json();

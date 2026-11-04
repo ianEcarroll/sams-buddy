@@ -10,6 +10,7 @@ import { judgeFromEnv } from './coach/judge.js';
 import { MODES, STARTER_STORIES } from './coach/modes.js';
 import { PLAN_GOALS, GOAL_KEYS, SUPPORT_CODES } from './coach/goals.js';
 import { emailEnabled, sendEmail, recipientsFor, practiceEmail } from './email.js';
+import { isPlatformAdmin, newInviteToken, INVITE_DAYS, estimateCost, validateFamily, ageFrom } from './families.js';
 import { pushEnabled, pushPublicKey, sendPush, reminderDue, reminderMessage } from './push.js';
 
 const app = express();
@@ -73,13 +74,44 @@ app.post('/api/adult/login', rateLimit(10), wrap(async (req, res) => {
   res.json({ token: sign({ kind: 'adult', sub: a.id }, 12 * 3600) });
 }));
 
+// ------------------------------------------------------------------ joining by invite (new families)
+
+const inviteByToken = (token) => one(`select id, note from invites where token_hash=$1 and used_at is null and expires_at > now()`, [hmac(String(token || ''))]);
+app.get('/api/invite/:token', rateLimit(30), wrap(async (req, res) => {
+  const inv = await inviteByToken(req.params.token);
+  res.json({ valid: !!inv });
+}));
+app.post('/api/invite/:token', rateLimit(10), wrap(async (req, res) => {
+  const { error, value: f } = validateFamily(req.body || {});
+  if (error) return res.status(400).json({ error });
+  const client = await pool.connect();
+  try {
+    await client.query('begin');
+    // Claim the invite first, so the same link can't create two families.
+    const inv = (await client.query('update invites set used_at=now() where token_hash=$1 and used_at is null and expires_at > now() returning id', [hmac(String(req.params.token || ''))])).rows[0];
+    if (!inv) { await client.query('rollback'); return res.status(410).json({ error: 'This invite link has expired or was already used. Ask for a new one.' }); }
+    if ((await client.query('select 1 from adults where email=$1', [f.email])).rowCount) { await client.query('rollback'); return res.status(409).json({ error: 'That email already has a Buddy account. Sign in instead, or use another email.' }); }
+    const l = (await client.query('insert into learners(name, birth_year, settings) values ($1,$2,$3) returning id', [f.learnerName, f.birthYear, {}])).rows[0];
+    await client.query('insert into consent(learner_id) values ($1)', [l.id]);
+    const a = (await client.query("insert into adults(learner_id, name, email, role, is_owner, pass_hash) values ($1,$2,$3,'parent',true,$4) returning id", [l.id, f.ownerName, f.email, hashPassword(f.password)])).rows[0];
+    await client.query('update invites set learner_id=$1 where id=$2', [l.id, inv.id]);
+    await client.query('commit');
+    res.json({ token: sign({ kind: 'adult', sub: a.id }, 12 * 3600) });
+  } catch (e) {
+    await client.query('rollback').catch(() => {});
+    throw e;
+  } finally {
+    client.release();
+  }
+}));
+
 const adult = express.Router();
 adult.use(wrap(requireAdult));
 
 adult.get('/me', wrap(async (req, res) => {
-  const learner = await one('select id, name, settings, current_activity_id from learners where id=$1', [req.learnerId]);
+  const learner = await one('select id, name, birth_year, settings, current_activity_id from learners where id=$1', [req.learnerId]);
   const consent = await one('select agreed_at, can_view, save_audio from consent where learner_id=$1', [req.learnerId]);
-  res.json({ adult: req.adult, learner: { ...learner, settings: settingsOf(learner) }, consent, voice: voiceEnabled(), email: emailEnabled() });
+  res.json({ adult: req.adult, learner: { ...learner, settings: settingsOf(learner) }, consent, voice: voiceEnabled(), email: emailEnabled(), admin: isPlatformAdmin(req.adult.email) });
 }));
 
 // Each team member chooses for themselves whether to get an email after every practice.
@@ -104,6 +136,45 @@ adult.delete('/team/:id', requireOwner, wrap(async (req, res) => {
   await q('delete from adults where id=$1 and learner_id=$2 and is_owner=false', [req.params.id, req.learnerId]);
   res.json({ ok: true });
 }));
+// ------------------------------------------------------------------ platform admin (Ian): families and invites
+
+function requirePlatformAdmin(req, res, next) {
+  if (!isPlatformAdmin(req.adult?.email)) return res.status(403).json({ error: 'Only the Buddy admin can do this.' });
+  next();
+}
+adult.get('/admin/families', requirePlatformAdmin, wrap(async (req, res) => {
+  const rows = await many(`select l.id, l.name, l.birth_year, l.created_at, l.disabled_at,
+      (select json_build_object('name', a.name, 'email', a.email) from adults a where a.learner_id=l.id and a.is_owner limit 1) as owner,
+      (select count(*)::int from adults a where a.learner_id=l.id) as team,
+      (select count(*)::int from devices d where d.learner_id=l.id and d.revoked_at is null) as devices,
+      (select count(*)::int from practice_sessions s where s.learner_id=l.id and s.started_at > now() - interval '7 days') as sessions_7d,
+      (select count(*)::int from practice_sessions s where s.learner_id=l.id and s.started_at > now() - interval '30 days') as sessions_30d,
+      (select max(started_at) from practice_sessions s where s.learner_id=l.id) as last_practice_at,
+      (select coalesce(sum(length(e.text)),0)::int from practice_events e join practice_sessions s on s.id=e.session_id where s.learner_id=l.id and e.who='buddy' and e.created_at > now() - interval '30 days') as buddy_chars_30d,
+      (select count(*)::int from practice_events e join practice_sessions s on s.id=e.session_id where s.learner_id=l.id and e.who='sam' and e.kind='response' and e.created_at > now() - interval '30 days') as responses_30d
+    from learners l order by l.created_at`);
+  res.json(rows.map((r) => ({ ...r, est_cost_30d: estimateCost({ buddyChars: r.buddy_chars_30d, responses: r.responses_30d }) })));
+}));
+adult.post('/admin/families/:id/pause', requirePlatformAdmin, wrap(async (req, res) => {
+  if (req.params.id === req.learnerId && req.body?.paused) return res.status(400).json({ error: "You can't pause your own family's account from here." });
+  await q('update learners set disabled_at = case when $1 then coalesce(disabled_at, now()) else null end where id=$2', [!!req.body?.paused, req.params.id]);
+  res.json({ ok: true });
+}));
+adult.get('/admin/invites', requirePlatformAdmin, wrap(async (req, res) => {
+  res.json(await many(`select i.id, i.note, i.created_at, i.expires_at, i.used_at, l.name as learner_name
+    from invites i left join learners l on l.id=i.learner_id order by i.created_at desc limit 100`));
+}));
+adult.post('/admin/invites', requirePlatformAdmin, wrap(async (req, res) => {
+  const token = newInviteToken();
+  await q(`insert into invites(token_hash, note, created_by, expires_at) values ($1,$2,$3, now() + make_interval(days => $4))`, [hmac(token), String(req.body?.note || '').slice(0, 80), req.adult.id, INVITE_DAYS]);
+  const base = (process.env.APP_URL || `${req.protocol}://${req.get('host')}`).replace(/\/$/, '');
+  res.json({ url: `${base}/adult/?invite=${token}`, expiresInDays: INVITE_DAYS });
+}));
+adult.delete('/admin/invites/:id', requirePlatformAdmin, wrap(async (req, res) => {
+  await q('update invites set expires_at=now() where id=$1 and used_at is null', [req.params.id]);
+  res.json({ ok: true });
+}));
+
 adult.post('/password', wrap(async (req, res) => {
   const { current, next } = req.body || {};
   const a = await one('select pass_hash from adults where id=$1', [req.adult.id]);
@@ -132,7 +203,7 @@ app.post('/api/device/pair', rateLimit(10), wrap(async (req, res) => {
   const code = String(req.body?.code || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
   const p = await one('update pairing_codes set used_at=now() where code_hash=$1 and used_at is null and expires_at > now() returning learner_id', [hmac(code)]);
   if (!p) return res.status(400).json({ error: 'That code did not work. Ask for a new one.' });
-  const d = await one('insert into devices(learner_id, label) values ($1,$2) returning id', [p.learner_id, String(req.body?.label || "Sam's device").slice(0, 60)]);
+  const d = await one('insert into devices(learner_id, label) values ($1,$2) returning id', [p.learner_id, String(req.body?.label || 'Device').slice(0, 60)]);
   res.json({ token: sign({ kind: 'device', sub: d.id }) });
 }));
 
@@ -184,7 +255,7 @@ function validateActivity(b) {
   for (const [i, it] of items.entries()) {
     if (b.mode === 'object' && (!it.name || !it.category || !it.function)) return `Item ${i + 1}: add the name, group and use.`;
     if (b.mode === 'story' && (!it.setting || !(it.events || []).filter(Boolean).length)) return `Story ${i + 1}: add the setting and at least one event.`;
-    if (b.mode === 'story' && !(it.image_ids || []).length && !it.intro?.trim()) return `Story ${i + 1}: add pictures, or a line for Buddy to say first, so Sam knows which story to tell.`;
+    if (b.mode === 'story' && !(it.image_ids || []).length && !it.intro?.trim()) return `Story ${i + 1}: add pictures, or a line for Buddy to say first, so the learner knows which story to tell.`;
     if (b.mode === 'task' && ((it.steps || []).filter(Boolean).length < 1)) return `Task ${i + 1}: add the steps.`;
     if (b.mode === 'conversation' && (!it.topic || !it.opener)) return `Topic ${i + 1}: add the topic and Buddy's opening line.`;
     if (b.mode === 'listen') {
@@ -197,9 +268,18 @@ function validateActivity(b) {
   }
   return null;
 }
+// Pictures in an activity must be this family's own uploads.
+async function imagesOwned(content, learnerId) {
+  const ids = [...new Set((content?.items || []).flatMap((it) => [it.image_id, ...(it.image_ids || [])]).filter(Boolean).map(String))];
+  if (!ids.length) return true;
+  if (!ids.every((id) => /^[0-9a-f-]{36}$/i.test(id))) return false;
+  const n = await one('select count(*)::int n from images where id = any($1::uuid[]) and learner_id=$2', [ids, learnerId]);
+  return n.n === ids.length;
+}
 adult.post('/activities', wrap(async (req, res) => {
   const err = validateActivity(req.body || {});
   if (err) return res.status(400).json({ error: err });
+  if (!(await imagesOwned(req.body.content, req.learnerId))) return res.status(400).json({ error: 'One of the pictures could not be found. Upload it again.' });
   const { mode, title, goal = '', status = 'active', content } = req.body;
   const a = await one('insert into activities(learner_id, mode, title, goal, plan_goal, status, content, created_by) values ($1,$2,$3,$4,$5,$6,$7,$8) returning id', [req.learnerId, mode, title.trim(), goal, planGoalOf(req.body), status, content, req.adult.id]);
   res.json({ id: a.id });
@@ -207,6 +287,7 @@ adult.post('/activities', wrap(async (req, res) => {
 adult.put('/activities/:id', wrap(async (req, res) => {
   const err = validateActivity(req.body || {});
   if (err) return res.status(400).json({ error: err });
+  if (!(await imagesOwned(req.body.content, req.learnerId))) return res.status(400).json({ error: 'One of the pictures could not be found. Upload it again.' });
   const { mode, title, goal = '', status = 'active', content } = req.body;
   await q('update activities set mode=$1, title=$2, goal=$3, plan_goal=$4, status=$5, content=$6, updated_at=now() where id=$7 and learner_id=$8', [mode, title.trim(), goal, planGoalOf(req.body), status, content, req.params.id, req.learnerId]);
   res.json({ ok: true });
@@ -220,7 +301,7 @@ adult.get('/modes', (req, res) => {
   res.json(Object.fromEntries(Object.entries(MODES).map(([k, m]) => [k, { label: m.label, defaultGoal: m.defaultGoal, defaultCues: m.defaultCues }])));
 });
 // Voice picker: the account's ElevenLabs voices, and a short sample in Buddy's own words.
-const VOICE_SAMPLE = "Hi Sam, I'm Buddy. Make a movie in your mind. When you're ready, press to talk.";
+const voiceSample = (name) => `Hi ${name}, I'm Buddy. Make a movie in your mind. When you're ready, press to talk.`;
 adult.get('/voices', wrap(async (req, res) => {
   if (!voiceEnabled()) return res.status(503).json({ error: 'Voice is not set up yet (ELEVENLABS_API_KEY).' });
   const l = await one('select settings from learners where id=$1', [req.learnerId]);
@@ -230,8 +311,8 @@ adult.get('/voices', wrap(async (req, res) => {
 adult.get('/voices/:id/sample', wrap(async (req, res) => {
   if (!voiceEnabled()) return res.status(503).json({ error: 'Voice is not set up yet.' });
   const id = String(req.params.id).replace(/[^A-Za-z0-9]/g, '').slice(0, 64);
-  const l = await one('select settings from learners where id=$1', [req.learnerId]);
-  const audio = await speak(VOICE_SAMPLE, { voiceId: id, speed: settingsOf(l).speech_speed });
+  const l = await one('select name, settings from learners where id=$1', [req.learnerId]);
+  const audio = await speak(voiceSample(l.name), { voiceId: id, speed: settingsOf(l).speech_speed });
   res.set('content-type', 'audio/mpeg').set('cache-control', 'private, max-age=86400').send(audio);
 }));
 adult.get('/goals', (req, res) => res.json({ goals: PLAN_GOALS, codes: SUPPORT_CODES }));
@@ -328,7 +409,7 @@ adult.get('/export/weekly.csv', wrap(requireRecordAccess), wrap(async (req, res)
     const aids = [...new Set(g.flatMap((r) => r.visual_aids || []))];
     const ex = g.find((r) => r.success) || g.find((r) => r.sam_response) || g[0];
     return [
-      goalLabel(g[0].plan_goal), g[0].day, "Sam's Buddy app (practice with Buddy)",
+      goalLabel(g[0].plan_goal), g[0].day, "Buddy app (practice with Buddy)",
       counted.length ? `${counted.filter((r) => r.success).length}/${counted.length}` : `practice only (${g.length})`,
       codes, aids.length ? aids : 'None', clip(`${ex.item_label}: ${ex.sam_response}`),
     ];
@@ -346,7 +427,7 @@ adult.get('/export/items.csv', wrap(requireRecordAccess), wrap(async (req, res) 
     r.sam_response, r.independent, r.after_support, r.support_provided, r.help_requests, r.review_note,
   ]);
   res.set('content-type', 'text/csv; charset=utf-8').set('content-disposition', 'attachment; filename="sams-buddy-all-practice.csv"')
-    .send(toCsv(['Date', 'Time', 'Goal', 'Activity', 'Item', 'Met target', 'Support code', 'Visual aids', "Sam's relevant turns", 'Score (first try)', 'Score (final)', "Sam's response",
+    .send(toCsv(['Date', 'Time', 'Goal', 'Activity', 'Item', 'Met target', 'Support code', 'Visual aids', "Learner's relevant turns", 'Score (first try)', 'Score (final)', "Sam's response",
       'Independently', 'After support', 'Support given', 'Asked for help', 'Note'], rows));
 }));
 
@@ -358,7 +439,7 @@ adult.delete('/records', requireOwner, wrap(async (req, res) => {
 async function exportFor(learnerId) {
   return {
     exported_at: new Date().toISOString(),
-    note: 'Practice records describe what happened during practice with Buddy, using the support codes from Sam\'s Functional Communication Plan. They are not assessments or diagnoses; the team sets baselines and decides what counts.',
+    note: 'Practice records describe what happened during practice with Buddy, using the support codes from the learner\'s communication plan. They are not assessments or diagnoses; the team sets baselines and decides what counts.',
     records: await many('select activity_title, mode, plan_goal, item_label, goal, success, support_code, visual_aids, sam_turns, score_first, score_correct, score_total, sam_response, independent, support_provided, after_support, help_requests, review_note, created_at from practice_records where learner_id=$1 order by created_at', [learnerId]),
     support_codes: SUPPORT_CODES,
     observations: await many('select setting, skill, note, created_at from observations where learner_id=$1 order by created_at', [learnerId]),
@@ -464,11 +545,11 @@ async function notifyPractice(learnerId, state, records, reason) {
 device.post('/practice/start', wrap(async (req, res) => {
   const consent = await one('select agreed_at from consent where learner_id=$1', [req.learnerId]);
   if (!consent?.agreed_at) return res.status(403).json({ error: 'Choose your privacy settings first.' });
-  const l = await one('select name, settings, current_activity_id from learners where id=$1', [req.learnerId]);
+  const l = await one('select name, birth_year, settings, current_activity_id from learners where id=$1', [req.learnerId]);
   const id = req.body?.activityId || l.current_activity_id;
   const act = id && await one("select id, mode, title, goal, plan_goal, content from activities where id=$1 and learner_id=$2 and status='active'", [id, req.learnerId]);
   if (!act) return res.status(404).json({ error: 'Your team has not chosen a practice yet.' });
-  const { state, turn } = createSession({ activity: act, settings: settingsOf(l), learnerName: l.name });
+  const { state, turn } = createSession({ activity: act, settings: settingsOf(l), learnerName: l.name, learnerAge: ageFrom(l.birth_year) });
   const s = await one('insert into practice_sessions(learner_id, activity_id, activity_snapshot, state) values ($1,$2,$3,$4) returning id', [req.learnerId, act.id, act, state]);
   res.json({ title: act.title, mode: act.mode, ...(await deliver(s.id, state, turn)) });
 }));
@@ -580,7 +661,7 @@ export async function sendDueReminders(now = new Date()) {
   let sent = 0;
   const learners = await many(`select l.id, l.name, l.settings, l.last_reminder_on::text as last_reminder_on,
       (select max(started_at) from practice_sessions s where s.learner_id=l.id) as last_practice_at
-    from learners l where coalesce(l.settings->>'reminder_time','') <> ''
+    from learners l where l.disabled_at is null and coalesce(l.settings->>'reminder_time','') <> ''
       and exists (select 1 from push_subscriptions p where p.learner_id=l.id)`);
   for (const l of learners) {
     const st = settingsOf(l);

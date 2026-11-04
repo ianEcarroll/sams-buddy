@@ -34,7 +34,7 @@ export const PLAN_GOALS = {
     n: 4,
     label: 'Reciprocal conversation',
     short: 'Conversation',
-    target: 'At least 4 relevant alternating turns, including a related comment and a relevant question from Sam — 4/5 conversations on two dates, no more than one general cue.',
+    target: 'At least 4 relevant alternating turns, including a related comment and a relevant question from the learner — 4/5 conversations on two dates, no more than one general cue.',
     cue: 'Comment → Bridge → Question → Continue',
     allowed: ['I', 'M'],
     modes: ['conversation'],
