@@ -2,7 +2,8 @@
 //   Prompt → wait → listen → recognise what Sam supplied → offer ONE relevant cue if needed → allow another attempt.
 // Pure state machine: no I/O except the injected `judge`. State is JSON so it can live in Postgres.
 
-import { MODES, LEVELS, TEAM_PHRASE, DEFAULT_CLARIFY_PHRASES, cueLadder, describe, labelFor } from './modes.js';
+import { RECALL_FRESH_DAYS as RECALL_DAYS } from './modes.js';
+import { MODES, LEVELS, TEAM_PHRASE, DEFAULT_CLARIFY_PHRASES, cueLadder, describe, labelFor, freshMemories, whenNoun } from './modes.js';
 import { PLAN_GOALS, supportCode, successFor } from './goals.js';
 
 const DEFAULTS = {
@@ -103,6 +104,7 @@ function openItem(state) {
       lines.push(line(m.prompt(item), 'prompt'));
     }
   } else if (state.mode === 'recall') {
+    state.item.mems = freshMemories(item, state.startedAt);
     if (item.intro) lines.push(line(item.intro, 'intro'));
     lines.push(line(TEAM_PHRASE, 'movie', { pauseAfter: think }));
     lines.push(line(m.prompt(item), 'prompt'));
@@ -173,7 +175,7 @@ async function process_(state, { text, displayText, confirmed }, judge) {
     : [];
 
   const judgeElements = state.mode === 'conversation' ? ['turn'] : state.mode === 'recall' ? ['memory'] : it.elements.filter((e) => e !== 'order' && e !== 'clarify');
-  const judgeItem = state.mode === 'recall' ? { ...item, already_recalled: it.recalled.map((r) => r.text) } : item;
+  const judgeItem = state.mode === 'recall' ? { ...item, memories: it.mems || [], already_recalled: it.recalled.map((r) => r.text) } : item;
   const j = await judge({ mode: state.mode, item: judgeItem, elements: judgeElements, text, activity: state.activity, history, inviteQuestion, learner: learnerOf(state) });
 
   if (j.garbled && !confirmed) return askToConfirm(state, { text, displayText });
@@ -271,21 +273,36 @@ function absorbRecall(state, j) {
   return newly;
 }
 
+// With no up-to-date list, the specific clue can name things the learner enjoys (from Practice plan → Interests),
+// leaving out any they have already talked about. Naming an activity gives part of the answer, so it counts as a specific cue.
+function interestClue(state) {
+  const said = state.item.recalled.map((r) => r.text.toLowerCase()).join(' ');
+  const left = (state.learnerInterests || []).filter((x) => !said.includes(String(x).toLowerCase()));
+  const pick = left.slice(0, 2);
+  if (!pick.length) return null;
+  return `Did you do any of the things you enjoy, like ${pick.join(' or ')}?`;
+}
+
 // Clues for one listed memory not yet remembered: broad → specific → photo (or Buddy says it, if there's no photo).
 function recallCue(state, level) {
   const it = state.item;
   const item = curItem(state);
-  const mems = (item.memories || []).filter((x) => x?.event);
+  const mems = it.mems || [];
   const remembered = new Set(it.recalled.map((r) => r.known));
   if (it.clueFor == null || remembered.has(it.clueFor) || !mems[it.clueFor]) {
     const next = mems.findIndex((_, i) => !remembered.has(i));
     it.clueFor = next >= 0 ? next : null;
   }
   const ev = it.clueFor != null ? mems[it.clueFor] : null;
-  const when = item.when || 'the last few days';
+  const when = whenNoun(item.when);
   if (level === 0) return cueLadder('recall', state.activity, item, 'memory')[0];
   if (level === 1) return ev?.broad_clue || `Think about ${when}. Where did you go, or who were you with?`;
-  if (level === 2) return ev?.specific_clue || 'Think about the morning, the afternoon and the evening.';
+  if (level === 2) {
+    if (ev?.specific_clue) return ev.specific_clue;
+    const hint = interestClue(state);
+    if (!ev && hint) { it.usedInterests = true; return hint; }
+    return 'Think about the morning, the afternoon and the evening.';
+  }
   if (ev?.image_id) { it.showImage = ev.image_id; return 'Look at this photo. What were you doing?'; }
   return ev ? `You ${ev.event}. Can you tell me about it?` : "That's okay. Tell me anything else you remember.";
 }
@@ -727,6 +744,8 @@ export function buildRecord(state, it, stopNote = null) {
       notes.unshift(`Remembered ${got.length} of ${total}: ${own} on their own${got.length > own ? `, ${got.length - own} after a clue` : ''}.`);
       const photo = it.supportGiven.some((s) => s.level === 3 && /photo/i.test(s.text));
       if (photo) notes.push('Needed a photo for at least one.');
+      if (!(it.mems || []).length && it.supportGiven.length) notes.push(`Buddy used general clues: no list of what ${state.learnerName || 'the learner'} did from the last ${RECALL_DAYS} days.`);
+      if (it.usedInterests) notes.push('One clue named their interests.');
     }
     if (it.unsafe?.length) notes.push(`Suggested something that may not be safe: ${it.unsafe.map((u) => `"${u}"`).join('; ')}.`);
     if (!stopNote && !supported.size && !Object.keys(it.skipped).length && metEls.length) notes.push('All parts given independently.');

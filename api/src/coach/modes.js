@@ -253,6 +253,31 @@ const think = {
 // Any real thing the learner remembers counts, listed or not. After the first answer Buddy asks "What else do you
 // remember?" once per memory as a plain follow-up; after that it gives clues, broad → specific → photo.
 const NUM = ['zero', 'one', 'two', 'three', 'four', 'five'];
+// The family's list is only used while it is recent; an old list would give clues about the wrong weekend.
+// "at the weekend" → "the weekend", for clues like "Think about the weekend."
+export const whenNoun = (when) => String(when || 'the last few days').replace(/^(at|on|in|during|over|from)\s+/i, '');
+export const RECALL_FRESH_DAYS = 7;
+const listed = (item) => (item?.memories || []).filter((m) => m?.event);
+export function freshMemories(item, now = Date.now()) {
+  const at = Date.parse(item?.memories_updated_at || '');
+  return Number.isFinite(at) && now - at <= RECALL_FRESH_DAYS * 86_400_000 ? listed(item) : [];
+}
+// On save: stamp each Remember My Day item whose list changed. The stamp comes from the server, never the browser.
+export function stampMemories(mode, content, oldContent, now = new Date()) {
+  if (mode !== 'recall' || !content?.items) return content;
+  const old = oldContent?.items || [];
+  const key = (it) => JSON.stringify(listed(it).map((m) => [m.event, m.broad_clue || '', m.specific_clue || '', m.image_id || '']));
+  content.items = content.items.map((it, i) => {
+    const prev = old[i];
+    const same = prev && key(prev) === key(it) && prev.memories_updated_at;
+    const out = { ...it };
+    if (same) out.memories_updated_at = prev.memories_updated_at;
+    else if (listed(it).length) out.memories_updated_at = now.toISOString();
+    else delete out.memories_updated_at;
+    return out;
+  });
+  return content;
+}
 export const recallTarget = (item) => Math.min(5, Math.max(1, Number(item?.target) || 3));
 const WHAT_ELSE = ['What else do you remember doing?', 'Anything else you remember?', 'What else did you do?'];
 const recall = {
@@ -271,10 +296,10 @@ const recall = {
     return n ? WHAT_ELSE[(n - 1) % WHAT_ELSE.length] : null;
   },
   prompt: (item) => item.prompt || `Tell me ${NUM[recallTarget(item)] || recallTarget(item)} thing${recallTarget(item) === 1 ? '' : 's'} you did ${item.when || 'recently'}.`,
-  simplePrompt: (item) => item.simple_prompt || `Think about ${item.when || 'the last few days'}. What did you do?`,
+  simplePrompt: (item) => item.simple_prompt || `Think about ${whenNoun(item.when)}. What did you do?`,
   // Level 0 only; levels 1–3 come from the family's clues for one thing not yet remembered (see engine recallCue).
   defaultCues: { memory: ['Think about {when}. What did you do?', '{broad}', '{specific}', '{photo}'] },
-  vars: (item) => ({ when: item.when || 'the last few days' }),
+  vars: (item) => ({ when: whenNoun(item.when) }),
   achieved: {},
   evidenceLabel: new Proxy({}, { get: (t, k) => (String(k).startsWith('memory_') ? `Memory ${Number(String(k).slice(7)) + 1}` : undefined) }),
   itemLabel: (item) => item.title || 'my day',

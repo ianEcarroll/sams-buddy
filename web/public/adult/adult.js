@@ -239,7 +239,7 @@ async function renderActivities(root) {
   root.append(
     h('div', { class: 'row-actions', style: 'margin-top:16px' }, Object.entries(modes).map(([m, d]) => h('button', { class: 'btn', onclick: () => editActivity(root, { mode: m, title: '', goal: d.defaultGoal, plan_goal: DEFAULT_GOAL[m], status: 'active', content: { items: [m === 'listen' ? blankStory() : m === 'recall' ? blankRecall() : {}] }, image_urls: {} }) }, `New: ${modeName(m)}`))),
     acts.length ? h('ul', { class: 'list panel' }, acts.map((a) => h('li', {},
-      h('div', {}, goalPill(a.plan_goal), ' ', h('strong', {}, a.title), h('br'), h('span', { class: 'muted' }, `${modeName(a.mode)} · ${a.content.items.length} item${a.content.items.length === 1 ? '' : 's'}${a.status === 'draft' ? ' · draft' : ''}`)),
+      h('div', {}, goalPill(a.plan_goal), ' ', h('strong', {}, a.title), h('br'), h('span', { class: 'muted' }, `${modeName(a.mode)} · ${a.content.items.length} item${a.content.items.length === 1 ? '' : 's'}${a.status === 'draft' ? ' · draft' : ''}${a.mode === 'recall' ? ` · ${a.content.items.every((it) => listStatus(it).fresh) ? 'list up to date' : 'list out of date: general clues'}` : ''}`)),
       h('div', { class: 'row-actions' },
         h('button', { class: 'btn', onclick: () => editActivity(root, a) }, 'Edit'),
         h('button', { class: 'btn btn-danger', onclick: run(async () => { if (confirm(`Archive "${a.title}"?`)) { await api(`/adult/activities/${a.id}`, { method: 'DELETE' }); renderShell(); } }) }, 'Archive'))))) :
@@ -419,6 +419,22 @@ function itemEditor(mode, it, i, urls, remove) {
 const blankStory = () => ({ questions: Array.from({ length: 5 }, () => ({ question: '', answers: [], clue: '' })) });
 
 // Memory Buddy, Remember My Day: what the learner really did, with clues Buddy gives one at a time.
+// How fresh the list is. Buddy only uses it for 7 days (RECALL_FRESH_DAYS on the server), then gives general clues.
+const RECALL_FRESH_DAYS = 7;
+function listAge(it) {
+  const at = Date.parse(it?.memories_updated_at || '');
+  if (!Number.isFinite(at)) return null;
+  return Math.floor((Date.now() - at) / 86400000);
+}
+function listStatus(it) {
+  const d = listAge(it);
+  const name = me.learner.name;
+  if (d == null) return { fresh: false, text: `No list saved yet. Buddy uses general clues and ${name}\u2019s interests.` };
+  const when = d === 0 ? 'today' : d === 1 ? 'yesterday' : `${d} days ago`;
+  return d <= RECALL_FRESH_DAYS
+    ? { fresh: true, text: `List updated ${when}. Buddy uses it for clues until it is ${RECALL_FRESH_DAYS} days old.` }
+    : { fresh: false, text: `List updated ${when}, so it is out of date. Buddy is using general clues and ${name}\u2019s interests. Update the list and save to use it again.` };
+}
 const blankRecall = () => ({ when: 'at the weekend', target: 3, memories: [{}, {}, {}] });
 function recallEditor(it, urls) {
   it.memories = it.memories?.length ? it.memories : [{}];
@@ -443,7 +459,8 @@ function recallEditor(it, urls) {
       field('How many things to remember', target, '1 to 5. Three works well.')),
     field("Buddy's question (optional)", txt(it, 'prompt'), 'Blank = "Tell me three things you did at the weekend."'),
     h('h4', { class: 'q-head' }, `What ${name} really did`),
-    h('p', { class: 'muted', style: 'margin:0' }, `Buddy uses these for clues: first the broad clue, then the specific one, then the photo. Anything else ${name} really did counts too, so the list doesn\u2019t need to be complete. Update it after each weekend or outing.`),
+    (() => { const st = listStatus(it); return h('p', { class: st.fresh ? 'list-age' : 'list-age stale' }, st.text); })(),
+    h('p', { class: 'muted', style: 'margin:0' }, `Buddy uses these for clues: first the broad clue, then the specific one, then the photo. Anything else ${name} really did counts too, so the list doesn\u2019t need to be complete. Update it after each weekend or outing: Buddy only uses it for ${RECALL_FRESH_DAYS} days.`),
     list,
     h('button', { class: 'btn', onclick: () => { it.memories.push({}); draw(); } }, 'Add something else they did'),
   ];
