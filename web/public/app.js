@@ -151,7 +151,7 @@ const MODE_INFO = {
   explain: { label: 'Explain Buddy', tagline: 'Say it clearly', icon: 'explain', modes: ['explain', 'object'] },
   think: { label: 'Think Buddy', tagline: 'Solve the problem', icon: 'think' },
   conversation: { label: 'Chat Buddy', tagline: 'Keep the conversation going', icon: 'chat' },
-  task: { label: 'Listen Buddy', tagline: 'Follow instructions', icon: 'ear' },
+  task: { label: 'Listen Buddy', tagline: 'Follow instructions', icon: 'ear', modes: ['follow', 'task'] },
 };
 const MODE_ORDER = Object.keys(MODE_INFO);
 const modesOf = (mod) => MODE_INFO[mod].modes || [mod];
@@ -308,7 +308,12 @@ function drawPractice() {
       h('button', { class: 'btn btn-primary', disabled: speakingNow, onclick: () => sendControl('listen_retry') }, icon('repeat'), 'Yes, try again'),
       h('button', { class: 'btn', disabled: speakingNow, onclick: () => sendControl('listen_finish') }, icon('stop'), 'No, I\u2019m finished'))
     : null;
-  const talk = readyBtn || choice || (canRecord()
+  // Listen Buddy on screen: Sam answers by tapping, so the board replaces the Talk button for those steps.
+  const board = ui.board ? drawBoard(ui.board, speakingNow) : null;
+  const tapHint = turn.expect === 'board'
+    ? h('p', { class: 'tap-hint' }, speakingNow ? 'Listen to all of it first\u2026' : 'Touch a shape, then touch a box.')
+    : null;
+  const talk = tapHint || readyBtn || choice || (canRecord()
     ? h('button', { class: 'talk', 'data-state': state, disabled: state === 'speaking' || state === 'busy' || turn.expect === 'confirm', onclick: onTalk, 'aria-label': TALK.label },
       TALK.icon ? icon(TALK.icon) : h('span', { class: 'dot', 'aria-hidden': 'true' }),
       h('span', { class: 'talk-text' }, h('span', {}, TALK.label), h('small', {}, TALK.sub)))
@@ -324,6 +329,7 @@ function drawPractice() {
   mount(
     h('div', { class: 'p-top' }, h('p', { class: 'p-title' }, P.title), h('button', { class: 'btn', onclick: finishPractice }, icon('stop'), 'Finish')),
     h('div', { class: 'stage' }, stage),
+    board,
     bubble,
     P.thinking ? h('p', { class: 'thinking' }, 'Thinking time. Press to talk whenever you are ready.') : null,
     cue,
@@ -431,6 +437,46 @@ async function sendControl(action) {
   stopVoice();
   try { applyTurn(await api(`/practice/${P.id}/control`, { method: 'POST', body: { action } })); } catch (e) { toast(e.message); }
 }
+// ------------------------------------------------------------ Listen Buddy on screen: shapes and boxes
+const SHAPE_COLOURS = { red: '#d63c3c', blue: '#2f6fd6', green: '#2e9d57', yellow: '#f2c230', purple: '#8a4fd0', orange: '#ee8a2a' };
+function shapeSvg(id) {
+  const [colour, shape] = String(id).split('-');
+  const f = SHAPE_COLOURS[colour] || '#888';
+  const d = {
+    circle: '<circle cx="24" cy="24" r="18"/>',
+    square: '<rect x="7" y="7" width="34" height="34" rx="4"/>',
+    triangle: '<path d="M24 5 L43 40 H5 Z"/>',
+    star: '<path d="M24 4l5.9 12.6 13.7 1.6-10.1 9.4 2.7 13.6L24 34.4l-12.2 6.8 2.7-13.6L4.4 18.2l13.7-1.6z"/>',
+    heart: '<path d="M24 42S6 31 6 18a9 9 0 0 1 18-3 9 9 0 0 1 18 3c0 13-18 24-18 24z"/>',
+  }[shape] || '<circle cx="24" cy="24" r="18"/>';
+  const el = document.createElement('span');
+  el.className = 'shape';
+  el.innerHTML = `<svg viewBox="0 0 48 48" aria-hidden="true"><g fill="${f}" stroke="rgba(0,0,0,.35)" stroke-width="1.5">${d}</g></svg>`;
+  return el;
+}
+function drawBoard(b, locked) {
+  const at = {};
+  for (const [tok, p] of Object.entries(b.pos || {})) if (p != null) at[p] = tok;
+  const name = (id) => b.tokens.find((t) => t.id === id)?.name || id;
+  const boxes = h('div', { class: 'boxes' }, Array.from({ length: b.boxes }, (_, i) => {
+    const tok = at[i];
+    return h('button', {
+      class: 'box', 'data-highlight': String(b.highlight === i), 'data-selected': String(!!tok && tok === b.selected), disabled: locked,
+      'aria-label': tok ? `Box ${i + 1}, ${name(tok)}` : `Box ${i + 1}, empty`,
+      onclick: () => (b.selected && b.selected !== tok ? sendAct({ type: 'box', box: i }) : tok ? sendAct({ type: 'token', token: tok }) : sendAct({ type: 'box', box: i })),
+    }, h('span', { class: 'box-num' }, String(i + 1)), tok ? shapeSvg(tok) : null);
+  }));
+  const tray = h('div', { class: 'tray', 'aria-label': 'Shapes' }, b.tokens.filter((t) => b.pos?.[t.id] == null).map((t) =>
+    h('button', { class: 'token', 'data-selected': String(b.selected === t.id), disabled: locked, 'aria-label': t.name, 'aria-pressed': String(b.selected === t.id), onclick: () => sendAct({ type: 'token', token: t.id }) }, shapeSvg(t.id))));
+  return h('div', { class: 'board' },
+    b.showStep ? h('p', { class: 'show-step' }, b.showStep) : null,
+    boxes, tray);
+}
+async function sendAct(a) {
+  if (!P || P.talk === 'busy') return;
+  try { applyTurn(await api(`/practice/${P.id}/act`, { method: 'POST', body: a })); } catch (e) { toast(e.message); }
+}
+
 function applyTurn(t) {
   P.turn = t; P.talk = 'idle';
   if (t.lines.length) P.shown = [];

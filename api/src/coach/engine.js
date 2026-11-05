@@ -3,6 +3,8 @@
 // Pure state machine: no I/O except the injected `judge`. State is JSON so it can live in Postgres.
 
 import { RECALL_FRESH_DAYS as RECALL_DAYS } from './modes.js';
+import { detectHelp } from './judge.js';
+import { FOLLOW_BOXES, followSteps, followStepText, followInstruction, tokenName, tokenParts } from './modes.js';
 import { MODES, LEVELS, TEAM_PHRASE, DEFAULT_CLARIFY_PHRASES, cueLadder, describe, labelFor, freshMemories, whenNoun } from './modes.js';
 import { PLAN_GOALS, supportCode, successFor } from './goals.js';
 
@@ -44,7 +46,7 @@ export function createSession({ activity, settings = {}, learnerName = 'Sam', le
     learnerInterests,
   };
   const lines = openItem(state);
-  return { state, turn: state.mode === 'listen' ? listenTurn(state, lines) : makeTurn(state, lines) };
+  return { state, turn: state.mode === 'listen' ? listenTurn(state, lines) : state.mode === 'follow' ? followTurn(state, lines) : makeTurn(state, lines) };
 }
 
 function newItemState(state) {
@@ -103,6 +105,21 @@ function openItem(state) {
       lines.push(line(TEAM_PHRASE, 'movie', { pauseAfter: think }));
       lines.push(line(m.prompt(item), 'prompt'));
     }
+  } else if (state.mode === 'follow') {
+    const st = state.item;
+    st.board = { pos: {}, selected: null, highlight: null };
+    for (const [tok, box] of Object.entries(item.start || {})) if ((item.tokens || []).includes(tok)) st.board.pos[tok] = Number(box) - 1;
+    st.phase = 'act';
+    st.diag = {};
+    st.showStep = null;
+    st.repeats = 0;
+    if (item.intro) lines.push(line(item.intro, 'intro'));
+    lines.push(line('Listen to all of it first.', 'intro'));
+    const instr = line(followInstruction(item), 'instruction');
+    lines.push(instr);
+    lines.push(line(TEAM_PHRASE, 'movie', { pauseAfter: think }));
+    lines.push(line(m.prompt(item), 'prompt'));
+    st.instructionLine = instr;
   } else if (state.mode === 'explain') {
     if (item.intro) lines.push(line(item.intro, 'intro'));
     lines.push(line(TEAM_PHRASE, 'movie', { pauseAfter: think }));
@@ -142,6 +159,7 @@ export async function respond(state, input, { judge }) {
     return { state, turn: makeTurn(state, [line("I didn't hear anything. Take your time, and press Talk when you're ready.", 'clarify')]) };
   }
   if (input.uncertain && !input.confirmed) return askToConfirm(state, input);
+  if (state.mode === 'follow') return { state, turn: followSpeech(state, input.displayText || text) };
   return process_(state, { text, displayText: input.displayText || text, confirmed: !!input.confirmed }, judge);
 }
 
@@ -407,9 +425,14 @@ export function control(state, action) {
   const m = MODES[state.mode];
   switch (action) {
     case 'repeat':
+      if (state.mode === 'follow') {
+        it.repeats += 1;
+        return { state, turn: followTurn(state, [line('Here it is again.', 'ack'), it.instructionLine]) };
+      }
       it.help.push({ kind: 'repeat', text: 'Repeat', source: 'button' });
       return { state, turn: makeTurn(state, state.lastLines.map((l) => ({ ...l, pauseAfter: l.pauseAfter }))) };
     case 'hint':
+      if (state.mode === 'follow') return { state, turn: followTurn(state, followNextSupport(state, 'sam')) };
       return { state, turn: makeTurn(state, [hintLine(state, 'sam')]) };
     case 'dont_understand':
       return { state, turn: makeTurn(state, handleHelp(state, 'dont_understand', "I don't understand", 'button')) };
@@ -741,6 +764,19 @@ export function buildRecord(state, it, stopNote = null) {
     for (const s of it.supportGiven) supported.set(s.el, Math.max(supported.get(s.el) ?? -1, s.level));
     for (const [el, lv] of supported) if (it.met[el]) notes.push(`${label(el)} needed a ${LEVELS[lv]} on this attempt.`);
     for (const el of Object.keys(it.skipped)) notes.push(`${label(el)} not given yet, even after a model.`);
+    if (state.mode === 'follow') {
+      notes.length = stopNote ? 1 : 0; // the step-by-step notes below replace the generic ones
+      followSteps(item).forEach((st, i) => {
+        const el = `step_${i}`;
+        const what = followStepText(st);
+        const d = it.diag?.[el];
+        if (it.skipped[el]) notes.push(`Step ${i + 1} (${what}): Buddy showed it.`);
+        else if (!it.met[el]) notes.push(`Step ${i + 1} (${what}): not done.`);
+        else if (!d) notes.push(`Step ${i + 1} (${what}): done on their own.`);
+        else notes.push(`Step ${i + 1} (${what}): ${FOLLOW_DIAG[d]}.`);
+      });
+      if (it.repeats) notes.push(`Asked to hear the instruction again ${it.repeats === 1 ? 'once' : `${it.repeats} times`}.`);
+    }
     if (state.mode === 'recall') {
       const total = it.elements.length;
       const got = it.elements.filter((e) => it.met[e]);
@@ -752,7 +788,7 @@ export function buildRecord(state, it, stopNote = null) {
       if (it.usedInterests) notes.push('One clue named their interests.');
     }
     if (it.unsafe?.length) notes.push(`Suggested something that may not be safe: ${it.unsafe.map((u) => `"${u}"`).join('; ')}.`);
-    if (!stopNote && !supported.size && !Object.keys(it.skipped).length && metEls.length) notes.push('All parts given independently.');
+    if (state.mode !== 'follow' && !stopNote && !supported.size && !Object.keys(it.skipped).length && metEls.length) notes.push('All parts given independently.');
   }
   if (help.length) notes.push('Asked for help, which counts as a successful response.');
 
@@ -840,8 +876,216 @@ function makeTurn(state, lines, expect = null) {
       itemNumber: state.itemIndex + 1,
       itemCount: state.activity.content.items.length,
       clarifyPhrases: state.mode === 'task' ? (item.clarify_phrases || DEFAULT_CLARIFY_PHRASES) : null,
+      board: state.mode === 'follow' && it?.board ? {
+        boxes: FOLLOW_BOXES,
+        tokens: (item.tokens || []).map((id) => ({ id, name: tokenName(id) })),
+        pos: it.board.pos,
+        selected: it.board.selected,
+        highlight: it.board.highlight,
+        showStep: it.showStep,
+      } : null,
     },
   };
+}
+
+// ---------------------------------------------------------------- Listen Buddy on screen (follow)
+
+const FOLLOW_DIAG = {
+  doing: 'understood and remembered it (said it back correctly) but did something different at first',
+  remembering: 'needed to hear it again (remembering)',
+  understanding: 'needed to see it on the screen (understanding)',
+};
+
+const followCur = (state) => {
+  const it = state.item;
+  const i = it.elements.findIndex((e) => !it.met[e] && !it.skipped[e]);
+  return i < 0 ? null : { i, el: it.elements[i], step: followSteps(curItem(state))[i] };
+};
+const isSay = (step) => String(step?.type).startsWith('say_');
+
+function followTurn(state, lines) {
+  const cur = followCur(state);
+  const speak = state.item.phase === 'retell' || (cur && isSay(cur.step));
+  return makeTurn(state, lines, state.done ? null : speak ? 'response' : 'board');
+}
+
+// Where a token would sit after a 'place' step, and whether that satisfies the step.
+function placeOk(board, step, slot) {
+  const at = (tok) => board.pos[tok];
+  if (step.type === 'box') return slot === Number(step.box) - 1;
+  const t = at(step.target);
+  if (t == null) return false;
+  if (step.type === 'next_to') return Math.abs(slot - t) === 1;
+  if (step.type === 'left_of') return slot < t;
+  if (step.type === 'right_of') return slot > t;
+  return false;
+}
+function sayAnswer(state, step) {
+  const placed = Object.entries(state.item.board.pos).filter(([, p]) => p != null).sort((a, b) => a[1] - b[1]);
+  if (!placed.length) return null;
+  if (step.type === 'say_left') return placed[0][0];
+  if (step.type === 'say_right') return placed.at(-1)[0];
+  return (placed.find(([, p]) => p === Number(step.box) - 1) || [])[0] || null;
+}
+
+function followMet(state, cur, evidence) {
+  const it = state.item;
+  it.met[cur.el] = { evidence, independent: !it.anySupport, level: maxLevelFor(it, cur.el), attempt: it.attempts };
+  it.showStep = null;
+  it.board.highlight = null;
+  it.phase = 'act';
+  if (!followCur(state)) return completeItem(state, [cur.el]);
+  return [];
+}
+
+/** Sam tapped a shape ({ type: 'token', token }) or a box ({ type: 'box', box: 0-based }). */
+export function act(state, action = {}) {
+  if (state.done || state.mode !== 'follow') return { state, turn: makeTurn(state, []) };
+  const it = state.item;
+  const item = curItem(state);
+  const cur = followCur(state);
+  if (!cur) return { state, turn: followTurn(state, []) };
+  if (it.phase === 'retell') return { state, turn: followTurn(state, [line('First tell me what I asked you to do. Press Talk.', 'clarify')]) };
+  if (action.type === 'token') {
+    const tok = String(action.token || '');
+    if (!(item.tokens || []).includes(tok)) return { state, turn: followTurn(state, []) };
+    it.board.selected = tok;
+    if (cur.step.type !== 'touch') return { state, turn: followTurn(state, []) };
+    it.attempts += 1;
+    it.responses.push({ text: `[touched] ${tokenName(tok)}`, afterSupport: it.anySupport });
+    if (tok === cur.step.token) return { state, turn: followTurn(state, followMet(state, cur, `touched the ${tokenName(tok)}`)) };
+    return { state, turn: followTurn(state, followWrong(state, cur)) };
+  }
+  if (action.type === 'box') {
+    const slot = Number(action.box);
+    if (!Number.isInteger(slot) || slot < 0 || slot >= FOLLOW_BOXES) return { state, turn: followTurn(state, []) };
+    const tok = it.board.selected;
+    if (!tok) return { state, turn: followTurn(state, [line('Touch a shape first, then touch a box.', 'clarify')]) };
+    if (isSay(cur.step)) return { state, turn: followTurn(state, [line('Now tell me. Press Talk.', 'clarify')]) };
+    it.attempts += 1;
+    it.responses.push({ text: `[put] ${tokenName(tok)} in box ${slot + 1}`, afterSupport: it.anySupport });
+    const occupied = Object.entries(it.board.pos).some(([t, p]) => p === slot && t !== tok);
+    if (cur.step.type !== 'touch' && tok === cur.step.token && !occupied && placeOk(it.board, cur.step, slot)) {
+      it.board.pos[tok] = slot;
+      it.board.selected = null;
+      return { state, turn: followTurn(state, followMet(state, cur, `put the ${tokenName(tok)} in box ${slot + 1}`)) };
+    }
+    it.board.selected = null; // wrong: the shape stays where it was
+    return { state, turn: followTurn(state, followWrong(state, cur)) };
+  }
+  return { state, turn: followTurn(state, []) };
+}
+
+// A step went wrong. First find out whether Sam remembers it; then give the next support.
+function followWrong(state, cur) {
+  const it = state.item;
+  const given = it.supportGiven.filter((s) => s.el === cur.el).length;
+  if (!given) {
+    it.phase = 'retell';
+    it.anySupport = true;
+    it.supportGiven.push({ el: cur.el, level: 0, text: 'What did I ask you to do?', by: 'buddy' });
+    return [line('Not quite.', 'feedback'), line(isSay(cur.step) ? 'What did I ask you to tell me?' : 'What did I ask you to do?', 'cue', { element: cur.el, level: LEVELS[0] })];
+  }
+  return [line('Not quite.', 'feedback'), ...followNextSupport(state, 'buddy')];
+}
+
+// Next support for the current step: hear it again → see it on screen → Buddy shows it.
+function followNextSupport(state, by) {
+  const it = state.item;
+  const cur = followCur(state);
+  if (!cur) return [];
+  const steps = followSteps(curItem(state));
+  const text = followStepText(cur.step, cur.i ? steps[cur.i - 1].token : null);
+  const top = Math.max(0, ...it.supportGiven.filter((s) => s.el === cur.el).map((s) => s.level));
+  const level = Math.min(3, it.supportGiven.some((s) => s.el === cur.el) ? top + 1 : 1);
+  it.anySupport = true;
+  it.phase = 'act';
+  if (level === 1) {
+    if (!it.diag[cur.el]) it.diag[cur.el] = 'remembering';
+    it.supportGiven.push({ el: cur.el, level, text: `Listen again: ${text}.`, by });
+    return [line(`Listen again: ${text}.`, 'cue', { element: cur.el, level: LEVELS[1] })];
+  }
+  if (level === 2) {
+    if (it.diag[cur.el] !== 'doing') it.diag[cur.el] = 'understanding';
+    it.showStep = `${text[0].toUpperCase()}${text.slice(1)}.`;
+    it.supportGiven.push({ el: cur.el, level, text: `Shown on screen: ${text}.`, by });
+    return [line(`Here it is on the screen: ${text}.`, 'cue', { element: cur.el, level: LEVELS[2] })];
+  }
+  // Model: Buddy does it.
+  it.supportGiven.push({ el: cur.el, level: 3, text: `Buddy showed it: ${text}.`, by });
+  it.modelGiven[cur.el] = true;
+  it.skipped[cur.el] = true;
+  it.showStep = null;
+  let shown;
+  if (isSay(cur.step)) {
+    const ans = sayAnswer(state, cur.step);
+    shown = line(ans ? `The ${tokenName(ans)} is ${cur.step.type === 'say_box' ? `in box ${cur.step.box}` : `on the ${cur.step.type === 'say_left' ? 'left' : 'right'}`}.` : "Let's move on.", 'model', { element: cur.el, level: LEVELS[3] });
+  } else if (cur.step.type === 'touch') {
+    it.board.selected = cur.step.token;
+    shown = line(`Watch. This is the ${tokenName(cur.step.token)}.`, 'model', { element: cur.el, level: LEVELS[3] });
+  } else {
+    const slot = [0, 1, 2, 3].find((b) => !Object.values(it.board.pos).includes(b) && placeOk(it.board, cur.step, b));
+    if (slot != null) { it.board.pos[cur.step.token] = slot; it.board.highlight = slot; }
+    it.board.selected = null;
+    shown = line(`Watch. The ${tokenName(cur.step.token)} goes here.`, 'model', { element: cur.el, level: LEVELS[3] });
+  }
+  if (!followCur(state)) return [shown, ...completeItem(state, [])];
+  return [shown, line("Now the next part.", 'prompt')];
+}
+
+// Sam spoke: either saying back the step ("What did I ask you to do?") or answering a "tell me" step.
+function followSpeech(state, text) {
+  const it = state.item;
+  const cur = followCur(state);
+  if (!cur) return followTurn(state, []);
+  const help = detectHelp(text);
+  if (help === 'repeat' || help === 'dont_understand') {
+    it.repeats += 1;
+    return followTurn(state, [line('Here it is again.', 'ack'), it.instructionLine]);
+  }
+  it.responses.push({ text, afterSupport: it.anySupport });
+  const steps = followSteps(curItem(state));
+  if (it.phase === 'retell') {
+    if (retellMatches(text, cur.step)) {
+      it.diag[cur.el] = 'doing';
+      it.phase = 'act';
+      return followTurn(state, [line("Yes, that's right. Have another go.", 'ack')]);
+    }
+    return followTurn(state, followNextSupport(state, 'buddy'));
+  }
+  if (isSay(cur.step)) {
+    it.attempts += 1;
+    const ans = sayAnswer(state, cur.step);
+    const others = (curItem(state).tokens || []).filter((t) => t !== ans);
+    const partsOf = (tok) => Object.values(tokenParts(tok));
+    const mentions = (w) => new RegExp(`\\b${w}\\b`, 'i').test(text);
+    // Right if it names the answer (colour or shape) and names nothing that only belongs to another shape.
+    const right = ans && partsOf(ans).some(mentions);
+    const wrong = ans && others.flatMap(partsOf).filter((w) => !partsOf(ans).includes(w)).some(mentions);
+    if (right && !wrong) return followTurn(state, followMet(state, cur, text));
+    return followTurn(state, followWrong(state, cur));
+  }
+  // A tap step, but Sam spoke: point him back to the screen without counting it.
+  it.responses.pop();
+  return followTurn(state, [line(cur.step.type === 'touch' ? 'Touch the shape on the screen.' : 'Touch a shape, then touch a box.', 'clarify')]);
+}
+
+// Did Sam say the step back? He needs the shape (its colour or shape word) and the key word of the action.
+function retellMatches(text, step) {
+  const t = String(text).toLowerCase();
+  const names = (tok) => { const { colour, shape } = tokenParts(tok); return t.includes(colour) || t.includes(shape); };
+  const num = (n) => new RegExp(`\\b(${n}|${['zero', 'one', 'two', 'three', 'four', 'five'][n]})\\b`).test(t);
+  switch (step.type) {
+    case 'touch': return names(step.token) && /\b(touch|tap|press|choose|pick|find|point)/.test(t);
+    case 'box': return names(step.token) && num(Number(step.box));
+    case 'next_to': return names(step.token) && names(step.target) && /\b(next|beside|by)\b/.test(t);
+    case 'left_of': return names(step.token) && names(step.target) && /\bleft\b/.test(t);
+    case 'right_of': return names(step.token) && names(step.target) && /\bright\b/.test(t);
+    case 'say_left': return /\bleft\b/.test(t);
+    case 'say_right': return /\bright\b/.test(t);
+    case 'say_box': return num(Number(step.box));
+    default: return false;
+  }
 }
 
 export { DEFAULTS as ENGINE_DEFAULTS };

@@ -19,7 +19,7 @@ export const PLAN_GOALS = {
     target: 'Familiar 2-step tasks in order — 4/5 opportunities on two dates without adult prompts. Trial 3 steps when ready.',
     cue: '"Make a movie in your mind." Retell the steps, then do them.',
     allowed: ['I'],
-    modes: ['task'],
+    modes: ['task', 'follow'],
   },
   narrative: {
     n: 3,
@@ -46,7 +46,7 @@ export const PLAN_GOALS = {
     target: 'Not counted towards the four plan goals.',
     cue: '',
     allowed: null, // no success rule — shown as practice only
-    modes: ['object', 'story', 'task', 'conversation', 'listen', 'think', 'recall', 'explain'],
+    modes: ['object', 'story', 'task', 'conversation', 'listen', 'think', 'recall', 'explain', 'follow'],
   },
 };
 export const GOAL_KEYS = Object.keys(PLAN_GOALS);
