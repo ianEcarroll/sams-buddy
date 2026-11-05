@@ -148,7 +148,7 @@ function renderConsent() {
 const MODE_INFO = {
   memory: { label: 'Memory Buddy', tagline: 'Remember and recall', icon: 'memory', modes: ['recall', 'listen'] },
   story: { label: 'Story Buddy', tagline: 'Organise my thoughts', icon: 'story' },
-  object: { label: 'Explain Buddy', tagline: 'Say it clearly', icon: 'explain' },
+  explain: { label: 'Explain Buddy', tagline: 'Say it clearly', icon: 'explain', modes: ['explain', 'object'] },
   think: { label: 'Think Buddy', tagline: 'Solve the problem', icon: 'think' },
   conversation: { label: 'Chat Buddy', tagline: 'Keep the conversation going', icon: 'chat' },
   task: { label: 'Listen Buddy', tagline: 'Follow instructions', icon: 'ear' },

@@ -237,7 +237,7 @@ function voicePicker(idInput) {
 async function renderActivities(root) {
   const acts = await api('/adult/activities');
   root.append(
-    h('div', { class: 'row-actions', style: 'margin-top:16px' }, Object.entries(modes).map(([m, d]) => h('button', { class: 'btn', onclick: () => editActivity(root, { mode: m, title: '', goal: d.defaultGoal, plan_goal: DEFAULT_GOAL[m], status: 'active', content: { items: [m === 'listen' ? blankStory() : m === 'recall' ? blankRecall() : {}] }, image_urls: {} }) }, `New: ${modeName(m)}`))),
+    h('div', { class: 'row-actions', style: 'margin-top:16px' }, Object.entries(modes).map(([m, d]) => h('button', { class: 'btn', onclick: () => editActivity(root, { mode: m, title: '', goal: d.defaultGoal, plan_goal: DEFAULT_GOAL[m], status: 'active', content: { items: [m === 'listen' ? blankStory() : m === 'recall' ? blankRecall() : m === 'explain' ? blankExplain() : {}] }, image_urls: {} }) }, `New: ${modeName(m)}`))),
     acts.length ? h('ul', { class: 'list panel' }, acts.map((a) => h('li', {},
       h('div', {}, goalPill(a.plan_goal), ' ', h('strong', {}, a.title), h('br'), h('span', { class: 'muted' }, `${modeName(a.mode)} · ${a.content.items.length} item${a.content.items.length === 1 ? '' : 's'}${a.status === 'draft' ? ' · draft' : ''}${a.mode === 'recall' ? ` · ${a.content.items.every((it) => listStatus(it).fresh) ? 'list up to date' : 'list out of date: general clues'}` : ''}`)),
       h('div', { class: 'row-actions' },
@@ -255,6 +255,7 @@ const CUE_NAMES = {
   listen: {},
   think: { problem: 'Noticing the problem', action: 'What to do', reason: 'Why', backup: 'If that does not work' },
   recall: {}, // clues come from each memory the family enters
+  explain: { point: 'Each part (the question, starter and model can also be set per part)' },
 };
 const LEVEL_NAMES = ['1. Reminder', '2. Specific cue', '3. Sentence starter', '4. Model'];
 
@@ -304,7 +305,7 @@ function editActivity(root, a) {
       a.mode === 'story' ? field('Story organiser on screen', organiser, `Fade it out step by step as ${me.learner.name} gets more independent: from the start \u2192 only if stuck \u2192 off.`) : null),
     h('h3', {}, a.mode === 'conversation' ? 'Topics, in the order Buddy moves between them' : a.mode === 'listen' ? 'Stories' : 'Items'),
     itemsBox,
-    h('button', { class: 'btn', onclick: () => { content.items.push(a.mode === 'listen' ? blankStory() : a.mode === 'recall' ? blankRecall() : {}); drawItems(); } }, a.mode === 'conversation' ? 'Add a topic' : a.mode === 'listen' ? 'Add another story' : 'Add an item'),
+    h('button', { class: 'btn', onclick: () => { content.items.push(a.mode === 'listen' ? blankStory() : a.mode === 'recall' ? blankRecall() : a.mode === 'explain' ? blankExplain() : {}); drawItems(); } }, a.mode === 'conversation' ? 'Add a topic' : a.mode === 'listen' ? 'Add another story' : 'Add an item'),
     Object.keys(CUE_NAMES[a.mode]).length ? h('div', { class: 'panel' }, cues) : '',
     h('div', { class: 'panel' }, field('What should reviewers look at?', reviewFocus, 'Shown with the practice records, e.g. "Are group words used without a cue?"')),
     h('div', { class: 'row-actions' },
@@ -356,7 +357,7 @@ const multi = (it, k, rows = 3) => bind(it, k, h('textarea', { rows }), lines, (
 
 function itemEditor(mode, it, i, urls, remove) {
   const box = h('div', { class: 'item-box' });
-  const head = h('div', { class: 'row-actions', style: 'justify-content:space-between' }, h('strong', {}, `${mode === 'conversation' ? 'Topic' : mode === 'listen' ? 'Story' : mode === 'think' ? 'Situation' : mode === 'recall' ? 'Memory practice' : 'Item'} ${i + 1}`), h('button', { class: 'btn btn-quiet', onclick: remove }, 'Remove'));
+  const head = h('div', { class: 'row-actions', style: 'justify-content:space-between' }, h('strong', {}, `${mode === 'conversation' ? 'Topic' : mode === 'listen' ? 'Story' : mode === 'think' ? 'Situation' : mode === 'recall' ? 'Memory practice' : mode === 'explain' ? 'Explanation' : 'Item'} ${i + 1}`), h('button', { class: 'btn btn-quiet', onclick: remove }, 'Remove'));
   let body;
   if (mode === 'object') body = [
     field('Picture', imagePicker(it, 'image_id', urls, false)),
@@ -406,6 +407,7 @@ function itemEditor(mode, it, i, urls, remove) {
   }
   if (mode === 'listen') body = storyEditor(it, urls);
   if (mode === 'recall') body = recallEditor(it, urls);
+  if (mode === 'explain') body = explainEditor(it, urls);
   if (mode === 'think') body = [
     h('div', { class: 'grid2' }, field('Short title', txt(it, 'title'), 'For the team, e.g. "Trainer not at the gym"'), field('Picture (optional)', imagePicker(it, 'image_id', urls, false))),
     field('The situation Buddy describes', bind(it, 'scenario', h('textarea', { rows: 2 })), `e.g. "You arrive at the gym, but your trainer isn\u2019t there." Use places and activities from ${me.learner.name}\u2019s life.`),
@@ -427,6 +429,34 @@ function itemEditor(mode, it, i, urls, remove) {
 const blankStory = () => ({ questions: Array.from({ length: 5 }, () => ({ question: '', answers: [], clue: '' })) });
 
 // Memory Buddy, Remember My Day: what the learner really did, with clues Buddy gives one at a time.
+// Explain Buddy, How do you…?: the parts a clear explanation includes. Buddy cues one missing part at a time.
+const blankExplain = () => ({ points: [{}, {}, {}] });
+function explainEditor(it, urls) {
+  it.points = it.points?.length ? it.points : [{}];
+  const name = me.learner.name;
+  const list = h('div', { class: 'q-list' });
+  const draw = () => list.replaceChildren(...it.points.map((pt, i) => h('div', { class: 'q-row' },
+    h('div', { class: 'q-num' }, String(i + 1)),
+    h('div', { class: 'q-fields' },
+      field('Part of a clear answer', txt(pt, 'text'), 'e.g. "cut the character out with scissors". Any wording with the same meaning counts.'),
+      h('div', { class: 'grid2' },
+        field('Question cue (optional)', txt(pt, 'question'), 'e.g. "What do you use to cut it out?"'),
+        field('Sentence starter (optional)', txt(pt, 'starter'), 'e.g. "I cut it out with ___."')),
+      field('Model sentence (optional)', txt(pt, 'model'), 'e.g. "I cut it out with scissors."')),
+    h('button', { class: 'btn btn-quiet', onclick: () => { it.points.splice(i, 1); draw(); } }, 'Remove'))));
+  draw();
+  return [
+    h('div', { class: 'grid2' },
+      field('Short title', txt(it, 'title'), 'For the team, e.g. "Paper characters"'),
+      field('Picture (optional)', imagePicker(it, 'image_id', urls, false))),
+    field("Buddy's question", txt(it, 'question'), `e.g. "Tell me how you make one of your paper characters." Things ${name} does or enjoys work best.`),
+    h('h4', { class: 'q-head' }, 'What a clear answer includes'),
+    h('p', { class: 'muted', style: 'margin:0' }, `If ${name}\u2019s answer is short, Buddy asks about one missing part at a time: first "Can you tell me more?", then your question, then the starter, then the model. Three or four parts works well.`),
+    list,
+    h('button', { class: 'btn', onclick: () => { it.points.push({}); draw(); } }, 'Add a part'),
+  ];
+}
+
 // How fresh the list is. Buddy only uses it for 7 days (RECALL_FRESH_DAYS on the server), then gives general clues.
 const RECALL_FRESH_DAYS = 7;
 function listAge(it) {
@@ -502,7 +532,7 @@ function storyEditor(it, urls) {
 }
 
 // ------------------------------------------------------------ review
-const DEFAULT_GOAL = { story: 'narrative', conversation: 'conversation', task: 'instructions', object: 'other', listen: 'other', think: 'unexpected', recall: 'other' };
+const DEFAULT_GOAL = { story: 'narrative', conversation: 'conversation', task: 'instructions', object: 'other', listen: 'other', think: 'unexpected', recall: 'other', explain: 'other' };
 // "Memory Buddy: Remember My Day" — two modes share Memory Buddy, so lists show both names.
 const modeName = (m) => `${modes[m].label}: ${modes[m].activityName}`;
 const TZ = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';

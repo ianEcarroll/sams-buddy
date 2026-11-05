@@ -46,7 +46,7 @@ export const PLAN_GOALS = {
     target: 'Not counted towards the four plan goals.',
     cue: '',
     allowed: null, // no success rule — shown as practice only
-    modes: ['object', 'story', 'task', 'conversation', 'listen', 'think', 'recall'],
+    modes: ['object', 'story', 'task', 'conversation', 'listen', 'think', 'recall', 'explain'],
   },
 };
 export const GOAL_KEYS = Object.keys(PLAN_GOALS);
