@@ -412,7 +412,71 @@ export const STARTER_EXPLAIN = {
   ],
 };
 
-export const MODES = { object, story, task, conversation, listen, think, recall, explain };
+// ---------- FOLLOW (Listen Buddy: follow a spoken instruction on screen) ----------
+// A row of numbered boxes and a few of Buddy's own coloured shapes. Buddy gives the whole instruction once; the learner
+// taps a shape, then a box. The last step can be spoken ("tell me which one is on the left"). When a step goes wrong,
+// Buddy finds out why: says it back correctly → did something different (doing); needed to hear it again → remembering;
+// needed to see it → understanding.
+export const FOLLOW_COLOURS = ['red', 'blue', 'green', 'yellow', 'purple', 'orange'];
+export const FOLLOW_SHAPES = ['circle', 'square', 'triangle', 'star', 'heart'];
+export const FOLLOW_BOXES = 4;
+export const tokenName = (id) => String(id || '').replace('-', ' ');
+export const tokenParts = (id) => { const [colour, shape] = String(id || '').split('-'); return { colour, shape }; };
+export const FOLLOW_STEP_TYPES = ['touch', 'box', 'next_to', 'left_of', 'right_of', 'say_left', 'say_right', 'say_box'];
+// One step in words. `prevToken` lets "Then put it in box 3" follow "touch the green triangle".
+export function followStepText(step, prevToken = null) {
+  const t = step.token && step.token === prevToken ? 'it' : `the ${tokenName(step.token)}`;
+  switch (step.type) {
+    case 'touch': return `touch the ${tokenName(step.token)}`;
+    case 'box': return `put ${t} in box ${step.box}`;
+    case 'next_to': return `put ${t} next to the ${tokenName(step.target)}`;
+    case 'left_of': return `put ${t} on the left of the ${tokenName(step.target)}`;
+    case 'right_of': return `put ${t} on the right of the ${tokenName(step.target)}`;
+    case 'say_left': return 'tell me which one is on the left';
+    case 'say_right': return 'tell me which one is on the right';
+    case 'say_box': return `tell me which one is in box ${step.box}`;
+    default: return '';
+  }
+}
+// Ray's wording for instructions: First … Then … Finally (two steps: First … Then).
+const followOrdinal = (i, n) => (i === 0 ? 'first' : i === n - 1 && n > 2 ? 'finally' : 'then');
+export const followSteps = (item) => (item.steps || []).filter((st) => FOLLOW_STEP_TYPES.includes(st?.type));
+export function followInstruction(item) {
+  const steps = followSteps(item);
+  return steps.map((st, i) => `${cap(followOrdinal(i, steps.length))}, ${followStepText(st, i ? steps[i - 1].token : null)}.`).join(' ');
+}
+const follow = {
+  label: 'Listen Buddy',
+  tagline: 'Follow instructions',
+  activityName: 'Follow on Screen',
+  defaultGoal: 'Listen to the whole instruction, then follow the steps in order',
+  cueCard: (item) => followSteps(item).map((_, i, a) => cap(followOrdinal(i, a.length))),
+  elements: (item) => followSteps(item).map((_, i) => `step_${i}`),
+  elementLabel: new Proxy({}, { get: (t, k) => (String(k).startsWith('step_') ? `Step ${Number(String(k).slice(5)) + 1}` : k) }),
+  cueCardIndex: (el) => (String(el).startsWith('step_') ? Number(el.slice(5)) : null),
+  prompt: () => 'Now you do it.',
+  simplePrompt: () => 'Touch a shape, then touch a box.',
+  defaultCues: {},
+  achieved: {},
+  evidenceLabel: new Proxy({}, { get: (t, k) => (String(k).startsWith('step_') ? `Step ${Number(String(k).slice(5)) + 1}` : undefined) }),
+  itemLabel: (item) => item.title || followInstruction(item).slice(0, 60),
+};
+
+// Three starter instructions: two 2-step (plan goal 2's target) and one 3-step trial, like Ray's example.
+export const STARTER_FOLLOW = {
+  title: 'Shapes and boxes',
+  goal: 'Listen to the whole instruction, then follow the steps in order',
+  items: [
+    { title: 'Red circle, blue square', tokens: ['red-circle', 'blue-square', 'green-triangle'],
+      steps: [{ type: 'box', token: 'red-circle', box: 1 }, { type: 'next_to', token: 'blue-square', target: 'red-circle' }] },
+    { title: 'Touch, then move', tokens: ['green-triangle', 'yellow-star', 'purple-heart'],
+      steps: [{ type: 'touch', token: 'green-triangle' }, { type: 'box', token: 'green-triangle', box: 3 }] },
+    { title: 'Three steps', tokens: ['red-circle', 'blue-square', 'yellow-star'], start: { 'blue-square': 3 },
+      steps: [{ type: 'touch', token: 'red-circle' }, { type: 'left_of', token: 'red-circle', target: 'blue-square' }, { type: 'say_left' }] },
+  ],
+};
+
+export const MODES = { object, story, task, conversation, listen, think, recall, explain, follow };
 
 // Three everyday situations every learner starts with in Think Buddy. The team should check them with the
 // therapist and can edit, archive or add their own in Activities.
@@ -522,6 +586,11 @@ export function labelFor(mode, el) {
 // Brief, specific feedback for a set of elements, e.g.
 // "named the object and explained its use" / "said where it happened and told what happened first, next and last, in order".
 export function describe(mode, els, item) {
+  if (mode === 'follow') {
+    const n = els.filter((e) => e.startsWith('step_')).length;
+    const total = followSteps(item).length;
+    return n && n === total ? `followed ${total === 1 ? 'the step' : `all ${NUM[total] || total} steps`}` : `did ${n === 1 ? 'one step' : `${NUM[n] || n} steps`}`;
+  }
   if (mode === 'explain') {
     const n = els.filter((e) => e.startsWith('point_')).length;
     const total = pointsOf(item).length;
