@@ -31,6 +31,8 @@ const toast = (msg) => { const t = h('div', { class: 'toast', role: 'status' }, 
 const list = (s) => String(s || '').split(',').map((x) => x.trim()).filter(Boolean);
 const lines = (s) => String(s || '').split('\n').map((x) => x.trim()).filter(Boolean);
 const fmt = (d) => new Date(d).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+// Download names use the child's name, e.g. "maya-buddy-weekly-record.csv".
+const fileName = () => `${String(me.learner.name || 'learner').toLowerCase().normalize('NFKD').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'learner'}-buddy`;
 const ROLE = { parent: 'Parent', therapist: 'Speech therapist', teacher: 'Teacher', job_coach: 'Job coach' };
 
 async function api(path, { method = 'GET', body, form } = {}) {
@@ -691,9 +693,9 @@ async function renderReview(root) {
     h('div', { class: 'review-top' },
       h('h2', {}, 'Progress on the plan goals'),
       h('div', { class: 'row-actions' },
-        h('button', { class: 'btn', onclick: run(() => download('/adult/export/weekly.csv', 'sams-buddy-weekly-record.csv')) }, 'Weekly record (CSV)'),
-        h('button', { class: 'btn btn-quiet', onclick: run(() => download('/adult/export/items.csv', 'sams-buddy-all-practice.csv')) }, 'All practice (CSV)'),
-        h('button', { class: 'btn btn-quiet', onclick: run(() => download('/adult/export', 'sams-buddy-records.json')) }, 'Full backup (JSON)'))),
+        h('button', { class: 'btn', onclick: run(() => download('/adult/export/weekly.csv', `${fileName()}-weekly-record.csv`)) }, 'Weekly record (CSV)'),
+        h('button', { class: 'btn btn-quiet', onclick: run(() => download('/adult/export/items.csv', `${fileName()}-all-practice.csv`)) }, 'All practice (CSV)'),
+        h('button', { class: 'btn btn-quiet', onclick: run(() => download('/adult/export', `${fileName()}-records.json`)) }, 'Full backup (JSON)'))),
     cards,
     h('details', { class: 'codes-key' }, h('summary', {}, 'How practice is counted'),
       h('p', {}, `Each item ${me.learner.name} finishes is one opportunity. It meets the target when every part is given with the support the plan allows for that goal (goals 1 and 2: no prompt; goals 3 and 4: one cue at most). Items stopped early, and practice not linked to a plan goal, are shown but not counted.`),
