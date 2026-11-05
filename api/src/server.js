@@ -420,7 +420,7 @@ adult.post('/observations', wrap(async (req, res) => {
   res.json({ ok: true });
 }));
 adult.get('/export', wrap(requireRecordAccess), wrap(async (req, res) => {
-  res.set('content-disposition', 'attachment; filename="sams-buddy-records.json"').json(await exportFor(req.learnerId));
+  res.set('content-disposition', 'attachment; filename="buddy-records.json"').json(await exportFor(req.learnerId));
 }));
 // ---- plan tracking: per-goal summary and CSV exports in the team's weekly-record format
 
@@ -479,7 +479,7 @@ adult.get('/export/weekly.csv', wrap(requireRecordAccess), wrap(async (req, res)
       codes, aids.length ? aids : 'None', clip(`${ex.item_label}: ${ex.sam_response}`),
     ];
   });
-  res.set('content-type', 'text/csv; charset=utf-8').set('content-disposition', 'attachment; filename="sams-buddy-weekly-record.csv"')
+  res.set('content-type', 'text/csv; charset=utf-8').set('content-disposition', 'attachment; filename="buddy-weekly-record.csv"')
     .send(toCsv(['Goal', 'Date', 'Setting/person', 'Success out of opportunities', 'Support code', 'Visual aid', 'Brief example'], rows));
 }));
 
@@ -491,8 +491,8 @@ adult.get('/export/items.csv', wrap(requireRecordAccess), wrap(async (req, res) 
     r.success == null ? 'not counted' : r.success ? 'yes' : 'no', r.support_code || '', r.visual_aids || [], r.sam_turns ?? '', r.score_total != null ? `${r.score_first}/${r.score_total}` : '', r.score_total != null ? `${r.score_correct}/${r.score_total}` : '',
     r.sam_response, r.independent, r.after_support, r.support_provided, r.help_requests, r.review_note,
   ]);
-  res.set('content-type', 'text/csv; charset=utf-8').set('content-disposition', 'attachment; filename="sams-buddy-all-practice.csv"')
-    .send(toCsv(['Date', 'Time', 'Goal', 'Activity', 'Item', 'Met target', 'Support code', 'Visual aids', "Learner's relevant turns", 'Score (first try)', 'Score (final)', "Sam's response",
+  res.set('content-type', 'text/csv; charset=utf-8').set('content-disposition', 'attachment; filename="buddy-all-practice.csv"')
+    .send(toCsv(['Date', 'Time', 'Goal', 'Activity', 'Item', 'Met target', 'Support code', 'Visual aids', "Learner's relevant turns", 'Score (first try)', 'Score (final)', "Learner's response",
       'Independently', 'After support', 'Support given', 'Asked for help', 'Note'], rows));
 }));
 
