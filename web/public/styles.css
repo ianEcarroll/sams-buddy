@@ -77,15 +77,16 @@ button { cursor: pointer; }
 [data-module="object"] { --mod: #9a6a00; --mod-soft: #fdf0cf; }
 [data-module="conversation"] { --mod: #0f7a6a; --mod-soft: #dcf3ee; }
 [data-module="task"] { --mod: #2563b0; --mod-soft: #e0ebf9; }
+[data-module="think"] { --mod: #b02a6b; --mod-soft: #f9e1ec; }
 :root[data-theme="dark"] [data-module] { --mod-soft: #22344f; }
 :root[data-theme="dark"] [data-module="listen"] { --mod: #f0a07c; } :root[data-theme="dark"] [data-module="story"] { --mod: #c1a5f0; }
 :root[data-theme="dark"] [data-module="object"] { --mod: #f4c25a; } :root[data-theme="dark"] [data-module="conversation"] { --mod: #4cc7b0; }
-:root[data-theme="dark"] [data-module="task"] { --mod: #8bb6f0; }
+:root[data-theme="dark"] [data-module="task"] { --mod: #8bb6f0; } :root[data-theme="dark"] [data-module="think"] { --mod: #f08cbb; }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) [data-module] { --mod-soft: #22344f; }
   :root:not([data-theme="light"]) [data-module="listen"] { --mod: #f0a07c; } :root:not([data-theme="light"]) [data-module="story"] { --mod: #c1a5f0; }
   :root:not([data-theme="light"]) [data-module="object"] { --mod: #f4c25a; } :root:not([data-theme="light"]) [data-module="conversation"] { --mod: #4cc7b0; }
-  :root:not([data-theme="light"]) [data-module="task"] { --mod: #8bb6f0; }
+  :root:not([data-theme="light"]) [data-module="task"] { --mod: #8bb6f0; } :root:not([data-theme="light"]) [data-module="think"] { --mod: #f08cbb; }
 }
 .card[data-module] { border-top: 6px solid var(--mod); }
 .card-icon { display: inline-grid; place-items: center; width: 56px; height: 56px; border-radius: 16px; background: var(--mod-soft, var(--sky-soft)); color: var(--mod, var(--ink)); flex: none; }

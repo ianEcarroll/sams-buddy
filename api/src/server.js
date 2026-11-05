@@ -7,7 +7,7 @@ import { sign, hmac, hashPassword, checkPassword, requireAdult, requireOwner, re
 import { transcribe, speak, voiceEnabled, listVoices, defaultVoiceId } from './voice.js';
 import { createSession, respond, confirmHeard, control, finish, ENGINE_DEFAULTS } from './coach/engine.js';
 import { judgeFromEnv } from './coach/judge.js';
-import { MODES, STARTER_STORIES } from './coach/modes.js';
+import { MODES, STARTER_STORIES, STARTER_SCENARIOS } from './coach/modes.js';
 import { PLAN_GOALS, GOAL_KEYS, SUPPORT_CODES } from './coach/goals.js';
 import { emailEnabled, sendEmail, recipientsFor, practiceEmail } from './email.js';
 import { isPlatformAdmin, newInviteToken, INVITE_DAYS, estimateCost, validateFamily, ageFrom, cleanInterests } from './families.js';
@@ -39,7 +39,7 @@ export const SETTING_DEFAULTS = {
   reminder_time: '',          // 'HH:MM' in the learner's time zone; '' = no reminder
   timezone: 'Europe/Paris',
   voice_id: null,
-  enabled_modes: ['story', 'object', 'task', 'listen'],
+  enabled_modes: ['story', 'object', 'task', 'listen', 'think'],
   interests: [],              // the child's interests and activities, used by Buddy in conversation
 };
 const SETTING_KEYS = Object.keys(SETTING_DEFAULTS);
@@ -228,7 +228,7 @@ adult.put('/settings', wrap(async (req, res) => {
 }));
 
 adult.get('/activities', wrap(async (req, res) => {
-  await ensureStarterStories(req.learnerId);
+  await ensureStarters(req.learnerId);
   const rows = await many("select id, mode, title, goal, plan_goal, status, content, updated_at from activities where learner_id=$1 and status<>'archived' order by mode, updated_at desc", [req.learnerId]);
   for (const r of rows) {
     const ids = (r.content.items || []).flatMap((it) => [it.image_id, ...(it.image_ids || [])]).filter(Boolean);
@@ -247,6 +247,15 @@ async function ensureStarterStories(learnerId) {
   const modes = settingsOf(l).enabled_modes;
   await q('update learners set settings = settings || $1::jsonb where id=$2', [{ listen_seeded: true, enabled_modes: modes.includes('listen') ? modes : [...modes, 'listen'] }, learnerId]);
 }
+// Think Buddy starts with three everyday situations (plan goal 1). Added once; the team can edit or archive them.
+async function ensureStarterScenarios(learnerId) {
+  const l = await one('select settings from learners where id=$1', [learnerId]);
+  if (!l || l.settings?.think_seeded) return;
+  await q("insert into activities(learner_id, mode, title, goal, plan_goal, status, content) values ($1,'think',$2,$3,'unexpected','active',$4)", [learnerId, STARTER_SCENARIOS.title, STARTER_SCENARIOS.goal, { items: STARTER_SCENARIOS.items }]);
+  const modes = settingsOf(l).enabled_modes;
+  await q('update learners set settings = settings || $1::jsonb where id=$2', [{ think_seeded: true, enabled_modes: modes.includes('think') ? modes : [...modes, 'think'] }, learnerId]);
+}
+const ensureStarters = async (learnerId) => { await ensureStarterStories(learnerId); await ensureStarterScenarios(learnerId); };
 
 function validateActivity(b) {
   if (!MODES[b.mode]) return 'Choose a practice type.';
@@ -259,6 +268,7 @@ function validateActivity(b) {
     if (b.mode === 'story' && (!it.setting || !(it.events || []).filter(Boolean).length)) return `Story ${i + 1}: add the setting and at least one event.`;
     if (b.mode === 'story' && !(it.image_ids || []).length && !it.intro?.trim()) return `Story ${i + 1}: add pictures, or a line for Buddy to say first, so the learner knows which story to tell.`;
     if (b.mode === 'task' && ((it.steps || []).filter(Boolean).length < 1)) return `Task ${i + 1}: add the steps.`;
+    if (b.mode === 'think' && (!it.scenario?.trim() || !it.problem?.trim())) return `Situation ${i + 1}: describe the situation and what is unexpected about it.`;
     if (b.mode === 'conversation' && (!it.topic || !it.opener)) return `Topic ${i + 1}: add the topic and Buddy's opening line.`;
     if (b.mode === 'listen') {
       if (!it.story?.trim()) return `Story ${i + 1}: write the story Buddy will read.`;
@@ -456,7 +466,7 @@ const device = express.Router();
 device.use(wrap(requireDevice));
 
 device.get('/home', wrap(async (req, res) => {
-  await ensureStarterStories(req.learnerId);
+  await ensureStarters(req.learnerId);
   const l = await one('select name, settings, current_activity_id from learners where id=$1', [req.learnerId]);
   const s = settingsOf(l);
   const consent = await one('select agreed_at, can_view, save_audio from consent where learner_id=$1', [req.learnerId]);

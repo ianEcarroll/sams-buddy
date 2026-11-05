@@ -210,7 +210,80 @@ const listen = {
   itemLabel: (item) => item.title || 'story',
 };
 
-export const MODES = { object, story, task, conversation, listen };
+// ---------- THINK (problem solving: a real-life situation, then "what would you do?") ----------
+// Buddy describes a situation. The learner says what is wrong and what they would do. If they don't say why,
+// or what they'd do if that didn't work, Buddy asks those as ordinary follow-up questions (not counted as support).
+export const THINK_FOLLOW_UPS = {
+  reason: 'Why do you think that would be a good idea?',
+  backup: "What could you do if that doesn't work?",
+};
+const think = {
+  label: 'Think Buddy',
+  tagline: 'Solve the problem',
+  activityName: 'Solve a Problem',
+  defaultGoal: 'Notice the problem, say a safe thing to do and why, and what to do if it does not work',
+  movie: true,
+  cueCard: () => ['Problem', 'What I’d do', 'Why', 'If not'],
+  elements: () => ['problem', 'action', 'reason', 'backup'],
+  elementLabel: { problem: 'Problem', action: 'What to do', reason: 'Why', backup: 'If that does not work' },
+  cueCardIndex: (el) => ({ problem: 0, action: 1, reason: 2, backup: 3 }[el]),
+  followUps: THINK_FOLLOW_UPS,
+  prompt: (item) => item.question || 'What would you do?',
+  simplePrompt: (item) => item.simple_prompt || 'Something is not how you expected. What could you do?',
+  defaultCues: {
+    problem: ['Stop and think. Is this what you expected?', 'What is different from what you expected?', 'The problem is ___.', 'The problem is {problem}.'],
+    action: ['STOP. THINK. Is this expected? If unsure, ASK.', 'What could you do, or who could you ask?', 'I would ___.', 'I would {action}.'],
+    reason: ['Why do you think that would be a good idea?', 'How would that help you?', 'That would help because ___.', 'That would help because {reason}.'],
+    backup: ["What could you do if that doesn't work?", 'If that does not work, who else could you ask?', "If that doesn't work, I would ___.", "If that doesn't work, I would {backup}."],
+  },
+  vars: (item) => ({
+    problem: item.problem || 'something is not as expected',
+    action: (item.good_actions || [])[0] || 'ask an adult I trust',
+    reason: item.reason_example || 'they can help me find out what to do',
+    backup: item.backup_example || 'ask another adult I trust',
+  }),
+  achieved: { problem: 'noticed the problem', action: 'said a safe thing to do', reason: 'explained why it would help', backup: 'had a plan if it did not work' },
+  evidenceLabel: { problem: 'Problem', action: 'Would do', reason: 'Why', backup: 'Plan B' },
+  itemLabel: (item) => item.title || 'situation',
+};
+
+export const MODES = { object, story, task, conversation, listen, think };
+
+// Three everyday situations every learner starts with in Think Buddy. The team should check them with the
+// therapist and can edit, archive or add their own in Activities.
+export const STARTER_SCENARIOS = {
+  title: 'Everyday surprises',
+  goal: 'Notice the problem, say a safe thing to do and why, and what to do if it does not work',
+  items: [
+    {
+      title: 'Trainer not at the gym',
+      scenario: "You arrive at the gym for your session, but your trainer isn't there.",
+      problem: 'the trainer is not there',
+      good_actions: ['ask the person at the front desk', 'wait a few minutes, then ask a member of staff', 'call or message my parent', 'check whether the session time changed'],
+      reason_example: 'the staff can find out where my trainer is',
+      backup_example: 'call my mum or dad and tell them',
+      unsafe: ['leave on my own without telling anyone', 'go off with someone I do not know'],
+    },
+    {
+      title: 'Library door locked',
+      scenario: 'Your teacher says the class is going to the library. When you get there, the door is locked and nobody is there.',
+      problem: 'the library is locked and the class is not there',
+      good_actions: ['go back to the classroom', 'ask a teacher', 'go to the school office and ask', 'ask a classmate where the class went'],
+      reason_example: 'a teacher will know where my class is',
+      backup_example: 'go to the school office',
+      unsafe: ['leave the school', 'wander around on my own for a long time'],
+    },
+    {
+      title: 'Wrong drink at the café',
+      scenario: 'You order a hot chocolate at a café, but they bring you an orange juice.',
+      problem: 'they brought the wrong drink',
+      good_actions: ['politely tell the person who served me', 'say "Excuse me, I ordered a hot chocolate"', 'ask the staff at the counter'],
+      reason_example: 'they can swap it for the right drink',
+      backup_example: 'ask someone else who works there, or ask the adult I am with',
+      unsafe: ['shout at the staff', 'take someone else’s drink'],
+    },
+  ],
+};
 
 // Two stories every learner starts with. The team can edit them or add more in Activities.
 export const STARTER_STORIES = [

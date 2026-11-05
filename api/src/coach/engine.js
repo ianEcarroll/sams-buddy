@@ -64,6 +64,8 @@ function newItemState(state) {
     modelGiven: {},
     orderBroken: false,
     phase: 'answer',
+    asked: {},       // think: follow-up questions already asked (why? / what if that doesn't work?)
+    unsafe: [],      // think: ideas the judge flagged as unsafe, in the learner's words
   };
   if (state.mode === 'task' && item.unclear_instruction) { st.phase = 'clarify'; st.elements.unshift('clarify'); }
   if (state.mode === 'conversation') st.conv = { validTurns: 0, questionAsked: false, turns: [], noted: {} };
@@ -97,6 +99,12 @@ function openItem(state) {
       lines.push(line(TEAM_PHRASE, 'movie', { pauseAfter: think }));
       lines.push(line(m.prompt(item), 'prompt'));
     }
+  } else if (state.mode === 'think') {
+    if (item.intro) lines.push(line(item.intro, 'intro'));
+    lines.push(line("Here's a situation.", 'intro'));
+    lines.push(line(item.scenario || '', 'instruction'));
+    lines.push(line(TEAM_PHRASE, 'movie', { pauseAfter: think }));
+    lines.push(line(m.prompt(item), 'prompt'));
   } else if (state.mode === 'conversation') {
     lines.push(line(item.opener || `Let's talk about ${item.topic}.`, 'prompt'));
   } else if (state.mode === 'listen') {
@@ -181,6 +189,7 @@ async function process_(state, { text, displayText, confirmed }, judge) {
   }
 
   it.attempts += 1;
+  if (j.unsafe) it.unsafe.push(displayText);
   const newly = absorb(state, j);
   const lines = [];
   if (allMet(state)) return { state, turn: makeTurn(state, completeItem(state, newly)) };
@@ -192,6 +201,18 @@ async function process_(state, { text, displayText, confirmed }, judge) {
   if (allMet(state) || it.attempts >= state.settings.max_attempts) return { state, turn: makeTurn(state, completeItem(state, newly)) };
 
   const focus = nextMissing(state);
+  // Think Buddy: "Why…?" and "What if that doesn't work?" are part of the activity, asked once as plain
+  // follow-up questions before any cue. They are not counted as support.
+  const follow = m.followUps?.[focus];
+  if (follow && !it.asked[focus] && it.met.action) {
+    it.asked[focus] = true;
+    it.focus = focus;
+    it.focusLevel = 0; // a later cue for this part starts at the specific cue
+    const q = line(follow, 'prompt');
+    state.lastLines = [q];
+    lines.push(q);
+    return { state, turn: makeTurn(state, lines) };
+  }
   lines.push(giveCue(state, focus, 'buddy'));
   return { state, turn: makeTurn(state, lines) };
 }
@@ -653,6 +674,7 @@ export function buildRecord(state, it, stopNote = null) {
     for (const s of it.supportGiven) supported.set(s.el, Math.max(supported.get(s.el) ?? -1, s.level));
     for (const [el, lv] of supported) if (it.met[el]) notes.push(`${label(el)} needed a ${LEVELS[lv]} on this attempt.`);
     for (const el of Object.keys(it.skipped)) notes.push(`${label(el)} not given yet, even after a model.`);
+    if (it.unsafe?.length) notes.push(`Suggested something that may not be safe: ${it.unsafe.map((u) => `"${u}"`).join('; ')}.`);
     if (!stopNote && !supported.size && !Object.keys(it.skipped).length && metEls.length) notes.push('All parts given independently.');
   }
   if (help.length) notes.push('Asked for help, which counts as a successful response.');
@@ -666,6 +688,11 @@ export function buildRecord(state, it, stopNote = null) {
     // Goal 1 is about noticing and asking; retelling the clear steps afterwards isn't part of it.
     code = supportCode(it.supportGiven.filter((s) => s.el === 'clarify'));
     complete = !!it.met.clarify;
+  } else if (state.mode === 'think' && planGoal === 'unexpected') {
+    // Goal 1 asks for noticing the change and a safe response (asking if unsure). "Why" and "what if" are
+    // practised too, but don't decide whether this opportunity met the goal.
+    code = supportCode(it.supportGiven.filter((s) => s.el === 'problem' || s.el === 'action'));
+    complete = !!(it.met.problem && it.met.action) && !it.unsafe.length;
   } else if (state.mode === 'conversation') {
     // The plan counts each speaker's contribution as one turn, so 2 relevant turns from Sam
     // (alternating with Buddy's) make 4 conversational turns.

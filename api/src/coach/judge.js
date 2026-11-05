@@ -31,6 +31,13 @@ export function detectHelp(text, extraPhrases = []) {
   return 'none';
 }
 
+// In Think Buddy, "I'd ask for help" or "I'd check with my coach" is an answer to the situation, not a request
+// to Buddy. Only clear requests to Buddy (repeat, don't understand, show me) count as help there.
+const THINK_HELP = new Set(['repeat', 'dont_understand', 'show_me']);
+export function helpFor(mode, kind) {
+  return mode === 'think' && !THINK_HELP.has(kind) ? 'none' : kind;
+}
+
 // ---------- keyword judge: offline fallback + tests ----------
 const STOP = new Set('the a an and then he she they it is are was were to of in on at for with his her their into from up down out over this that'.split(' '));
 const words = (s) => String(s || '').toLowerCase().match(/[a-z']+/g) || [];
@@ -59,7 +66,7 @@ function firstIndex(text, candidates) {
 }
 
 export function keywordJudge({ mode, item, elements, text, activity }) {
-  const out = { met: {}, inOrder: null, help: detectHelp(text, item.clarify_phrases), relevant: false, connection: false, question: false, garbled: false, reply: null };
+  const out = { met: {}, inOrder: null, help: helpFor(mode, detectHelp(text, item.clarify_phrases)), unsafe: false, relevant: false, connection: false, question: false, garbled: false, reply: null };
   for (const el of elements) out.met[el] = null;
 
   if (mode === 'object') {
@@ -87,6 +94,16 @@ export function keywordJudge({ mode, item, elements, text, activity }) {
 
   if (mode === 'listen') {
     out.met.answer = findAny(text, item.answers || []);
+  }
+
+  if (mode === 'think') {
+    const actions = [...(item.good_actions || []).flatMap(keyWords), 'ask', 'tell', 'call', 'message', 'staff', 'teacher', 'adult', 'parent', 'mum', 'dad', 'mom'];
+    out.met.action = findAny(text, actions);
+    out.met.problem = findAny(text, keyWords(item.problem)) || (out.met.action ? text : null);
+    out.met.reason = /\b(because|so that|so (i|they|he|she|we)|that way|cause|'cause)\b/i.test(text) ? text : null;
+    out.met.backup = /\b(if (that|it|they) (doesn'?t|does not|didn'?t|did not|don'?t|isn'?t|wasn'?t)|otherwise|instead|someone else|then i'?d|if not)\b/i.test(text) ? text : null;
+    out.unsafe = !!findAny(text, (item.unsafe || []).filter((u) => words(u).length > 1));
+    if (out.unsafe) out.met.action = null;
   }
 
   if (mode === 'conversation') {
@@ -118,6 +135,10 @@ function answerKey(mode, item, activity) {
   if (mode === 'task') return { steps_in_order: item.steps, instruction_given: MODES.task.instruction(item) };
   if (mode === 'conversation') return { topic: item.topic, buddy_last_said: null, practise_questions: !!c.practise_questions };
   if (mode === 'listen') return { story: item.story, question: item.question, accepted_answers: item.answers || [] };
+  if (mode === 'think') return {
+    situation: item.scenario, what_is_unexpected: item.problem, approved_safe_responses: item.good_actions || [],
+    example_reason: item.reason_example || null, example_backup_plan: item.backup_example || null, not_safe: item.unsafe || [],
+  };
   return {};
 }
 
@@ -126,6 +147,7 @@ const ELEMENT_GUIDE = {
   story: 'where = the learner said where it happens. event_N = they described event N (meaning, not exact words). order = only judge in events_in_order. vocabulary = they used one of the target words or approved alternatives AND it fits the picture/action.',
   task: 'step_N = the learner\'s retelling includes step N (meaning, not exact words). order = only judge in events_in_order.',
   listen: 'answer = the learner\'s response correctly answers the question, judged against the story and the accepted answers. Accept any wording, synonym or partial answer with the same meaning (e.g. "a bird" for "crow" only if bird is accepted; "Peter" for "Peter Pan"). A wrong or unrelated answer, or "I don\'t know", is not supplied. Evidence = their answer words.',
+  think: 'This is a problem-solving role-play: Buddy described a situation and asked what the learner would do. The whole response may cover several parts at once. problem = they show they noticed what is wrong or unexpected (naming it, or giving a response that clearly deals with that specific problem). action = they say a safe, sensible thing they would do; asking a trusted adult, staff member, teacher or parent always counts; compare with the approved responses by meaning, not wording, and accept other safe, sensible ideas too. An unsafe idea (in not_safe, or plainly unsafe such as leaving alone, going with a stranger, or anything risky) is NOT an action: set unsafe_idea = true. reason = they explain why their idea would help ("because…", "so that…", or a clear reason in other words). backup = they say what they would do if their first idea did not work. Saying what they WOULD do in the situation (e.g. "I\'d ask my coach for help", "I need help so I\'d ask the staff") is an answer, not a help_request; help_request is only for asking Buddy itself (e.g. "Can you say that again?", "I don\'t understand the question").',
   conversation: 'turn = the learner made a relevant comment, a personal connection, or a question on the topic. Any of these is a valid turn.',
 };
 
@@ -198,6 +220,7 @@ export function makeClaudeJudge({ apiKey, model, workspaceId, fetchImpl = fetch 
           personal_connection: { type: 'boolean' },
           asked_question: { type: 'boolean' },
           transcript_seems_garbled: { type: 'boolean' },
+          unsafe_idea: { type: 'boolean', description: 'Think mode only: the learner suggested something unsafe.' },
           reply: { type: 'string' },
         },
         required: ['elements', 'events_in_order', 'help_request', 'transcript_seems_garbled'],
@@ -230,7 +253,9 @@ export function makeClaudeJudge({ apiKey, model, workspaceId, fetchImpl = fetch 
       if (elements.includes(e.element) && e.supplied) out.met[e.element] = (e.evidence || '').trim() || '(supplied)';
     }
     out.inOrder = input.events_in_order === 'yes' ? true : input.events_in_order === 'no' ? false : null;
-    out.help = quickHelp !== 'none' ? quickHelp : (HELP_ENUM.includes(input.help_request) ? input.help_request : 'none');
+    out.help = helpFor(mode, quickHelp !== 'none' ? quickHelp : (HELP_ENUM.includes(input.help_request) ? input.help_request : 'none'));
+    out.unsafe = mode === 'think' && !!input.unsafe_idea;
+    if (out.unsafe && out.met.action) out.met.action = null;
     out.relevant = !!input.relevant_to_topic;
     out.connection = !!input.personal_connection;
     out.question = !!input.asked_question;

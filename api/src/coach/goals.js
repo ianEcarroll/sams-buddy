@@ -10,7 +10,7 @@ export const PLAN_GOALS = {
     target: 'Notice a change, pause and ask a trusted adult for clarification — 4/5 safe role-plays on two separate dates, with no adult prompt.',
     cue: 'STOP → THINK → Is this expected? → If unsure, ASK',
     allowed: ['I'],
-    modes: ['task'],
+    modes: ['task', 'think'],
   },
   instructions: {
     n: 2,
@@ -46,7 +46,7 @@ export const PLAN_GOALS = {
     target: 'Not counted towards the four plan goals.',
     cue: '',
     allowed: null, // no success rule — shown as practice only
-    modes: ['object', 'story', 'task', 'conversation', 'listen'],
+    modes: ['object', 'story', 'task', 'conversation', 'listen', 'think'],
   },
 };
 export const GOAL_KEYS = Object.keys(PLAN_GOALS);
