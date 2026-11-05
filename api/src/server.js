@@ -39,12 +39,14 @@ export const SETTING_DEFAULTS = {
   reminder_time: '',          // 'HH:MM' in the learner's time zone; '' = no reminder
   timezone: 'Europe/Paris',
   voice_id: null,
-  enabled_modes: ['story', 'object', 'task', 'listen', 'think'],
+  enabled_modes: ['story', 'object', 'task', 'listen', 'think', 'recall'],
   interests: [],              // the child's interests and activities, used by Buddy in conversation
 };
 const SETTING_KEYS = Object.keys(SETTING_DEFAULTS);
 const settingsOf = (learner) => ({ ...SETTING_DEFAULTS, ...(learner?.settings || {}) });
 const imageUrl = (id) => `/api/images/${id}?s=${hmac(id)}`;
+// Every picture an activity item uses: its own, a story's sequence, and Memory Buddy's photo clues.
+const imageIdsOf = (it) => [it?.image_id, ...(it?.image_ids || []), ...(it?.memories || []).map((m) => m?.image_id)].filter(Boolean);
 
 app.get('/api/health', (req, res) => res.json({ ok: true, voice: voiceEnabled(), judge: process.env.ANTHROPIC_API_KEY ? 'claude' : 'keyword' }));
 
@@ -231,7 +233,7 @@ adult.get('/activities', wrap(async (req, res) => {
   await ensureStarters(req.learnerId);
   const rows = await many("select id, mode, title, goal, plan_goal, status, content, updated_at from activities where learner_id=$1 and status<>'archived' order by mode, updated_at desc", [req.learnerId]);
   for (const r of rows) {
-    const ids = (r.content.items || []).flatMap((it) => [it.image_id, ...(it.image_ids || [])]).filter(Boolean);
+    const ids = (r.content.items || []).flatMap(imageIdsOf);
     r.image_urls = Object.fromEntries(ids.map((id) => [id, imageUrl(id)]));
   }
   res.json(rows);
@@ -255,7 +257,14 @@ async function ensureStarterScenarios(learnerId) {
   const modes = settingsOf(l).enabled_modes;
   await q('update learners set settings = settings || $1::jsonb where id=$2', [{ think_seeded: true, enabled_modes: modes.includes('think') ? modes : [...modes, 'think'] }, learnerId]);
 }
-const ensureStarters = async (learnerId) => { await ensureStarterStories(learnerId); await ensureStarterScenarios(learnerId); };
+// Memory Buddy's "Remember My Day" has no starter content (it is about the child's own life), but is switched on once.
+async function ensureRecallEnabled(learnerId) {
+  const l = await one('select settings from learners where id=$1', [learnerId]);
+  if (!l || l.settings?.recall_enabled) return;
+  const modes = settingsOf(l).enabled_modes;
+  await q('update learners set settings = settings || $1::jsonb where id=$2', [{ recall_enabled: true, enabled_modes: modes.includes('recall') ? modes : [...modes, 'recall'] }, learnerId]);
+}
+const ensureStarters = async (learnerId) => { await ensureStarterStories(learnerId); await ensureStarterScenarios(learnerId); await ensureRecallEnabled(learnerId); };
 
 function validateActivity(b) {
   if (!MODES[b.mode]) return 'Choose a practice type.';
@@ -268,6 +277,11 @@ function validateActivity(b) {
     if (b.mode === 'story' && (!it.setting || !(it.events || []).filter(Boolean).length)) return `Story ${i + 1}: add the setting and at least one event.`;
     if (b.mode === 'story' && !(it.image_ids || []).length && !it.intro?.trim()) return `Story ${i + 1}: add pictures, or a line for Buddy to say first, so the learner knows which story to tell.`;
     if (b.mode === 'task' && ((it.steps || []).filter(Boolean).length < 1)) return `Task ${i + 1}: add the steps.`;
+    if (b.mode === 'recall') {
+      const n = Number(it.target ?? 3);
+      if (!Number.isInteger(n) || n < 1 || n > 5) return `Memory ${i + 1}: choose how many things to remember (1 to 5).`;
+      if (!it.when?.trim() && !it.prompt?.trim()) return `Memory ${i + 1}: say when it happened (e.g. "at the weekend") or write Buddy's question.`;
+    }
     if (b.mode === 'think' && (!it.scenario?.trim() || !it.problem?.trim())) return `Situation ${i + 1}: describe the situation and what is unexpected about it.`;
     if (b.mode === 'conversation' && (!it.topic || !it.opener)) return `Topic ${i + 1}: add the topic and Buddy's opening line.`;
     if (b.mode === 'listen') {
@@ -282,7 +296,7 @@ function validateActivity(b) {
 }
 // Pictures in an activity must be this family's own uploads.
 async function imagesOwned(content, learnerId) {
-  const ids = [...new Set((content?.items || []).flatMap((it) => [it.image_id, ...(it.image_ids || [])]).filter(Boolean).map(String))];
+  const ids = [...new Set((content?.items || []).flatMap(imageIdsOf).map(String))];
   if (!ids.length) return true;
   if (!ids.every((id) => /^[0-9a-f-]{36}$/i.test(id))) return false;
   const n = await one('select count(*)::int n from images where id = any($1::uuid[]) and learner_id=$2', [ids, learnerId]);

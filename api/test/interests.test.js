@@ -41,7 +41,7 @@ test('a practice session carries the interests through to the judge', () => {
 });
 
 test('every module has a Buddy name, a tagline and its plain activity name', () => {
-  const names = Object.values(MODES).map((m) => m.label);
+  const names = [...new Set(Object.values(MODES).map((m) => m.label))];
   assert.deepEqual(names.sort(), ['Chat Buddy', 'Explain Buddy', 'Listen Buddy', 'Memory Buddy', 'Story Buddy', 'Think Buddy']);
   for (const m of Object.values(MODES)) { assert.ok(m.tagline); assert.ok(m.activityName); }
 });
