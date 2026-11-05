@@ -129,12 +129,24 @@ const ELEMENT_GUIDE = {
   conversation: 'turn = the learner made a relevant comment, a personal connection, or a question on the topic. Any of these is a valid turn.',
 };
 
-// Who Buddy is talking to: first name, and age when the family gave a year of birth.
+// Who Buddy is talking to: first name, age when the family gave a year of birth, and the interests the family entered.
 const describe = (learner = {}) => {
   const name = learner.name || 'the learner';
   const age = Number(learner.age) > 0 ? `a ${learner.age}-year-old` : 'a young person';
-  return { name, age };
+  const interests = (Array.isArray(learner.interests) ? learner.interests : []).map((i) => String(i).replace(/["\n\r]/g, '').slice(0, 40)).filter(Boolean).slice(0, 15);
+  return { name, age, interests };
 };
+
+// The family's list of interests: context only. It helps spot personal connections and gives Buddy things to talk about.
+function interestsLine(learner) {
+  const { name, interests } = describe(learner);
+  return interests.length ? ` ${name}'s family says ${name} enjoys: ${interests.join(', ')}. Mentioning one of these counts as a personal connection when it relates to the topic.` : '';
+}
+function interestsReply(learner) {
+  const { name, interests } = describe(learner);
+  if (!interests.length) return '';
+  return `- Things ${name} enjoys: ${interests.join(', ')}. When it fits the topic naturally, link your comment to one of them (e.g. "That reminds me of ${interests[0]}."). Don't force it, don't change the topic to it, and don't list them.\n`;
+}
 
 export function systemFor(learner) {
   const { name, age } = describe(learner);
@@ -146,6 +158,7 @@ Rules:
 - Never credit an element ${name} did not say. Evidence must be ${name}'s own words copied from the transcript.
 - Accept approved alternatives from the answer key. Do not invent stricter targets.
 - The transcript comes from speech recognition. If it looks like a recognition error (garbled, wrong-language fragments, words that make no sense in context) set transcript_seems_garbled = true rather than treating it as a language mistake.
+- A response that links the topic to ${name}'s own life counts as a personal connection.${interestsLine(learner)}
 - help_request: classify if ${name} is asking for repetition, saying they don't understand, asking for help, asking to be shown, or saying they need to check with their job coach. Otherwise "none".
 Always respond by calling the report tool.`;
 }
@@ -158,7 +171,7 @@ Staying in the conversation:
 - Talk like a friendly person on the phone: share simple likes, opinions and everyday comments in character. If ${name} asks something you can't really know (e.g. "what colour is my shirt?"), turn it back to them warmly ("Ooh, tell me! Is that your favourite colour?").
 - Only if ${name} sincerely asks whether you are a real person, say briefly that you're their practice buddy, then carry on with the topic.
 - Never comment on ${name}'s progress: no "well done for asking a question", "you made a connection", "task complete", goals, levels or scores. Progress is recorded separately for the adults.
-- Don't tell ${name} to ask you a question; the app handles that. Vary your wording and don't reuse phrases from earlier in the conversation.`;
+${interestsReply(learner)}- Don't tell ${name} to ask you a question; the app handles that. Vary your wording and don't reuse phrases from earlier in the conversation.`;
 }
 
 export function makeClaudeJudge({ apiKey, model, workspaceId, fetchImpl = fetch }) {

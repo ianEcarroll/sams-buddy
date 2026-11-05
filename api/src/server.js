@@ -10,7 +10,7 @@ import { judgeFromEnv } from './coach/judge.js';
 import { MODES, STARTER_STORIES } from './coach/modes.js';
 import { PLAN_GOALS, GOAL_KEYS, SUPPORT_CODES } from './coach/goals.js';
 import { emailEnabled, sendEmail, recipientsFor, practiceEmail } from './email.js';
-import { isPlatformAdmin, newInviteToken, INVITE_DAYS, estimateCost, validateFamily, ageFrom } from './families.js';
+import { isPlatformAdmin, newInviteToken, INVITE_DAYS, estimateCost, validateFamily, ageFrom, cleanInterests } from './families.js';
 import { pushEnabled, pushPublicKey, sendPush, reminderDue, reminderMessage } from './push.js';
 
 const app = express();
@@ -40,6 +40,7 @@ export const SETTING_DEFAULTS = {
   timezone: 'Europe/Paris',
   voice_id: null,
   enabled_modes: ['story', 'object', 'task', 'listen'],
+  interests: [],              // the child's interests and activities, used by Buddy in conversation
 };
 const SETTING_KEYS = Object.keys(SETTING_DEFAULTS);
 const settingsOf = (learner) => ({ ...SETTING_DEFAULTS, ...(learner?.settings || {}) });
@@ -218,6 +219,7 @@ adult.put('/settings', wrap(async (req, res) => {
   const clean = {};
   for (const k of SETTING_KEYS) if (k in (body.settings || {})) clean[k] = body.settings[k];
   if (clean.enabled_modes) clean.enabled_modes = clean.enabled_modes.filter((m) => MODES[m]);
+  if ('interests' in clean) clean.interests = cleanInterests(clean.interests);
   if ('reminder_time' in clean && !/^([01]\d|2[0-3]):[0-5]\d$/.test(clean.reminder_time || '')) clean.reminder_time = '';
   if ('timezone' in clean) { try { new Intl.DateTimeFormat('en', { timeZone: clean.timezone }); } catch { delete clean.timezone; } }
   await q('update learners set settings = settings || $1::jsonb, current_activity_id = coalesce($2, current_activity_id) where id=$3', [clean, body.current_activity_id || null, req.learnerId]);
@@ -298,7 +300,7 @@ adult.delete('/activities/:id', wrap(async (req, res) => {
   res.json({ ok: true });
 }));
 adult.get('/modes', (req, res) => {
-  res.json(Object.fromEntries(Object.entries(MODES).map(([k, m]) => [k, { label: m.label, defaultGoal: m.defaultGoal, defaultCues: m.defaultCues }])));
+  res.json(Object.fromEntries(Object.entries(MODES).map(([k, m]) => [k, { label: m.label, tagline: m.tagline, activityName: m.activityName, defaultGoal: m.defaultGoal, defaultCues: m.defaultCues }])));
 });
 // Voice picker: the account's ElevenLabs voices, and a short sample in Buddy's own words.
 const voiceSample = (name) => `Hi ${name}, I'm Buddy. Make a movie in your mind. When you're ready, press to talk.`;
@@ -549,7 +551,7 @@ device.post('/practice/start', wrap(async (req, res) => {
   const id = req.body?.activityId || l.current_activity_id;
   const act = id && await one("select id, mode, title, goal, plan_goal, content from activities where id=$1 and learner_id=$2 and status='active'", [id, req.learnerId]);
   if (!act) return res.status(404).json({ error: 'Your team has not chosen a practice yet.' });
-  const { state, turn } = createSession({ activity: act, settings: settingsOf(l), learnerName: l.name, learnerAge: ageFrom(l.birth_year) });
+  const { state, turn } = createSession({ activity: act, settings: settingsOf(l), learnerName: l.name, learnerAge: ageFrom(l.birth_year), learnerInterests: settingsOf(l).interests });
   const s = await one('insert into practice_sessions(learner_id, activity_id, activity_snapshot, state) values ($1,$2,$3,$4) returning id', [req.learnerId, act.id, act, state]);
   res.json({ title: act.title, mode: act.mode, ...(await deliver(s.id, state, turn)) });
 }));

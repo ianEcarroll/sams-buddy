@@ -19,7 +19,9 @@ const cap = (s) => (s ? s[0].toUpperCase() + s.slice(1) : s);
 
 // ---------------------------------------------------------------- session lifecycle
 
-export function createSession({ activity, settings = {}, learnerName = 'Sam', learnerAge = null, now = Date.now() }) {
+const learnerOf = (state) => ({ name: state.learnerName, age: state.learnerAge, interests: state.learnerInterests || [] });
+
+export function createSession({ activity, settings = {}, learnerName = 'Sam', learnerAge = null, learnerInterests = [], now = Date.now() }) {
   const items = activity.content?.items || [];
   if (!items.length) throw new Error('This activity has no items yet.');
   const state = {
@@ -38,6 +40,7 @@ export function createSession({ activity, settings = {}, learnerName = 'Sam', le
     startedAt: now,
     learnerName,
     learnerAge,
+    learnerInterests,
   };
   const lines = openItem(state);
   return { state, turn: state.mode === 'listen' ? listenTurn(state, lines) : makeTurn(state, lines) };
@@ -155,7 +158,7 @@ async function process_(state, { text, displayText, confirmed }, judge) {
     : [];
 
   const judgeElements = state.mode === 'conversation' ? ['turn'] : it.elements.filter((e) => e !== 'order' && e !== 'clarify');
-  const j = await judge({ mode: state.mode, item, elements: judgeElements, text, activity: state.activity, history, inviteQuestion, learner: { name: state.learnerName, age: state.learnerAge } });
+  const j = await judge({ mode: state.mode, item, elements: judgeElements, text, activity: state.activity, history, inviteQuestion, learner: learnerOf(state) });
 
   if (j.garbled && !confirmed) return askToConfirm(state, { text, displayText });
 
@@ -464,7 +467,7 @@ async function listenAnswer(state, { text, displayText, confirmed }, judge) {
   const item = curItem(state);
   const qi = L.queue[L.pos];
   const q = questionsOf(state)[qi];
-  const j = await judge({ mode: 'listen', item: { ...q, story: item.story, clarify_phrases: [] }, elements: ['answer'], text, activity: state.activity, history: [], learner: { name: state.learnerName, age: state.learnerAge } });
+  const j = await judge({ mode: 'listen', item: { ...q, story: item.story, clarify_phrases: [] }, elements: ['answer'], text, activity: state.activity, history: [], learner: learnerOf(state) });
   if (j.garbled && !confirmed) return askToConfirm(state, { text, displayText });
   if (j.help && j.help !== 'none') return { state, turn: listenTurn(state, listenHelp(state, j.help, text, 'spoken')) };
 

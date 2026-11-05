@@ -1,4 +1,6 @@
 // Practice mode definitions.
+// Each mode is one of the Buddy modules the learner sees (Chat Buddy, Story Buddy …): `label` is the module name,
+// `tagline` what it helps with, `activityName` the plain description the team sees beside it.
 // Each mode turns an activity item into a list of "elements" Sam is aiming to supply,
 // a default support ladder per element, and plain feedback phrases.
 // The therapist/parent can override any cue wording in the activity's `cues` field.
@@ -31,7 +33,9 @@ export function fill(template, vars) {
 
 // ---------- OBJECT ----------
 const object = {
-  label: 'Describe a Picture',
+  label: 'Explain Buddy',
+  tagline: 'Say it clearly',
+  activityName: 'Describe a Picture',
   defaultGoal: 'Name, group and use in one sentence',
   cueCard: () => ['Name', 'Group', 'Use'],
   elements: () => ['name', 'category', 'function'],
@@ -59,7 +63,9 @@ function storyElements(item) {
   return els;
 }
 const story = {
-  label: 'Tell a Story',
+  label: 'Story Buddy',
+  tagline: 'Organise my thoughts',
+  activityName: 'Tell a Story',
   defaultGoal: 'Setting, events in order and precise words',
   movie: true,
   cueCard: (item) => ['Where', ...(item.events || []).map((_, i, a) => cap(ordinal(i, a.length)))],
@@ -105,7 +111,9 @@ function taskElements(item) {
   return els;
 }
 const task = {
-  label: 'Practise a Task',
+  label: 'Listen Buddy',
+  tagline: 'Understand and follow instructions',
+  activityName: 'Practise a Task',
   defaultGoal: 'Retell the job instructions in order; ask for clarification when needed',
   movie: true,
   cueCard: (item) => (item.steps || []).map((_, i, a) => cap(ordinal(i, a.length))),
@@ -141,7 +149,9 @@ const task = {
 
 // ---------- CONVERSATION ----------
 const conversation = {
-  label: 'Have a Conversation',
+  label: 'Chat Buddy',
+  tagline: 'Keep the conversation going',
+  activityName: 'Have a Conversation',
   defaultGoal: 'Relevant comments, personal connections and follow-up questions',
   cueCard: (item, activity) => (activity?.content?.practise_questions ? ['Answer', 'Add', 'Ask'] : ['Answer', 'Add']),
   elements: () => ['turn'],
@@ -183,7 +193,9 @@ const conversation = {
 
 // ---------- LISTEN (story read aloud, then questions) ----------
 const listen = {
-  label: 'Listen to a Story',
+  label: 'Memory Buddy',
+  tagline: 'Remember and recall',
+  activityName: 'Listen to a Story',
   defaultGoal: 'Listen to a story and answer questions about it',
   cueCard: () => null,
   elements: (item) => (item.questions || []).map((_, i) => `q_${i}`),
