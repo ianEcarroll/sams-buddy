@@ -283,7 +283,7 @@ function editActivity(root, a) {
   // Cue ladders: prefilled with the defaults; saved only if changed.
   const cueInputs = {};
   const cues = h('details', {}, h('summary', {}, 'Words and cues (support sequence)'),
-    h('p', { class: 'muted' }, 'Buddy offers one cue at a time, from 1 to 4, and only for the one missing part. {name}, {category}, {function}, {setting}, {event}, {ordinal}, {step}, {topic}, {words} are filled in automatically.'),
+    h('p', { class: 'muted' }, 'Buddy offers one cue at a time, from 1 to 4, and only for the one missing part. {name}, {category}, {function}, {setting}, {event}, {ordinal}, {step}, {topic}, {words}, {problem}, {action}, {reason}, {backup} are filled in automatically.'),
     Object.entries(CUE_NAMES[a.mode]).map(([key, label]) => {
       const current = content.cues?.[key] || modes[a.mode].defaultCues[key];
       cueInputs[key] = current.map((t) => h('input', { value: t }));
@@ -348,7 +348,7 @@ const multi = (it, k, rows = 3) => bind(it, k, h('textarea', { rows }), lines, (
 
 function itemEditor(mode, it, i, urls, remove) {
   const box = h('div', { class: 'item-box' });
-  const head = h('div', { class: 'row-actions', style: 'justify-content:space-between' }, h('strong', {}, `${mode === 'conversation' ? 'Topic' : mode === 'listen' ? 'Story' : 'Item'} ${i + 1}`), h('button', { class: 'btn btn-quiet', onclick: remove }, 'Remove'));
+  const head = h('div', { class: 'row-actions', style: 'justify-content:space-between' }, h('strong', {}, `${mode === 'conversation' ? 'Topic' : mode === 'listen' ? 'Story' : mode === 'think' ? 'Situation' : 'Item'} ${i + 1}`), h('button', { class: 'btn btn-quiet', onclick: remove }, 'Remove'));
   let body;
   if (mode === 'object') body = [
     field('Picture', imagePicker(it, 'image_id', urls, false)),
@@ -395,6 +395,19 @@ function itemEditor(mode, it, i, urls, remove) {
   ];
   }
   if (mode === 'listen') body = storyEditor(it, urls);
+  if (mode === 'think') body = [
+    h('div', { class: 'grid2' }, field('Short title', txt(it, 'title'), 'For the team, e.g. "Trainer not at the gym"'), field('Picture (optional)', imagePicker(it, 'image_id', urls, false))),
+    field('The situation Buddy describes', bind(it, 'scenario', h('textarea', { rows: 2 })), `e.g. "You arrive at the gym, but your trainer isn\u2019t there." Use places and activities from ${me.learner.name}\u2019s life.`),
+    field('What is unexpected or wrong', txt(it, 'problem'), 'e.g. "the trainer is not there"'),
+    field('Good, safe responses, one per line', multi(it, 'good_actions', 4), `Buddy accepts these and anything with the same meaning. Asking a trusted adult always counts. The first one is used for the model cue.`),
+    h('div', { class: 'grid2' },
+      field('Example reason (for the model cue)', txt(it, 'reason_example'), 'e.g. "the staff can find my trainer"'),
+      field('Example plan B (for the model cue)', txt(it, 'backup_example'), 'e.g. "call my dad"')),
+    field('Not safe, one per line (optional)', multi(it, 'unsafe', 2), 'Ideas Buddy should not accept, e.g. "leave on my own". They are flagged for the team in Review practice.'),
+    h('div', { class: 'grid2' },
+      field("Buddy's question (optional)", txt(it, 'question'), 'Blank = "What would you do?"'),
+      field('Simpler wording for "I don\u2019t understand" (optional)', txt(it, 'simple_prompt'))),
+  ];
   box.append(head, ...body);
   return box;
 }
@@ -430,7 +443,7 @@ function storyEditor(it, urls) {
 }
 
 // ------------------------------------------------------------ review
-const DEFAULT_GOAL = { story: 'narrative', conversation: 'conversation', task: 'instructions', object: 'other', listen: 'other' };
+const DEFAULT_GOAL = { story: 'narrative', conversation: 'conversation', task: 'instructions', object: 'other', listen: 'other', think: 'unexpected' };
 const TZ = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
 const goalPill = (k) => {
   const g = goals?.goals[k] || goals?.goals.other;
