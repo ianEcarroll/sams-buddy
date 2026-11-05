@@ -70,7 +70,28 @@ button { cursor: pointer; }
 .start span { opacity: .92; }
 .cards { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
 .card { border: 2px solid var(--line); background: var(--surface); border-radius: var(--radius); padding: 16px; min-height: 132px; display: flex; flex-direction: column; justify-content: space-between; align-items: flex-start; text-align: left; font-weight: 700; font-size: 1.15rem; }
-.card svg { width: 44px; height: 44px; }
+.card svg { width: 32px; height: 32px; }
+/* Buddy modules: each has its own colour (--mod) and a soft tint (--mod-soft) behind its icon. */
+[data-module="listen"] { --mod: #b4532a; --mod-soft: #fbe6dc; }
+[data-module="story"] { --mod: #6a3fb0; --mod-soft: #ece4f8; }
+[data-module="object"] { --mod: #9a6a00; --mod-soft: #fdf0cf; }
+[data-module="conversation"] { --mod: #0f7a6a; --mod-soft: #dcf3ee; }
+[data-module="task"] { --mod: #2563b0; --mod-soft: #e0ebf9; }
+:root[data-theme="dark"] [data-module] { --mod-soft: #22344f; }
+:root[data-theme="dark"] [data-module="listen"] { --mod: #f0a07c; } :root[data-theme="dark"] [data-module="story"] { --mod: #c1a5f0; }
+:root[data-theme="dark"] [data-module="object"] { --mod: #f4c25a; } :root[data-theme="dark"] [data-module="conversation"] { --mod: #4cc7b0; }
+:root[data-theme="dark"] [data-module="task"] { --mod: #8bb6f0; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) [data-module] { --mod-soft: #22344f; }
+  :root:not([data-theme="light"]) [data-module="listen"] { --mod: #f0a07c; } :root:not([data-theme="light"]) [data-module="story"] { --mod: #c1a5f0; }
+  :root:not([data-theme="light"]) [data-module="object"] { --mod: #f4c25a; } :root:not([data-theme="light"]) [data-module="conversation"] { --mod: #4cc7b0; }
+  :root:not([data-theme="light"]) [data-module="task"] { --mod: #8bb6f0; }
+}
+.card[data-module] { border-top: 6px solid var(--mod); }
+.card-icon { display: inline-grid; place-items: center; width: 56px; height: 56px; border-radius: 16px; background: var(--mod-soft, var(--sky-soft)); color: var(--mod, var(--ink)); flex: none; }
+.card .card-count { color: var(--mod, var(--ink-soft)); font-weight: 700; }
+.picker-title { display: flex; align-items: center; gap: 12px; }
+.picker-title .card-icon svg { width: 32px; height: 32px; }
 .card small { font-weight: 400; color: var(--ink-soft); font-size: .95rem; }
 .card[aria-disabled="true"] { opacity: .5; }
 .picker { display: grid; gap: 10px; }
@@ -274,3 +295,8 @@ details > summary { cursor: pointer; font-weight: 700; padding: 6px 0; }
 .table td.num { font-variant-numeric: tabular-nums; white-space: nowrap; }
 .table tr.paused td { color: var(--ink-soft); }
 .adult .row-actions input { border: 2px solid var(--line); border-radius: 12px; padding: 8px 12px; min-height: 44px; background: var(--surface); min-width: 0; }
+
+/* ---------- Team: interest suggestions for Chat Buddy topics ---------- */
+.interest-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { border: 1.5px solid var(--line); background: var(--surface); border-radius: 999px; padding: 4px 12px; font-size: .9rem; min-height: 34px; }
+.chip:hover { border-color: var(--ink); }

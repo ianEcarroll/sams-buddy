@@ -146,11 +146,15 @@ async function renderPlan(root) {
     voice_id: h('input', { value: settings.voice_id || '', placeholder: 'Default voice' }),
     reminder_time: h('input', { type: 'time', value: settings.reminder_time || '' }),
   };
-  const modeBoxes = Object.keys(modes).map((m) => h('label', { class: 'switch' }, h('input', { type: 'checkbox', value: m, checked: settings.enabled_modes.includes(m) }), modes[m].label));
+  const interests = h('textarea', { rows: 3, placeholder: 'e.g. drumming, marching band, gym, Disney, paper characters' }, (settings.interests || []).join(', '));
+  const modeBoxes = Object.keys(modes).map((m) => h('label', { class: 'switch' }, h('input', { type: 'checkbox', value: m, checked: settings.enabled_modes.includes(m) }), h('span', {}, h('strong', {}, modes[m].label), h('br'), h('small', { class: 'muted' }, modes[m].activityName))));
   root.append(
     h('h2', {}, 'Start My Practice'),
     h('div', { class: 'panel' }, field(`When ${me.learner.name} presses Start My Practice, open:`, current, `Pick one activity so ${me.learner.name} has fewer decisions to make.`)),
-    h('h2', {}, `Practice types ${me.learner.name} can see`),
+    h('h2', {}, `Interests and activities`),
+    h('div', { class: 'panel' }, field(`What does ${me.learner.name} enjoy or do?`, interests,
+      `Separate with commas: hobbies, clubs, sports, favourite films, characters or music. Buddy uses these to make conversations about things ${me.learner.name} cares about, and they appear as topic suggestions when you add a Chat Buddy topic. They are sent to the AI that writes Buddy\u2019s replies, so leave out anything private.`)),
+    h('h2', {}, `Buddy modules ${me.learner.name} can see`),
     h('div', { class: 'panel grid2' }, modeBoxes),
     h('h2', {}, 'Buddy\u2019s voice'),
     voicePicker(f.voice_id),
@@ -171,8 +175,11 @@ async function renderPlan(root) {
       for (const [k, el] of Object.entries(f)) s[k] = el.type === 'checkbox' ? el.checked : el.type === 'number' ? Number(el.value) : (el.value || null);
       s.reminder_time = f.reminder_time.value || '';
       s.timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      s.interests = interests.value;
       s.enabled_modes = modeBoxes.map((b) => b.querySelector('input')).filter((i) => i.checked).map((i) => i.value);
       await api('/adult/settings', { method: 'PUT', body: { settings: s, current_activity_id: current.value } });
+      me = await api('/adult/me');
+      interests.value = (me.learner.settings.interests || []).join(', ');
       toast('Practice plan saved.');
     }) }, 'Save practice plan'),
   );
@@ -374,11 +381,19 @@ function itemEditor(mode, it, i, urls, remove) {
       field('Approved clarification phrases, one per line', multi(it, 'clarify_phrases', 4), 'Blank = Could you repeat that? / Can you show me the first step? / I don\u2019t understand. / I need help. / I need to check with my job coach.'),
     ];
   }
-  if (mode === 'conversation') body = [
-    h('div', { class: 'grid2' }, field('Topic', txt(it, 'topic'), `Pick from ${me.learner.name}\u2019s interests`), field('Picture (optional)', imagePicker(it, 'image_id', urls, false))),
+  if (mode === 'conversation') {
+    const topic = txt(it, 'topic');
+    const likes = me.learner.settings?.interests || [];
+    // One tap fills the topic with one of the child's interests (Practice plan → Interests and activities).
+    const chips = likes.length
+      ? h('div', { class: 'interest-chips' }, likes.map((x) => h('button', { type: 'button', class: 'chip', onclick: () => { topic.value = x; topic.dispatchEvent(new Event('input')); } }, x)))
+      : h('small', { class: 'muted' }, `Add ${me.learner.name}\u2019s interests in Practice plan and they\u2019ll appear here.`);
+    body = [
+    h('div', { class: 'grid2' }, h('div', { class: 'field' }, field('Topic', topic, `Pick from ${me.learner.name}\u2019s interests:`), chips), field('Picture (optional)', imagePicker(it, 'image_id', urls, false))),
     field("Buddy's opening line", txt(it, 'opener'), 'A comment works well, e.g. "I watched Toy Story at the weekend."'),
     h('div', { class: 'grid2' }, field('Example comment (for the model cue)', txt(it, 'example_comment')), field('Example question (for the model cue)', txt(it, 'example_question'))),
   ];
+  }
   if (mode === 'listen') body = storyEditor(it, urls);
   box.append(head, ...body);
   return box;

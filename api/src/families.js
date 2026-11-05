@@ -37,3 +37,20 @@ export function validateFamily({ learnerName, birthYear, ownerName, email, passw
 }
 
 export const ageFrom = (birthYear, now = new Date()) => (birthYear ? now.getUTCFullYear() - birthYear : null);
+
+// Interests and activities the family enters (e.g. "drumming, marching band, Disney"). Buddy uses them as conversation
+// material. Accepts a list or a comma/new-line separated string; keeps up to 15 short, distinct entries.
+export const MAX_INTERESTS = 15;
+export function cleanInterests(input) {
+  const raw = Array.isArray(input) ? input : String(input ?? '').split(/[,\n;]/);
+  const out = [];
+  const seen = new Set();
+  for (const r of raw) {
+    const v = String(r ?? '').replace(/["<>{}\[\]`\\]/g, '').replace(/\s+/g, ' ').trim().slice(0, 40).trim();
+    if (!v || seen.has(v.toLowerCase())) continue;
+    seen.add(v.toLowerCase());
+    out.push(v);
+    if (out.length === MAX_INTERESTS) break;
+  }
+  return out;
+}

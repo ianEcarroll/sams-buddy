@@ -144,21 +144,24 @@ function renderConsent() {
 }
 
 // ------------------------------------------------------------ home
+// The Buddy modules, in the order Sam sees them. Each has its own name, icon and colour.
 const MODE_INFO = {
-  story: { label: 'Tell a Story', icon: 'story' },
-  object: { label: 'Describe a Picture', icon: 'picture' },
-  conversation: { label: 'Have a Conversation', icon: 'chat' },
-  task: { label: 'Practise a Task', icon: 'task' },
-  listen: { label: 'Listen to a Story', icon: 'listen' },
+  listen: { label: 'Memory Buddy', tagline: 'Remember and recall', icon: 'memory' },
+  story: { label: 'Story Buddy', tagline: 'Organise my thoughts', icon: 'story' },
+  object: { label: 'Explain Buddy', tagline: 'Say it clearly', icon: 'explain' },
+  conversation: { label: 'Chat Buddy', tagline: 'Keep the conversation going', icon: 'chat' },
+  task: { label: 'Listen Buddy', tagline: 'Follow instructions', icon: 'ear' },
 };
+const MODE_ORDER = Object.keys(MODE_INFO);
 
 function renderHome() {
   const current = home.activities.find((a) => a.id === home.current_activity_id);
-  const cards = ['listen', 'story', 'object', 'conversation', 'task'].map((mode) => {
+  const cards = MODE_ORDER.map((mode) => {
     const list = home.activities.filter((a) => a.mode === mode);
     const on = home.modes.includes(mode) && list.length > 0;
-    return h('button', { class: 'card', 'aria-disabled': on ? 'false' : 'true', onclick: () => on ? (list.length === 1 ? startPractice(list[0].id) : renderPicker(mode, list)) : toast('Nothing here yet. Your team will add it.') },
-      icon(MODE_INFO[mode].icon), h('span', {}, MODE_INFO[mode].label, h('br'), h('small', {}, on ? `${list.length} to practise` : 'Not yet')));
+    return h('button', { class: 'card', 'data-module': mode, 'aria-disabled': on ? 'false' : 'true', onclick: () => on ? (list.length === 1 ? startPractice(list[0].id) : renderPicker(mode, list)) : toast('Nothing here yet. Your team will add it.') },
+      h('span', { class: 'card-icon' }, icon(MODE_INFO[mode].icon)),
+      h('span', {}, MODE_INFO[mode].label, h('br'), h('small', {}, MODE_INFO[mode].tagline), h('br'), h('small', { class: 'card-count' }, on ? `${list.length} to practise` : 'Not yet')));
   });
   mount(
     brand(home.name),
@@ -172,7 +175,7 @@ function renderHome() {
 
 function renderPicker(mode, list) {
   mount(
-    h('div', { class: 'p-top' }, h('h1', { class: 'hello', style: 'font-size:2rem' }, MODE_INFO[mode].label), h('button', { class: 'btn', onclick: renderHome }, 'Back')),
+    h('div', { class: 'p-top' }, h('h1', { class: 'hello picker-title', 'data-module': mode, style: 'font-size:2rem' }, h('span', { class: 'card-icon' }, icon(MODE_INFO[mode].icon)), MODE_INFO[mode].label), h('button', { class: 'btn', onclick: renderHome }, 'Back')),
     h('div', { class: 'picker' }, list.map((a) => h('button', { class: 'btn', onclick: () => startPractice(a.id) }, a.title))),
   );
 }
@@ -464,6 +467,9 @@ const ICONS = {
   picture: S('<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M21 17l-5-5-9 8"/>'),
   chat: S('<path d="M4 5h11a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2H9l-4 3v-3H4a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2z"/><path d="M19 9h1a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-1v3l-3-3h-3"/>'),
   task: S('<rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4V3h6v1M9 10l1.5 1.5L14 8M9 16h6"/>'),
+  memory: S('<path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/><path d="M12 7.5V12l3 2"/>'),
+  explain: S('<path d="M4 4h16a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H10l-5 4v-4H4a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1z"/><path d="M7.5 8.5h9M7.5 12h6"/>'),
+  ear: S('<path d="M7 9a5.5 5.5 0 0 1 11 0c0 3.2-3 4.2-3 7.5a3 3 0 0 1-5.5 1.6"/><path d="M10.5 9.5a2 2 0 0 1 4 0c0 1.6-2 2.2-2 3.8"/>'),
   listen: S('<path d="M4 14v-2a8 8 0 0 1 16 0v2"/><rect x="3" y="14" width="5" height="7" rx="2"/><rect x="16" y="14" width="5" height="7" rx="2"/>'),
   play: S('<path d="M7 4.5v15l12-7.5z"/>'),
   speaker: S('<path d="M4 9v6h4l5 4V5L8 9H4z"/><path d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12"/>'),
