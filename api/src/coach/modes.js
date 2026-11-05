@@ -19,6 +19,13 @@ export const DEFAULT_CLARIFY_PHRASES = [
 ];
 
 const ORDINALS = ['first', 'next', 'last'];
+// Story Buddy's organiser words: First → Next → Then → Finally (Ray's framework).
+export function storyOrdinal(i, total) {
+  if (total <= 1 || i === 0) return 'first';
+  if (i === total - 1) return 'finally';
+  return i === 1 ? 'next' : 'then';
+}
+export { whoList };
 export function ordinal(i, total) {
   if (total <= 1) return 'first';
   if (i === 0) return 'first';
@@ -55,38 +62,68 @@ const object = {
 };
 
 // ---------- STORY ----------
+// Who was there and how it ended are optional parts the team can add (plan goal 3: who/where + events + detail/outcome).
+const whoList = (item) => (Array.isArray(item.who) ? item.who : String(item.who || '').split(',')).map((w) => w.trim()).filter(Boolean);
 function storyElements(item) {
-  const els = ['where'];
+  const els = [];
+  if (whoList(item).length) els.push('who');
+  els.push('where');
   (item.events || []).forEach((_, i) => els.push(`event_${i}`));
+  if (item.outcome?.trim()) els.push('ending');
   if ((item.events || []).length >= 2) els.push('order');
   if ((item.target_words || []).length) els.push('vocabulary');
   return els;
+}
+// The organiser on screen: [Who] → Where → First → Next → Then → Finally → [Ending]
+function storyCard(item) {
+  const evs = item.events || [];
+  return [
+    ...(whoList(item).length ? ['Who'] : []), 'Where',
+    ...evs.map((_, i) => cap(storyOrdinal(i, evs.length))),
+    ...(item.outcome?.trim() ? ['How it ended'] : []),
+  ];
+}
+function storyCardIndex(el, item) {
+  const hasWho = whoList(item || {}).length ? 1 : 0;
+  const n = (item?.events || []).length;
+  if (el === 'who') return 0;
+  if (el === 'where') return hasWho;
+  if (String(el).startsWith('event_')) return hasWho + 1 + Number(el.slice(6));
+  if (el === 'ending') return hasWho + 1 + n;
+  return null;
 }
 const story = {
   label: 'Story Buddy',
   tagline: 'Organise my thoughts',
   activityName: 'Tell a Story',
-  defaultGoal: 'Setting, events in order and precise words',
+  defaultGoal: 'Who and where, events in order (First → Next → Then → Finally) and how it ended',
   movie: true,
-  cueCard: (item) => ['Where', ...(item.events || []).map((_, i, a) => cap(ordinal(i, a.length)))],
+  organiser: true, // the cue card is a First → Next → Then → Finally organiser the team can fade out
+  cueCard: storyCard,
   elements: storyElements,
-  elementLabel: new Proxy({ where: 'Where', order: 'Order', vocabulary: 'Words' }, {
+  elementLabel: new Proxy({ who: 'Who', where: 'Where', ending: 'How it ended', order: 'Order', vocabulary: 'Words' }, {
     get: (t, k) => t[k] ?? (String(k).startsWith('event_') ? `Event ${Number(String(k).slice(6)) + 1}` : k),
   }),
-  cueCardIndex: (el) => (el === 'where' ? 0 : el.startsWith('event_') ? Number(el.slice(6)) + 1 : null),
-  prompt: (item) => item.prompt || 'When you are ready, tell me the story. Say where it happens, then what happens first, next and last.',
+  cueCardIndex: storyCardIndex,
+  prompt: (item) => item.prompt || `When you are ready, tell me the story. Say ${whoList(item).length ? 'who was there, ' : ''}where it happens, then what happens first, next, then and finally${item.outcome?.trim() ? ', and how it ended' : ''}.`,
   simplePrompt: (item) => item.simple_prompt || 'Look at the pictures. Tell me what happens.',
   defaultCues: {
+    who: ['Remember to say who was there.', 'Who was there?', '___ was there.', '{whoModel} {whoVerb} there.'],
     where: ['Remember to say where it happens.', 'Where does the story happen?', 'It happens at the ___.', 'It happens at the {setting}.'],
+    ending: ['Remember to say how it ended.', 'What happened at the end?', 'At the end, ___.', 'At the end, {outcome}.'],
     event: ['Think about what happens {ordinal}.', 'What happens {ordinal}?', '{Ordinal}, ___.', '{Ordinal}, {event}.'],
-    order: ['Tell it in order: first, next, last.', 'What happened first?', 'First … then … last …', '{orderedModel}'],
+    order: ['Tell it in order: first, next, then, finally.', 'What happened first?', 'First … next … then … finally …', '{orderedModel}'],
     vocabulary: ['Think about a word that fits what is happening.', 'Which word fits best: {words}?', 'You could use the word "{word}".', '{vocabModel}'],
   },
   vars: (item, el) => {
     const evs = item.events || [];
     const i = el?.startsWith('event_') ? Number(el.slice(6)) : 0;
-    const o = ordinal(i, evs.length);
+    const o = storyOrdinal(i, evs.length);
+    const who = whoList(item);
     return {
+      whoModel: who.length > 1 ? `${who.slice(0, -1).join(', ')} and ${who.at(-1)}` : who[0],
+      whoVerb: who.length > 1 ? 'were' : 'was',
+      outcome: item.outcome,
       setting: item.setting,
       event: evs[i],
       ordinal: o,
@@ -94,13 +131,13 @@ const story = {
       words: (item.target_words || []).join(', '),
       word: (item.target_words || [])[0],
       vocabModel: item.vocabulary_model || `One word that fits is "${(item.target_words || [])[0]}".`,
-      orderedModel: evs.map((e, k) => `${cap(ordinal(k, evs.length))}, ${e}.`).join(' '),
+      orderedModel: evs.map((e, k) => `${cap(storyOrdinal(k, evs.length))}, ${e}.`).join(' '),
     };
   },
   cueKey: (el) => (el.startsWith('event_') ? 'event' : el),
-  achieved: { where: 'said where the story happened', order: 'told the events in order', vocabulary: 'used a precise word' },
-  achievedFor: (el, item) => (el.startsWith('event_') ? `told what happened ${ordinal(Number(el.slice(6)), (item.events || []).length)}` : null),
-  evidenceLabel: { where: 'Where', order: 'Order', vocabulary: 'Word' },
+  achieved: { who: 'said who was there', where: 'said where the story happened', ending: 'said how it ended', order: 'told the events in order', vocabulary: 'used a precise word' },
+  achievedFor: (el, item) => (el.startsWith('event_') ? `told what happened ${storyOrdinal(Number(el.slice(6)), (item.events || []).length)}` : null),
+  evidenceLabel: { who: 'Who', where: 'Where', ending: 'Ending', order: 'Order', vocabulary: 'Word' },
   itemLabel: (item) => item.title || 'story',
 };
 
@@ -425,7 +462,7 @@ export function describe(mode, els, item) {
   const parts = [];
   for (const e of rest) parts.push(achievedPhrase(mode, e, item));
   if (seq.length) {
-    const ords = seq.map((e) => ordinal(Number(e.split('_')[1]), total));
+    const ords = seq.map((e) => (mode === 'story' ? storyOrdinal : ordinal)(Number(e.split('_')[1]), total));
     const list = joinPhrases([...new Set(ords)]);
     let p = mode === 'story' ? `told what happened ${list}` : `told the ${list} step${ords.length > 1 ? 's' : ''}`;
     if (els.includes('order') && seq.length > 1) p += ', in order';

@@ -33,7 +33,7 @@ test('a complete independent story under goal 3 is a success with code I', async
   assert.equal(r.plan_goal, 'narrative');
   assert.equal(r.support_code, 'I');
   assert.equal(r.success, true);
-  assert.ok(r.visual_aids.includes('Cue card'));
+  assert.ok(r.visual_aids.includes('Organiser'), 'a story records the organiser as its visual aid');
 });
 
 test('an item that needed several cues is coded P and does not meet an I-only goal', async () => {

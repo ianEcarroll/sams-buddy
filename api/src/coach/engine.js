@@ -775,7 +775,7 @@ export function buildRecord(state, it, stopNote = null) {
     complete = it.elements.length > 0 && it.elements.every((e) => it.met[e]);
   }
   const visualAids = [];
-  if (state.settings.cue_cards) visualAids.push('Cue card');
+  if (state.settings.cue_cards && it.cardShown) visualAids.push(m.organiser ? 'Organiser' : 'Cue card');
   if ((item.image_ids || []).length || item.image_id) visualAids.push('Pictures');
   if (state.settings.captions) visualAids.push('Captions');
 
@@ -798,16 +798,27 @@ export function buildRecord(state, it, stopNote = null) {
 
 // ---------------------------------------------------------------- what the client renders
 
+// Story Buddy's organiser can be faded by the team: 'show' (from the start), 'when_stuck' (appears once Buddy
+// has had to give a cue) or 'off'. Other modes always show their cue card when cue cards are on.
+function organiserVisible(state) {
+  if (!MODES[state.mode].organiser) return true;
+  const how = state.activity.content?.organiser || 'show';
+  if (how === 'off') return false;
+  if (how === 'when_stuck') return !!state.item?.anySupport;
+  return true;
+}
+
 function makeTurn(state, lines, expect = null) {
   const m = MODES[state.mode];
   const item = curItem(state);
   const it = state.item;
   let cueCard = null;
-  const labels = state.settings.cue_cards ? m.cueCard(item, state.activity) : null;
+  const labels = state.settings.cue_cards && organiserVisible(state) ? m.cueCard(item, state.activity) : null;
   if (labels) {
+    if (it) it.cardShown = true;
     const lit = labels.map(() => false);
     for (const el of Object.keys(it?.met || {})) {
-      const i = m.cueCardIndex(el);
+      const i = m.cueCardIndex(el, item);
       if (i != null && i < lit.length) lit[i] = true;
     }
     cueCard = { labels, lit };
