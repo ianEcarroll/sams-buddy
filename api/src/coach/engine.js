@@ -103,6 +103,10 @@ function openItem(state) {
       lines.push(line(TEAM_PHRASE, 'movie', { pauseAfter: think }));
       lines.push(line(m.prompt(item), 'prompt'));
     }
+  } else if (state.mode === 'explain') {
+    if (item.intro) lines.push(line(item.intro, 'intro'));
+    lines.push(line(TEAM_PHRASE, 'movie', { pauseAfter: think }));
+    lines.push(line(m.prompt(item), 'prompt'));
   } else if (state.mode === 'recall') {
     state.item.mems = freshMemories(item, state.startedAt);
     if (item.intro) lines.push(line(item.intro, 'intro'));

@@ -342,7 +342,77 @@ const recall = {
   itemLabel: (item) => item.title || 'my day',
 };
 
-export const MODES = { object, story, task, conversation, listen, think, recall };
+// ---------- EXPLAIN (Explain Buddy: "Tell me how you make…") ----------
+// The learner explains how they do something. The team lists the parts a clear explanation includes; any wording
+// with the same meaning counts. A short answer gets the smallest useful cue for ONE missing part, never a rewrite.
+const pointsOf = (item) => (item.points || []).filter((p) => p?.text);
+const explain = {
+  label: 'Explain Buddy',
+  tagline: 'Say it clearly',
+  activityName: 'How Do You…?',
+  defaultGoal: 'Explain how I do something clearly and completely',
+  movie: true,
+  cueCard: (item) => pointsOf(item).map((_, i) => String(i + 1)),
+  elements: (item) => pointsOf(item).map((_, i) => `point_${i}`),
+  elementLabel: new Proxy({}, { get: (t, k) => (String(k).startsWith('point_') ? `Part ${Number(String(k).slice(6)) + 1}` : k) }),
+  cueCardIndex: (el) => (String(el).startsWith('point_') ? Number(el.slice(6)) : null),
+  cueKey: () => 'point',
+  prompt: (item) => item.question || 'Tell me how you do it.',
+  simplePrompt: (item) => item.simple_prompt || 'What is the first thing you do?',
+  defaultCues: {
+    point: ['Can you tell me more about how you do it?', '{pointQuestion}', '{pointStarter}', 'You could say: "{pointModel}"'],
+  },
+  vars: (item, el) => {
+    const p = pointsOf(item)[Number(String(el || '').slice(6)) || 0] || {};
+    return {
+      pointQuestion: p.question || 'What else do you do?',
+      pointStarter: p.starter || 'Then I ___.',
+      pointModel: p.model || `I ${p.text}.`,
+    };
+  },
+  achieved: {},
+  evidenceLabel: new Proxy({}, { get: (t, k) => (String(k).startsWith('point_') ? `Part ${Number(String(k).slice(6)) + 1}` : undefined) }),
+  itemLabel: (item) => item.title || item.question || 'explanation',
+};
+
+// Three everyday explanations every learner starts with. The team can edit them or add their own (e.g. from the
+// child's interests: "Tell me how you make one of your paper characters").
+export const STARTER_EXPLAIN = {
+  title: 'How do you…?',
+  goal: 'Explain how I do something clearly and completely',
+  items: [
+    {
+      title: 'Making a sandwich',
+      question: 'Tell me how you make a sandwich.',
+      points: [
+        { text: 'get two slices of bread', question: 'What do you start with?', starter: 'First I get ___.', model: 'First I get two slices of bread.' },
+        { text: 'put a filling on the bread, like butter, ham or cheese', question: 'What do you put on the bread?', starter: 'Then I put ___ on the bread.', model: 'Then I put some cheese on the bread.' },
+        { text: 'put the other slice on top', question: 'What do you do with the other slice?', starter: 'Then I put ___ on top.', model: 'Then I put the other slice on top.' },
+        { text: 'cut it or eat it', question: 'What do you do at the end?', starter: 'Finally I ___ it.', model: 'Finally I cut it in half.' },
+      ],
+    },
+    {
+      title: 'Brushing teeth',
+      question: 'Tell me how you brush your teeth.',
+      points: [
+        { text: 'put toothpaste on the toothbrush', question: 'What do you put on the toothbrush?', starter: 'First I put ___ on my toothbrush.', model: 'First I put toothpaste on my toothbrush.' },
+        { text: 'brush all the teeth, top and bottom, for about two minutes', question: 'Which teeth do you brush, and for how long?', starter: 'I brush ___.', model: 'I brush all my teeth for two minutes.' },
+        { text: 'spit and rinse', question: 'What do you do when you have finished brushing?', starter: 'Then I ___.', model: 'Then I spit out the toothpaste and rinse.' },
+      ],
+    },
+    {
+      title: 'Getting ready to go out',
+      question: 'Tell me how you get ready to go out.',
+      points: [
+        { text: 'put on shoes and a coat or jacket', question: 'What do you put on?', starter: 'First I put on ___.', model: 'First I put on my shoes and coat.' },
+        { text: 'take what is needed, like keys, phone, money or a bag', question: 'What do you take with you?', starter: 'I take ___.', model: 'I take my phone and my keys.' },
+        { text: 'tell someone at home where they are going', question: 'Who do you tell, and what do you tell them?', starter: 'I tell ___ where I am going.', model: 'I tell my mum where I am going.' },
+      ],
+    },
+  ],
+};
+
+export const MODES = { object, story, task, conversation, listen, think, recall, explain };
 
 // Three everyday situations every learner starts with in Think Buddy. The team should check them with the
 // therapist and can edit, archive or add their own in Activities.
@@ -452,6 +522,12 @@ export function labelFor(mode, el) {
 // Brief, specific feedback for a set of elements, e.g.
 // "named the object and explained its use" / "said where it happened and told what happened first, next and last, in order".
 export function describe(mode, els, item) {
+  if (mode === 'explain') {
+    const n = els.filter((e) => e.startsWith('point_')).length;
+    const total = pointsOf(item).length;
+    if (n && n === total) return 'explained every part clearly';
+    return n === 1 ? 'made a good start' : `explained ${NUM[n] || n} parts`;
+  }
   if (mode === 'recall') {
     const n = els.filter((e) => e.startsWith('memory_')).length;
     return n === 1 ? 'remembered one thing you did' : `remembered ${NUM[n] || n} things you did`;

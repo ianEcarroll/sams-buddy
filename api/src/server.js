@@ -7,7 +7,7 @@ import { sign, hmac, hashPassword, checkPassword, requireAdult, requireOwner, re
 import { transcribe, speak, voiceEnabled, listVoices, defaultVoiceId } from './voice.js';
 import { createSession, respond, confirmHeard, control, finish, ENGINE_DEFAULTS } from './coach/engine.js';
 import { judgeFromEnv } from './coach/judge.js';
-import { MODES, STARTER_STORIES, STARTER_SCENARIOS, stampMemories } from './coach/modes.js';
+import { MODES, STARTER_STORIES, STARTER_SCENARIOS, STARTER_EXPLAIN, stampMemories } from './coach/modes.js';
 import { PLAN_GOALS, GOAL_KEYS, SUPPORT_CODES } from './coach/goals.js';
 import { emailEnabled, sendEmail, recipientsFor, practiceEmail } from './email.js';
 import { isPlatformAdmin, newInviteToken, INVITE_DAYS, estimateCost, validateFamily, ageFrom, cleanInterests } from './families.js';
@@ -39,7 +39,7 @@ export const SETTING_DEFAULTS = {
   reminder_time: '',          // 'HH:MM' in the learner's time zone; '' = no reminder
   timezone: 'Europe/Paris',
   voice_id: null,
-  enabled_modes: ['story', 'object', 'task', 'listen', 'think', 'recall'],
+  enabled_modes: ['story', 'object', 'task', 'listen', 'think', 'recall', 'explain'],
   interests: [],              // the child's interests and activities, used by Buddy in conversation
 };
 const SETTING_KEYS = Object.keys(SETTING_DEFAULTS);
@@ -264,7 +264,15 @@ async function ensureRecallEnabled(learnerId) {
   const modes = settingsOf(l).enabled_modes;
   await q('update learners set settings = settings || $1::jsonb where id=$2', [{ recall_enabled: true, enabled_modes: modes.includes('recall') ? modes : [...modes, 'recall'] }, learnerId]);
 }
-const ensureStarters = async (learnerId) => { await ensureStarterStories(learnerId); await ensureStarterScenarios(learnerId); await ensureRecallEnabled(learnerId); };
+// Explain Buddy's "How do you…?" starts with three everyday explanations. Added once; the team can edit or archive them.
+async function ensureStarterExplain(learnerId) {
+  const l = await one('select settings from learners where id=$1', [learnerId]);
+  if (!l || l.settings?.explain_seeded) return;
+  await q("insert into activities(learner_id, mode, title, goal, plan_goal, status, content) values ($1,'explain',$2,$3,'other','active',$4)", [learnerId, STARTER_EXPLAIN.title, STARTER_EXPLAIN.goal, { items: STARTER_EXPLAIN.items }]);
+  const modes = settingsOf(l).enabled_modes;
+  await q('update learners set settings = settings || $1::jsonb where id=$2', [{ explain_seeded: true, enabled_modes: modes.includes('explain') ? modes : [...modes, 'explain'] }, learnerId]);
+}
+const ensureStarters = async (learnerId) => { await ensureStarterStories(learnerId); await ensureStarterScenarios(learnerId); await ensureRecallEnabled(learnerId); await ensureStarterExplain(learnerId); };
 
 function validateActivity(b) {
   if (!MODES[b.mode]) return 'Choose a practice type.';
@@ -277,6 +285,7 @@ function validateActivity(b) {
     if (b.mode === 'story' && (!it.setting || !(it.events || []).filter(Boolean).length)) return `Story ${i + 1}: add the setting and at least one event.`;
     if (b.mode === 'story' && !(it.image_ids || []).length && !it.intro?.trim()) return `Story ${i + 1}: add pictures, or a line for Buddy to say first, so the learner knows which story to tell.`;
     if (b.mode === 'task' && ((it.steps || []).filter(Boolean).length < 1)) return `Task ${i + 1}: add the steps.`;
+    if (b.mode === 'explain' && (!it.question?.trim() || !(it.points || []).filter((pt) => pt?.text?.trim()).length)) return `Explanation ${i + 1}: add Buddy's question and at least one part of a clear answer.`;
     if (b.mode === 'recall') {
       const n = Number(it.target ?? 3);
       if (!Number.isInteger(n) || n < 1 || n > 5) return `Memory ${i + 1}: choose how many things to remember (1 to 5).`;
