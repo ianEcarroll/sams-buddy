@@ -11,7 +11,7 @@
 //   reply: string | null                   // conversation only: Buddy's next line
 // }
 
-import { MODES, DEFAULT_CLARIFY_PHRASES } from './modes.js';
+import { MODES, DEFAULT_CLARIFY_PHRASES, whoList } from './modes.js';
 
 // ---------- deterministic help-request detection (runs before any model) ----------
 const HELP_PATTERNS = [
@@ -90,6 +90,8 @@ export function keywordJudge({ mode, item, elements, text, activity }) {
       if (hit) positions.push(firstIndex(text, kws));
     });
     if (mode === 'story') {
+      if (elements.includes('who')) out.met.who = findAny(text, whoList(item).flatMap((w) => [w, ...keyWords(w)]));
+      if (elements.includes('ending')) out.met.ending = findAny(text, keyWords(item.outcome));
       out.met.where = findAny(text, [item.setting, ...(item.setting_alternatives || []), ...keyWords(item.setting)]);
       if (elements.includes('vocabulary')) out.met.vocabulary = findAny(text, [...(item.target_words || []), ...(item.word_alternatives || [])]);
     }
@@ -147,6 +149,7 @@ function answerKey(mode, item, activity) {
   };
   if (mode === 'story') return {
     setting: item.setting, approved_setting_wordings: item.setting_alternatives || [],
+    who_was_there: whoList(item), how_it_ended: item.outcome || null,
     events_in_order: item.events, target_words: item.target_words || [], approved_alternative_words: item.word_alternatives || [],
   };
   if (mode === 'task') return { steps_in_order: item.steps, instruction_given: MODES.task.instruction(item) };
@@ -166,7 +169,7 @@ function answerKey(mode, item, activity) {
 
 const ELEMENT_GUIDE = {
   object: 'name = the learner named the object (approved name or obvious variant e.g. plural, "a"/"the"). category = they named its group (approved group only, or an obvious synonym of it). use = they said what it is used for, in any wording with the same meaning.',
-  story: 'where = the learner said where it happens. event_N = they described event N (meaning, not exact words). order = only judge in events_in_order. vocabulary = they used one of the target words or approved alternatives AND it fits the picture/action.',
+  story: 'who = they said who was there (any one of the people listed, or an obvious way of naming them such as "my dad" for Dad). ending = they said how it ended or the outcome (meaning, not exact words). where = the learner said where it happens. event_N = they described event N (meaning, not exact words). order = only judge in events_in_order. vocabulary = they used one of the target words or approved alternatives AND it fits the picture/action.',
   task: 'step_N = the learner\'s retelling includes step N (meaning, not exact words). order = only judge in events_in_order.',
   listen: 'answer = the learner\'s response correctly answers the question, judged against the story and the accepted answers. Accept any wording, synonym or partial answer with the same meaning (e.g. "a bird" for "crow" only if bird is accepted; "Peter" for "Peter Pan"). A wrong or unrelated answer, or "I don\'t know", is not supplied. Evidence = their answer words.',
   recall: 'Memory practice: the learner is asked to remember real things they did. memory = they described at least one real thing they did or experienced (evidence = their words). Also fill "events": one entry per DIFFERENT thing they say they did in this response, as a short phrase in their own words (e.g. "went to the gym"). Set known to the index of the matching thing the family listed, or -1 if it is something else (it still counts: the family list is not complete). Leave out anything already_remembered_earlier, repeats, "I don\'t know", and simple yes/no answers. Several details about one activity are one event, not several.',

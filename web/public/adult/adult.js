@@ -249,7 +249,7 @@ async function renderActivities(root) {
 
 const CUE_NAMES = {
   object: { name: 'Name', category: 'Group', function: 'Use' },
-  story: { where: 'Where', event: 'Each event', order: 'Order', vocabulary: 'Target words' },
+  story: { who: 'Who', where: 'Where', event: 'Each event', ending: 'How it ended', order: 'Order', vocabulary: 'Target words' },
   task: { step: 'Each step', order: 'Order', clarify: 'Asking for clarification' },
   conversation: { turn: 'Comment', question: 'Follow-up question' },
   listen: {},
@@ -278,6 +278,10 @@ function editActivity(root, a) {
   const status = h('select', {}, h('option', { value: 'active', selected: a.status === 'active' }, `Ready for ${me.learner.name}`), h('option', { value: 'draft', selected: a.status === 'draft' }, 'Draft'));
   const reviewFocus = h('textarea', { rows: 2 }, content.review_focus || '');
   const practiseQ = h('input', { type: 'checkbox', checked: !!content.practise_questions });
+  // Story Buddy: fade the First → Next → Then → Finally organiser as the learner gets more independent.
+  const organiser = h('select', {},
+    [['show', 'Show it from the start'], ['when_stuck', 'Only if they get stuck (after Buddy\u2019s first cue)'], ['off', 'Don\u2019t show it']]
+      .map(([v, l]) => h('option', { value: v, selected: (content.organiser || 'show') === v }, l)));
   const itemsBox = h('div', {});
   const drawItems = () => itemsBox.replaceChildren(...content.items.map((it, i) => itemEditor(a.mode, it, i, urls, () => { content.items.splice(i, 1); drawItems(); })));
   drawItems();
@@ -296,7 +300,8 @@ function editActivity(root, a) {
     h('h2', {}, `${a.id ? 'Edit' : 'New'}: ${modeName(a.mode)}`),
     h('div', { class: 'panel' }, field(`Which goal in ${me.learner.name}\u2019s communication plan does this practise?`, planGoal), goalHint),
     h('div', { class: 'panel grid2' }, field('Title', title), field('Skill / goal being practised', goal), field('Status', status),
-      a.mode === 'conversation' ? h('label', { class: 'switch' }, practiseQ, 'Also practise asking follow-up questions') : null),
+      a.mode === 'conversation' ? h('label', { class: 'switch' }, practiseQ, 'Also practise asking follow-up questions') : null,
+      a.mode === 'story' ? field('Story organiser on screen', organiser, `Fade it out step by step as ${me.learner.name} gets more independent: from the start \u2192 only if stuck \u2192 off.`) : null),
     h('h3', {}, a.mode === 'conversation' ? 'Topics, in the order Buddy moves between them' : a.mode === 'listen' ? 'Stories' : 'Items'),
     itemsBox,
     h('button', { class: 'btn', onclick: () => { content.items.push(a.mode === 'listen' ? blankStory() : a.mode === 'recall' ? blankRecall() : {}); drawItems(); } }, a.mode === 'conversation' ? 'Add a topic' : a.mode === 'listen' ? 'Add another story' : 'Add an item'),
@@ -306,6 +311,7 @@ function editActivity(root, a) {
       h('button', { class: 'btn btn-primary', onclick: run(async () => {
         content.review_focus = reviewFocus.value.trim();
         if (a.mode === 'conversation') content.practise_questions = practiseQ.checked;
+        if (a.mode === 'story') content.organiser = organiser.value;
         content.cues = {};
         for (const [key, inputs] of Object.entries(cueInputs)) {
           const vals = inputs.map((i) => i.value.trim());
@@ -364,8 +370,10 @@ function itemEditor(mode, it, i, urls, remove) {
     field('Pictures, in order', imagePicker(it, 'image_ids', urls, true)),
     h('div', { class: 'grid2' }, field('Story title', txt(it, 'title')), field('Setting (where)', txt(it, 'setting')), field('Other accepted setting words', csv(it, 'setting_alternatives'))),
     field('What Buddy says first', txt(it, 'intro'), `Tells ${me.learner.name} which story this is, e.g. "Let\u2019s tell the story of your trip to Ireland." Needed if there are no pictures.`),
-    field("Buddy's question (optional)", txt(it, 'prompt'), 'Leave blank for: "When you are ready, tell me the story. Say where it happens, then what happens first, next and last."'),
-    field('Events, one per line, in order', multi(it, 'events'), 'e.g. "the boy builds a kite"'),
+    field("Buddy's question (optional)", txt(it, 'prompt'), 'Leave blank for: "When you are ready, tell me the story. Say who was there, where it happens, then what happens first, next, then and finally, and how it ended."'),
+    field('Who was there (optional)', csv(it, 'who'), 'Comma separated, e.g. "Dad, the band". Any one of them counts.'),
+    field('Events, one per line, in order', multi(it, 'events'), 'Up to four works well: the organiser shows them as First \u2192 Next \u2192 Then \u2192 Finally. e.g. "the boy builds a kite"'),
+    field('How it ended, or one detail (optional)', txt(it, 'outcome'), 'e.g. "we went for pizza afterwards"'),
     h('div', { class: 'grid2' }, field("Therapist's target words", csv(it, 'target_words'), 'e.g. spin, build, construct'), field('Approved alternative words', csv(it, 'word_alternatives'))),
     field('Model sentence using a target word (optional)', txt(it, 'vocabulary_model')),
     field('Simpler wording for "I don\u2019t understand" (optional)', txt(it, 'simple_prompt')),
