@@ -66,6 +66,9 @@ function newItemState(state) {
     phase: 'answer',
     asked: {},       // think: follow-up questions already asked (why? / what if that doesn't work?)
     unsafe: [],      // think: ideas the judge flagged as unsafe, in the learner's words
+    recalled: [],    // recall: things remembered so far { text, known } (known = index in item.memories or -1)
+    clueFor: null,   // recall: which listed memory the current clues are about
+    showImage: null, // recall: photo shown as the strongest clue
   };
   if (state.mode === 'task' && item.unclear_instruction) { st.phase = 'clarify'; st.elements.unshift('clarify'); }
   if (state.mode === 'conversation') st.conv = { validTurns: 0, questionAsked: false, turns: [], noted: {} };
@@ -99,6 +102,10 @@ function openItem(state) {
       lines.push(line(TEAM_PHRASE, 'movie', { pauseAfter: think }));
       lines.push(line(m.prompt(item), 'prompt'));
     }
+  } else if (state.mode === 'recall') {
+    if (item.intro) lines.push(line(item.intro, 'intro'));
+    lines.push(line(TEAM_PHRASE, 'movie', { pauseAfter: think }));
+    lines.push(line(m.prompt(item), 'prompt'));
   } else if (state.mode === 'think') {
     if (item.intro) lines.push(line(item.intro, 'intro'));
     lines.push(line("Here's a situation.", 'intro'));
@@ -165,8 +172,9 @@ async function process_(state, { text, displayText, confirmed }, judge) {
     ? [{ who: 'Buddy', text: item.opener }, ...conv.turns.flatMap((t) => [{ who: 'Sam', text: t.text }, ...(t.reply ? [{ who: 'Buddy', text: t.reply }] : [])])]
     : [];
 
-  const judgeElements = state.mode === 'conversation' ? ['turn'] : it.elements.filter((e) => e !== 'order' && e !== 'clarify');
-  const j = await judge({ mode: state.mode, item, elements: judgeElements, text, activity: state.activity, history, inviteQuestion, learner: learnerOf(state) });
+  const judgeElements = state.mode === 'conversation' ? ['turn'] : state.mode === 'recall' ? ['memory'] : it.elements.filter((e) => e !== 'order' && e !== 'clarify');
+  const judgeItem = state.mode === 'recall' ? { ...item, already_recalled: it.recalled.map((r) => r.text) } : item;
+  const j = await judge({ mode: state.mode, item: judgeItem, elements: judgeElements, text, activity: state.activity, history, inviteQuestion, learner: learnerOf(state) });
 
   if (j.garbled && !confirmed) return askToConfirm(state, { text, displayText });
 
@@ -190,7 +198,7 @@ async function process_(state, { text, displayText, confirmed }, judge) {
 
   it.attempts += 1;
   if (j.unsafe) it.unsafe.push(displayText);
-  const newly = absorb(state, j);
+  const newly = state.mode === 'recall' ? absorbRecall(state, j) : absorb(state, j);
   const lines = [];
   if (allMet(state)) return { state, turn: makeTurn(state, completeItem(state, newly)) };
 
@@ -203,8 +211,8 @@ async function process_(state, { text, displayText, confirmed }, judge) {
   const focus = nextMissing(state);
   // Think Buddy: "Why…?" and "What if that doesn't work?" are part of the activity, asked once as plain
   // follow-up questions before any cue. They are not counted as support.
-  const follow = m.followUps?.[focus];
-  if (follow && !it.asked[focus] && it.met.action) {
+  const follow = m.followUp?.(focus, it);
+  if (follow && !it.asked[focus]) {
     it.asked[focus] = true;
     it.focus = focus;
     it.focusLevel = 0; // a later cue for this part starts at the specific cue
@@ -244,6 +252,44 @@ function absorb(state, j) {
   return newly;
 }
 
+// Memory Buddy (recall): each new, different thing remembered fills the next memory slot.
+function absorbRecall(state, j) {
+  const it = state.item;
+  const newly = [];
+  const norm = (t) => String(t || '').toLowerCase().replace(/[^a-z0-9 ]/g, '').trim();
+  for (const ev of j.events || []) {
+    const known = Number.isInteger(ev.known) ? ev.known : -1;
+    const dup = it.recalled.some((r) => (known >= 0 && r.known === known) || norm(r.text) === norm(ev.text));
+    if (dup || !norm(ev.text)) continue;
+    const slot = it.elements.find((e) => !it.met[e] && !it.skipped[e]);
+    if (!slot) break;
+    it.recalled.push({ text: ev.text, known });
+    it.met[slot] = { evidence: ev.text, independent: !it.anySupport, level: maxLevelFor(it, slot), attempt: it.attempts };
+    newly.push(slot);
+    if (known >= 0 && it.clueFor === known) { it.clueFor = null; it.showImage = null; }
+  }
+  return newly;
+}
+
+// Clues for one listed memory not yet remembered: broad → specific → photo (or Buddy says it, if there's no photo).
+function recallCue(state, level) {
+  const it = state.item;
+  const item = curItem(state);
+  const mems = (item.memories || []).filter((x) => x?.event);
+  const remembered = new Set(it.recalled.map((r) => r.known));
+  if (it.clueFor == null || remembered.has(it.clueFor) || !mems[it.clueFor]) {
+    const next = mems.findIndex((_, i) => !remembered.has(i));
+    it.clueFor = next >= 0 ? next : null;
+  }
+  const ev = it.clueFor != null ? mems[it.clueFor] : null;
+  const when = item.when || 'the last few days';
+  if (level === 0) return cueLadder('recall', state.activity, item, 'memory')[0];
+  if (level === 1) return ev?.broad_clue || `Think about ${when}. Where did you go, or who were you with?`;
+  if (level === 2) return ev?.specific_clue || 'Think about the morning, the afternoon and the evening.';
+  if (ev?.image_id) { it.showImage = ev.image_id; return 'Look at this photo. What were you doing?'; }
+  return ev ? `You ${ev.event}. Can you tell me about it?` : "That's okay. Tell me anything else you remember.";
+}
+
 const required = (state) => state.item.elements.filter((e) => !state.item.skipped[e]);
 const allMet = (state) => required(state).every((e) => state.item.met[e]);
 const nextMissing = (state) => required(state).find((e) => !state.item.met[e]);
@@ -265,7 +311,7 @@ function giveCue(state, el, by, forceLevel = null) {
   const level = forceLevel ?? (it.focus === el ? Math.min(3, it.focusLevel + 1) : fadeStart(state, el));
   it.focus = el;
   it.focusLevel = level;
-  const text = cueLadder(state.mode, state.activity, item, el)[level];
+  const text = state.mode === 'recall' ? recallCue(state, level) : cueLadder(state.mode, state.activity, item, el)[level];
   it.supportGiven.push({ el, level, text, by });
   it.anySupport = true;
   if (level === 3) it.modelGiven[el] = true;
@@ -674,6 +720,14 @@ export function buildRecord(state, it, stopNote = null) {
     for (const s of it.supportGiven) supported.set(s.el, Math.max(supported.get(s.el) ?? -1, s.level));
     for (const [el, lv] of supported) if (it.met[el]) notes.push(`${label(el)} needed a ${LEVELS[lv]} on this attempt.`);
     for (const el of Object.keys(it.skipped)) notes.push(`${label(el)} not given yet, even after a model.`);
+    if (state.mode === 'recall') {
+      const total = it.elements.length;
+      const got = it.elements.filter((e) => it.met[e]);
+      const own = got.filter((e) => it.met[e].independent).length;
+      notes.unshift(`Remembered ${got.length} of ${total}: ${own} on their own${got.length > own ? `, ${got.length - own} after a clue` : ''}.`);
+      const photo = it.supportGiven.some((s) => s.level === 3 && /photo/i.test(s.text));
+      if (photo) notes.push('Needed a photo for at least one.');
+    }
     if (it.unsafe?.length) notes.push(`Suggested something that may not be safe: ${it.unsafe.map((u) => `"${u}"`).join('; ')}.`);
     if (!stopNote && !supported.size && !Object.keys(it.skipped).length && metEls.length) notes.push('All parts given independently.');
   }
@@ -739,7 +793,7 @@ function makeTurn(state, lines, expect = null) {
     }
     cueCard = { labels, lit };
   }
-  const images = state.mode === 'story' ? (item.image_ids || []) : (item.image_id ? [item.image_id] : []);
+  const images = state.mode === 'story' ? (item.image_ids || []) : state.mode === 'recall' ? (it?.showImage ? [it.showImage] : []) : (item.image_id ? [item.image_id] : []);
   return {
     lines,
     expect: expect || (state.done ? 'none' : 'response'),

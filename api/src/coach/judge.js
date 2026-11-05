@@ -39,6 +39,8 @@ export function helpFor(mode, kind) {
 }
 
 // ---------- keyword judge: offline fallback + tests ----------
+// Everyday verbs say nothing about WHICH thing was done ("went" to the gym vs "went" to the cinema).
+const COMMON_VERBS = new Set('went going played play watched visited made bought walked stayed took have had with some'.split(' '));
 const STOP = new Set('the a an and then he she they it is are was were to of in on at for with his her their into from up down out over this that'.split(' '));
 const words = (s) => String(s || '').toLowerCase().match(/[a-z']+/g) || [];
 const keyWords = (s) => words(s).filter((w) => w.length > 3 && !STOP.has(w));
@@ -64,6 +66,8 @@ function firstIndex(text, candidates) {
   }
   return best;
 }
+
+const eventWords = (e) => words(e).filter((w) => w.length >= 3 && !STOP.has(w) && !COMMON_VERBS.has(w));
 
 export function keywordJudge({ mode, item, elements, text, activity }) {
   const out = { met: {}, inOrder: null, help: helpFor(mode, detectHelp(text, item.clarify_phrases)), unsafe: false, relevant: false, connection: false, question: false, garbled: false, reply: null };
@@ -94,6 +98,19 @@ export function keywordJudge({ mode, item, elements, text, activity }) {
 
   if (mode === 'listen') {
     out.met.answer = findAny(text, item.answers || []);
+  }
+
+  if (mode === 'recall') {
+    // Each clause that says the learner did something counts as one thing remembered.
+    const mems = (item.memories || []).filter((m) => m?.event);
+    const clauses = String(text).split(/\b(?:and then|and|then|also)\b|[.,;!?]/i).map((c) => c.trim()).filter(Boolean);
+    out.events = [];
+    for (const c of clauses) {
+      const known = mems.findIndex((m) => findAny(c, eventWords(m.event)));
+      const did = /\b(i|we|me and|my)\b/i.test(c) && /\b(went|go|going|played|play|watched|saw|ate|had|did|visited|made|met|bought|swam|ran|walked|drummed|practi[sc]ed|cooked|baked|stayed|rode|drove|took|got|was|were)\b/i.test(c);
+      if (known >= 0 || did) out.events.push({ text: c, known });
+    }
+    out.met.memory = out.events.length ? text : null;
   }
 
   if (mode === 'think') {
@@ -135,6 +152,11 @@ function answerKey(mode, item, activity) {
   if (mode === 'task') return { steps_in_order: item.steps, instruction_given: MODES.task.instruction(item) };
   if (mode === 'conversation') return { topic: item.topic, buddy_last_said: null, practise_questions: !!c.practise_questions };
   if (mode === 'listen') return { story: item.story, question: item.question, accepted_answers: item.answers || [] };
+  if (mode === 'recall') return {
+    question: MODES.recall.prompt(item), time_period: item.when || null,
+    things_the_family_says_they_did: (item.memories || []).filter((m) => m?.event).map((m, i) => ({ index: i, event: m.event })),
+    already_remembered_earlier: item.already_recalled || [],
+  };
   if (mode === 'think') return {
     situation: item.scenario, what_is_unexpected: item.problem, approved_safe_responses: item.good_actions || [],
     example_reason: item.reason_example || null, example_backup_plan: item.backup_example || null, not_safe: item.unsafe || [],
@@ -147,6 +169,7 @@ const ELEMENT_GUIDE = {
   story: 'where = the learner said where it happens. event_N = they described event N (meaning, not exact words). order = only judge in events_in_order. vocabulary = they used one of the target words or approved alternatives AND it fits the picture/action.',
   task: 'step_N = the learner\'s retelling includes step N (meaning, not exact words). order = only judge in events_in_order.',
   listen: 'answer = the learner\'s response correctly answers the question, judged against the story and the accepted answers. Accept any wording, synonym or partial answer with the same meaning (e.g. "a bird" for "crow" only if bird is accepted; "Peter" for "Peter Pan"). A wrong or unrelated answer, or "I don\'t know", is not supplied. Evidence = their answer words.',
+  recall: 'Memory practice: the learner is asked to remember real things they did. memory = they described at least one real thing they did or experienced (evidence = their words). Also fill "events": one entry per DIFFERENT thing they say they did in this response, as a short phrase in their own words (e.g. "went to the gym"). Set known to the index of the matching thing the family listed, or -1 if it is something else (it still counts: the family list is not complete). Leave out anything already_remembered_earlier, repeats, "I don\'t know", and simple yes/no answers. Several details about one activity are one event, not several.',
   think: 'This is a problem-solving role-play: Buddy described a situation and asked what the learner would do. The whole response may cover several parts at once. problem = they show they noticed what is wrong or unexpected (naming it, or giving a response that clearly deals with that specific problem). action = they say a safe, sensible thing they would do; asking a trusted adult, staff member, teacher or parent always counts; compare with the approved responses by meaning, not wording, and accept other safe, sensible ideas too. An unsafe idea (in not_safe, or plainly unsafe such as leaving alone, going with a stranger, or anything risky) is NOT an action: set unsafe_idea = true. reason = they explain why their idea would help ("because…", "so that…", or a clear reason in other words). backup = they say what they would do if their first idea did not work. Saying what they WOULD do in the situation (e.g. "I\'d ask my coach for help", "I need help so I\'d ask the staff") is an answer, not a help_request; help_request is only for asking Buddy itself (e.g. "Can you say that again?", "I don\'t understand the question").',
   conversation: 'turn = the learner made a relevant comment, a personal connection, or a question on the topic. Any of these is a valid turn.',
 };
@@ -220,6 +243,11 @@ export function makeClaudeJudge({ apiKey, model, workspaceId, fetchImpl = fetch 
           personal_connection: { type: 'boolean' },
           asked_question: { type: 'boolean' },
           transcript_seems_garbled: { type: 'boolean' },
+          events: {
+            type: 'array',
+            description: 'Recall mode only: each different thing the learner says they did.',
+            items: { type: 'object', properties: { text: { type: 'string' }, known: { type: 'integer' } }, required: ['text', 'known'] },
+          },
           unsafe_idea: { type: 'boolean', description: 'Think mode only: the learner suggested something unsafe.' },
           reply: { type: 'string' },
         },
@@ -255,6 +283,11 @@ export function makeClaudeJudge({ apiKey, model, workspaceId, fetchImpl = fetch 
     out.inOrder = input.events_in_order === 'yes' ? true : input.events_in_order === 'no' ? false : null;
     out.help = helpFor(mode, quickHelp !== 'none' ? quickHelp : (HELP_ENUM.includes(input.help_request) ? input.help_request : 'none'));
     out.unsafe = mode === 'think' && !!input.unsafe_idea;
+    if (mode === 'recall') {
+      out.events = (Array.isArray(input.events) ? input.events : [])
+        .map((e) => ({ text: String(e?.text || '').trim().slice(0, 200), known: Number.isInteger(e?.known) ? e.known : -1 }))
+        .filter((e) => e.text);
+    }
     if (out.unsafe && out.met.action) out.met.action = null;
     out.relevant = !!input.relevant_to_topic;
     out.connection = !!input.personal_connection;

@@ -146,7 +146,7 @@ function renderConsent() {
 // ------------------------------------------------------------ home
 // The Buddy modules, in the order Sam sees them. Each has its own name, icon and colour.
 const MODE_INFO = {
-  listen: { label: 'Memory Buddy', tagline: 'Remember and recall', icon: 'memory' },
+  memory: { label: 'Memory Buddy', tagline: 'Remember and recall', icon: 'memory', modes: ['recall', 'listen'] },
   story: { label: 'Story Buddy', tagline: 'Organise my thoughts', icon: 'story' },
   object: { label: 'Explain Buddy', tagline: 'Say it clearly', icon: 'explain' },
   think: { label: 'Think Buddy', tagline: 'Solve the problem', icon: 'think' },
@@ -154,12 +154,13 @@ const MODE_INFO = {
   task: { label: 'Listen Buddy', tagline: 'Follow instructions', icon: 'ear' },
 };
 const MODE_ORDER = Object.keys(MODE_INFO);
+const modesOf = (mod) => MODE_INFO[mod].modes || [mod];
 
 function renderHome() {
   const current = home.activities.find((a) => a.id === home.current_activity_id);
   const cards = MODE_ORDER.map((mode) => {
-    const list = home.activities.filter((a) => a.mode === mode);
-    const on = home.modes.includes(mode) && list.length > 0;
+    const list = home.activities.filter((a) => modesOf(mode).includes(a.mode) && home.modes.includes(a.mode));
+    const on = list.length > 0;
     return h('button', { class: 'card', 'data-module': mode, 'aria-disabled': on ? 'false' : 'true', onclick: () => on ? (list.length === 1 ? startPractice(list[0].id) : renderPicker(mode, list)) : toast('Nothing here yet. Your team will add it.') },
       h('span', { class: 'card-icon' }, icon(MODE_INFO[mode].icon)),
       h('span', {}, MODE_INFO[mode].label, h('br'), h('small', {}, MODE_INFO[mode].tagline), h('br'), h('small', { class: 'card-count' }, on ? `${list.length} to practise` : 'Not yet')));

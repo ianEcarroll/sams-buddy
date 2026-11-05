@@ -136,7 +136,7 @@ function renderShell() {
 // ------------------------------------------------------------ practice plan + settings
 async function renderPlan(root) {
   const [{ settings, current_activity_id }, acts] = await Promise.all([api('/adult/settings'), api('/adult/activities')]);
-  const current = h('select', {}, h('option', { value: '' }, '— none —'), acts.filter((a) => a.status === 'active').map((a) => h('option', { value: a.id, selected: a.id === current_activity_id }, `${modes[a.mode].label}: ${a.title}`)));
+  const current = h('select', {}, h('option', { value: '' }, '— none —'), acts.filter((a) => a.status === 'active').map((a) => h('option', { value: a.id, selected: a.id === current_activity_id }, `${modeName(a.mode)} \u2014 ${a.title}`)));
   const num = (k, min, max, step = 1) => h('input', { type: 'number', min, max, step, value: settings[k] });
   const chk = (k) => h('input', { type: 'checkbox', checked: !!settings[k] });
   const f = {
@@ -237,9 +237,9 @@ function voicePicker(idInput) {
 async function renderActivities(root) {
   const acts = await api('/adult/activities');
   root.append(
-    h('div', { class: 'row-actions', style: 'margin-top:16px' }, Object.entries(modes).map(([m, d]) => h('button', { class: 'btn', onclick: () => editActivity(root, { mode: m, title: '', goal: d.defaultGoal, plan_goal: DEFAULT_GOAL[m], status: 'active', content: { items: [m === 'listen' ? blankStory() : {}] }, image_urls: {} }) }, `New: ${d.label}`))),
+    h('div', { class: 'row-actions', style: 'margin-top:16px' }, Object.entries(modes).map(([m, d]) => h('button', { class: 'btn', onclick: () => editActivity(root, { mode: m, title: '', goal: d.defaultGoal, plan_goal: DEFAULT_GOAL[m], status: 'active', content: { items: [m === 'listen' ? blankStory() : m === 'recall' ? blankRecall() : {}] }, image_urls: {} }) }, `New: ${modeName(m)}`))),
     acts.length ? h('ul', { class: 'list panel' }, acts.map((a) => h('li', {},
-      h('div', {}, goalPill(a.plan_goal), ' ', h('strong', {}, a.title), h('br'), h('span', { class: 'muted' }, `${modes[a.mode].label} · ${a.content.items.length} item${a.content.items.length === 1 ? '' : 's'}${a.status === 'draft' ? ' · draft' : ''}`)),
+      h('div', {}, goalPill(a.plan_goal), ' ', h('strong', {}, a.title), h('br'), h('span', { class: 'muted' }, `${modeName(a.mode)} · ${a.content.items.length} item${a.content.items.length === 1 ? '' : 's'}${a.status === 'draft' ? ' · draft' : ''}`)),
       h('div', { class: 'row-actions' },
         h('button', { class: 'btn', onclick: () => editActivity(root, a) }, 'Edit'),
         h('button', { class: 'btn btn-danger', onclick: run(async () => { if (confirm(`Archive "${a.title}"?`)) { await api(`/adult/activities/${a.id}`, { method: 'DELETE' }); renderShell(); } }) }, 'Archive'))))) :
@@ -253,6 +253,8 @@ const CUE_NAMES = {
   task: { step: 'Each step', order: 'Order', clarify: 'Asking for clarification' },
   conversation: { turn: 'Comment', question: 'Follow-up question' },
   listen: {},
+  think: { problem: 'Noticing the problem', action: 'What to do', reason: 'Why', backup: 'If that does not work' },
+  recall: {}, // clues come from each memory the family enters
 };
 const LEVEL_NAMES = ['1. Reminder', '2. Specific cue', '3. Sentence starter', '4. Model'];
 
@@ -284,20 +286,20 @@ function editActivity(root, a) {
   const cueInputs = {};
   const cues = h('details', {}, h('summary', {}, 'Words and cues (support sequence)'),
     h('p', { class: 'muted' }, 'Buddy offers one cue at a time, from 1 to 4, and only for the one missing part. {name}, {category}, {function}, {setting}, {event}, {ordinal}, {step}, {topic}, {words}, {problem}, {action}, {reason}, {backup} are filled in automatically.'),
-    Object.entries(CUE_NAMES[a.mode]).map(([key, label]) => {
+    Object.entries(CUE_NAMES[a.mode] || {}).map(([key, label]) => {
       const current = content.cues?.[key] || modes[a.mode].defaultCues[key];
       cueInputs[key] = current.map((t) => h('input', { value: t }));
       return h('div', { class: 'panel' }, h('h3', {}, label), h('div', { class: 'ladder' }, cueInputs[key].flatMap((inp, i) => [h('label', {}, LEVEL_NAMES[i]), inp])));
     }));
 
   root.replaceChildren(
-    h('h2', {}, `${a.id ? 'Edit' : 'New'}: ${modes[a.mode].label}`),
+    h('h2', {}, `${a.id ? 'Edit' : 'New'}: ${modeName(a.mode)}`),
     h('div', { class: 'panel' }, field(`Which goal in ${me.learner.name}\u2019s communication plan does this practise?`, planGoal), goalHint),
     h('div', { class: 'panel grid2' }, field('Title', title), field('Skill / goal being practised', goal), field('Status', status),
       a.mode === 'conversation' ? h('label', { class: 'switch' }, practiseQ, 'Also practise asking follow-up questions') : null),
     h('h3', {}, a.mode === 'conversation' ? 'Topics, in the order Buddy moves between them' : a.mode === 'listen' ? 'Stories' : 'Items'),
     itemsBox,
-    h('button', { class: 'btn', onclick: () => { content.items.push(a.mode === 'listen' ? blankStory() : {}); drawItems(); } }, a.mode === 'conversation' ? 'Add a topic' : a.mode === 'listen' ? 'Add another story' : 'Add an item'),
+    h('button', { class: 'btn', onclick: () => { content.items.push(a.mode === 'listen' ? blankStory() : a.mode === 'recall' ? blankRecall() : {}); drawItems(); } }, a.mode === 'conversation' ? 'Add a topic' : a.mode === 'listen' ? 'Add another story' : 'Add an item'),
     Object.keys(CUE_NAMES[a.mode]).length ? h('div', { class: 'panel' }, cues) : '',
     h('div', { class: 'panel' }, field('What should reviewers look at?', reviewFocus, 'Shown with the practice records, e.g. "Are group words used without a cue?"')),
     h('div', { class: 'row-actions' },
@@ -348,7 +350,7 @@ const multi = (it, k, rows = 3) => bind(it, k, h('textarea', { rows }), lines, (
 
 function itemEditor(mode, it, i, urls, remove) {
   const box = h('div', { class: 'item-box' });
-  const head = h('div', { class: 'row-actions', style: 'justify-content:space-between' }, h('strong', {}, `${mode === 'conversation' ? 'Topic' : mode === 'listen' ? 'Story' : mode === 'think' ? 'Situation' : 'Item'} ${i + 1}`), h('button', { class: 'btn btn-quiet', onclick: remove }, 'Remove'));
+  const head = h('div', { class: 'row-actions', style: 'justify-content:space-between' }, h('strong', {}, `${mode === 'conversation' ? 'Topic' : mode === 'listen' ? 'Story' : mode === 'think' ? 'Situation' : mode === 'recall' ? 'Memory practice' : 'Item'} ${i + 1}`), h('button', { class: 'btn btn-quiet', onclick: remove }, 'Remove'));
   let body;
   if (mode === 'object') body = [
     field('Picture', imagePicker(it, 'image_id', urls, false)),
@@ -395,6 +397,7 @@ function itemEditor(mode, it, i, urls, remove) {
   ];
   }
   if (mode === 'listen') body = storyEditor(it, urls);
+  if (mode === 'recall') body = recallEditor(it, urls);
   if (mode === 'think') body = [
     h('div', { class: 'grid2' }, field('Short title', txt(it, 'title'), 'For the team, e.g. "Trainer not at the gym"'), field('Picture (optional)', imagePicker(it, 'image_id', urls, false))),
     field('The situation Buddy describes', bind(it, 'scenario', h('textarea', { rows: 2 })), `e.g. "You arrive at the gym, but your trainer isn\u2019t there." Use places and activities from ${me.learner.name}\u2019s life.`),
@@ -414,6 +417,37 @@ function itemEditor(mode, it, i, urls, remove) {
 
 // ------------------------------------------------------------ listen: story editor
 const blankStory = () => ({ questions: Array.from({ length: 5 }, () => ({ question: '', answers: [], clue: '' })) });
+
+// Memory Buddy, Remember My Day: what the learner really did, with clues Buddy gives one at a time.
+const blankRecall = () => ({ when: 'at the weekend', target: 3, memories: [{}, {}, {}] });
+function recallEditor(it, urls) {
+  it.memories = it.memories?.length ? it.memories : [{}];
+  if (it.target == null) it.target = 3;
+  const name = me.learner.name;
+  const list = h('div', { class: 'q-list' });
+  const draw = () => list.replaceChildren(...it.memories.map((m, i) => h('div', { class: 'q-row' },
+    h('div', { class: 'q-num' }, String(i + 1)),
+    h('div', { class: 'q-fields' },
+      h('div', { class: 'grid2' },
+        field(`What ${name} did`, txt(m, 'event'), 'e.g. "went to the gym with Dad"'),
+        field('Photo (optional, the last clue)', imagePicker(m, 'image_id', urls, false))),
+      h('div', { class: 'grid2' },
+        field('Broad clue', txt(m, 'broad_clue'), 'e.g. "Think about Saturday morning."'),
+        field('More specific clue', txt(m, 'specific_clue'), 'e.g. "You went somewhere to exercise."'))),
+    h('button', { class: 'btn btn-quiet', onclick: () => { it.memories.splice(i, 1); draw(); } }, 'Remove'))));
+  draw();
+  const target = bind(it, 'target', h('input', { type: 'number', min: 1, max: 5, step: 1 }), (v) => Number(v) || 3);
+  return [
+    h('div', { class: 'grid2' },
+      field('When', txt(it, 'when'), 'e.g. "at the weekend", "on your school trip"'),
+      field('How many things to remember', target, '1 to 5. Three works well.')),
+    field("Buddy's question (optional)", txt(it, 'prompt'), 'Blank = "Tell me three things you did at the weekend."'),
+    h('h4', { class: 'q-head' }, `What ${name} really did`),
+    h('p', { class: 'muted', style: 'margin:0' }, `Buddy uses these for clues: first the broad clue, then the specific one, then the photo. Anything else ${name} really did counts too, so the list doesn\u2019t need to be complete. Update it after each weekend or outing.`),
+    list,
+    h('button', { class: 'btn', onclick: () => { it.memories.push({}); draw(); } }, 'Add something else they did'),
+  ];
+}
 
 function storyEditor(it, urls) {
   it.questions = it.questions?.length ? it.questions : blankStory().questions;
@@ -443,7 +477,9 @@ function storyEditor(it, urls) {
 }
 
 // ------------------------------------------------------------ review
-const DEFAULT_GOAL = { story: 'narrative', conversation: 'conversation', task: 'instructions', object: 'other', listen: 'other', think: 'unexpected' };
+const DEFAULT_GOAL = { story: 'narrative', conversation: 'conversation', task: 'instructions', object: 'other', listen: 'other', think: 'unexpected', recall: 'other' };
+// "Memory Buddy: Remember My Day" — two modes share Memory Buddy, so lists show both names.
+const modeName = (m) => `${modes[m].label}: ${modes[m].activityName}`;
 const TZ = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
 const goalPill = (k) => {
   const g = goals?.goals[k] || goals?.goals.other;

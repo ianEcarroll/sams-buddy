@@ -228,6 +228,7 @@ const think = {
   elementLabel: { problem: 'Problem', action: 'What to do', reason: 'Why', backup: 'If that does not work' },
   cueCardIndex: (el) => ({ problem: 0, action: 1, reason: 2, backup: 3 }[el]),
   followUps: THINK_FOLLOW_UPS,
+  followUp: (el, it) => (it.met.action ? THINK_FOLLOW_UPS[el] || null : null),
   prompt: (item) => item.question || 'What would you do?',
   simplePrompt: (item) => item.simple_prompt || 'Something is not how you expected. What could you do?',
   defaultCues: {
@@ -247,7 +248,39 @@ const think = {
   itemLabel: (item) => item.title || 'situation',
 };
 
-export const MODES = { object, story, task, conversation, listen, think };
+// ---------- RECALL (Memory Buddy: real experiences, e.g. "Tell me three things you did at the weekend") ----------
+// The family lists a few things the learner really did, each with a broad clue, a specific clue and an optional photo.
+// Any real thing the learner remembers counts, listed or not. After the first answer Buddy asks "What else do you
+// remember?" once per memory as a plain follow-up; after that it gives clues, broad → specific → photo.
+const NUM = ['zero', 'one', 'two', 'three', 'four', 'five'];
+export const recallTarget = (item) => Math.min(5, Math.max(1, Number(item?.target) || 3));
+const WHAT_ELSE = ['What else do you remember doing?', 'Anything else you remember?', 'What else did you do?'];
+const recall = {
+  label: 'Memory Buddy',
+  tagline: 'Remember and recall',
+  activityName: 'Remember My Day',
+  defaultGoal: 'Remember real things I did, with as few clues as possible',
+  movie: true,
+  cueCard: (item) => Array.from({ length: recallTarget(item) }, (_, i) => String(i + 1)),
+  elements: (item) => Array.from({ length: recallTarget(item) }, (_, i) => `memory_${i}`),
+  elementLabel: new Proxy({}, { get: (t, k) => (String(k).startsWith('memory_') ? `Memory ${Number(String(k).slice(7)) + 1}` : k) }),
+  cueCardIndex: (el) => (String(el).startsWith('memory_') ? Number(el.slice(7)) : null),
+  cueKey: () => 'memory',
+  followUp: (el, it) => {
+    const n = Object.keys(it.met).length;
+    return n ? WHAT_ELSE[(n - 1) % WHAT_ELSE.length] : null;
+  },
+  prompt: (item) => item.prompt || `Tell me ${NUM[recallTarget(item)] || recallTarget(item)} thing${recallTarget(item) === 1 ? '' : 's'} you did ${item.when || 'recently'}.`,
+  simplePrompt: (item) => item.simple_prompt || `Think about ${item.when || 'the last few days'}. What did you do?`,
+  // Level 0 only; levels 1–3 come from the family's clues for one thing not yet remembered (see engine recallCue).
+  defaultCues: { memory: ['Think about {when}. What did you do?', '{broad}', '{specific}', '{photo}'] },
+  vars: (item) => ({ when: item.when || 'the last few days' }),
+  achieved: {},
+  evidenceLabel: new Proxy({}, { get: (t, k) => (String(k).startsWith('memory_') ? `Memory ${Number(String(k).slice(7)) + 1}` : undefined) }),
+  itemLabel: (item) => item.title || 'my day',
+};
+
+export const MODES = { object, story, task, conversation, listen, think, recall };
 
 // Three everyday situations every learner starts with in Think Buddy. The team should check them with the
 // therapist and can edit, archive or add their own in Activities.
@@ -357,6 +390,10 @@ export function labelFor(mode, el) {
 // Brief, specific feedback for a set of elements, e.g.
 // "named the object and explained its use" / "said where it happened and told what happened first, next and last, in order".
 export function describe(mode, els, item) {
+  if (mode === 'recall') {
+    const n = els.filter((e) => e.startsWith('memory_')).length;
+    return n === 1 ? 'remembered one thing you did' : `remembered ${NUM[n] || n} things you did`;
+  }
   const seq = els.filter((e) => e.startsWith('event_') || e.startsWith('step_'));
   const total = mode === 'story' ? (item.events || []).length : (item.steps || []).length;
   const rest = els.filter((e) => !seq.includes(e) && e !== 'order');
