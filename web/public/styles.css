@@ -301,3 +301,7 @@ details > summary { cursor: pointer; font-weight: 700; padding: 6px 0; }
 .interest-chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .chip { border: 1.5px solid var(--line); background: var(--surface); border-radius: 999px; padding: 4px 12px; font-size: .9rem; min-height: 34px; }
 .chip:hover { border-color: var(--ink); }
+
+/* ---------- Team: Memory Buddy list freshness ---------- */
+.list-age { margin: 0; padding: 8px 12px; border-radius: 8px; background: var(--met-soft, var(--sky-soft)); font-size: .92rem; }
+.list-age.stale { background: var(--notyet-soft, var(--sun-soft)); }

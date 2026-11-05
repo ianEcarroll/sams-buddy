@@ -7,7 +7,7 @@ import { sign, hmac, hashPassword, checkPassword, requireAdult, requireOwner, re
 import { transcribe, speak, voiceEnabled, listVoices, defaultVoiceId } from './voice.js';
 import { createSession, respond, confirmHeard, control, finish, ENGINE_DEFAULTS } from './coach/engine.js';
 import { judgeFromEnv } from './coach/judge.js';
-import { MODES, STARTER_STORIES, STARTER_SCENARIOS } from './coach/modes.js';
+import { MODES, STARTER_STORIES, STARTER_SCENARIOS, stampMemories } from './coach/modes.js';
 import { PLAN_GOALS, GOAL_KEYS, SUPPORT_CODES } from './coach/goals.js';
 import { emailEnabled, sendEmail, recipientsFor, practiceEmail } from './email.js';
 import { isPlatformAdmin, newInviteToken, INVITE_DAYS, estimateCost, validateFamily, ageFrom, cleanInterests } from './families.js';
@@ -306,7 +306,8 @@ adult.post('/activities', wrap(async (req, res) => {
   const err = validateActivity(req.body || {});
   if (err) return res.status(400).json({ error: err });
   if (!(await imagesOwned(req.body.content, req.learnerId))) return res.status(400).json({ error: 'One of the pictures could not be found. Upload it again.' });
-  const { mode, title, goal = '', status = 'active', content } = req.body;
+  const { mode, title, goal = '', status = 'active' } = req.body;
+  const content = stampMemories(mode, req.body.content, null);
   const a = await one('insert into activities(learner_id, mode, title, goal, plan_goal, status, content, created_by) values ($1,$2,$3,$4,$5,$6,$7,$8) returning id', [req.learnerId, mode, title.trim(), goal, planGoalOf(req.body), status, content, req.adult.id]);
   res.json({ id: a.id });
 }));
@@ -314,7 +315,9 @@ adult.put('/activities/:id', wrap(async (req, res) => {
   const err = validateActivity(req.body || {});
   if (err) return res.status(400).json({ error: err });
   if (!(await imagesOwned(req.body.content, req.learnerId))) return res.status(400).json({ error: 'One of the pictures could not be found. Upload it again.' });
-  const { mode, title, goal = '', status = 'active', content } = req.body;
+  const { mode, title, goal = '', status = 'active' } = req.body;
+  const prev = await one('select content from activities where id=$1 and learner_id=$2', [req.params.id, req.learnerId]);
+  const content = stampMemories(mode, req.body.content, prev?.content);
   await q('update activities set mode=$1, title=$2, goal=$3, plan_goal=$4, status=$5, content=$6, updated_at=now() where id=$7 and learner_id=$8', [mode, title.trim(), goal, planGoalOf(req.body), status, content, req.params.id, req.learnerId]);
   res.json({ ok: true });
 }));
