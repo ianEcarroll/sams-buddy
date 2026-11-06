@@ -26,7 +26,8 @@ function brand(name) {
   el.append(h('span', { class: 'brand-text' }, name ? h('small', {}, `${name}'s`) : null, 'Buddy'));
   return el;
 }
-const field = (label, input, hint) => h('label', { class: 'field' }, h('span', {}, label), input, hint ? h('small', { class: 'muted' }, hint) : null);
+// A group of controls (e.g. the picture picker) sits in a <div>, so a click on the label doesn't open the file chooser.
+const field = (label, input, hint) => h(input?.dataset?.group ? 'div' : 'label', { class: 'field' }, h('span', {}, label), input, hint ? h('small', { class: 'muted' }, hint) : null);
 const toast = (msg) => { const t = h('div', { class: 'toast', role: 'status' }, msg); document.body.append(t); setTimeout(() => t.remove(), 4000); };
 const list = (s) => String(s || '').split(',').map((x) => x.trim()).filter(Boolean);
 const lines = (s) => String(s || '').split('\n').map((x) => x.trim()).filter(Boolean);
@@ -130,6 +131,7 @@ function renderShell() {
       h('button', { class: 'btn btn-quiet', onclick: () => { sessionStorage.removeItem(TOKEN_KEY); token = null; boot(); } }, 'Sign out')),
     h('nav', { class: 'tabs', role: 'tablist' }, tabsFor().map(([k, l]) => h('button', { role: 'tab', 'aria-selected': String(tab === k), onclick: () => { tab = k; renderShell(); } }, l))),
     body,
+    h('p', { class: 'muted credits' }, SYMBOL_CREDIT, ' \u00B7 ', h('a', { href: 'https://creativecommons.org/licenses/by-sa/4.0/', target: '_blank', rel: 'noopener' }, 'Licence')),
   );
   if (!me.voice) body.append(h('p', { class: 'panel' }, `Voice is not connected yet (ELEVENLABS_API_KEY). ${me.learner.name} can still practise by typing.`));
   ({ plan: renderPlan, activities: renderActivities, review: renderReview, notes: renderNotes, team: renderTeam, families: renderFamilies })[tab](body).catch((e) => toast(e.message));
@@ -432,24 +434,72 @@ function previewBox(mode, it, ctx) {
 }
 const shorten = (s, words) => { const w = String(s).split(/\s+/); return w.length > words ? `${w.slice(0, words).join(' ')}…` : s; };
 
+// Pictures: find one of the built-in Mulberry symbols, or upload a photo. Symbols are stored as "sym:<name>".
+const SYMBOL_CREDIT = 'Pictures: Mulberry Symbols \u00A9 Steve Lee, CC BY-SA 4.0 (mulberrysymbols.org)';
+let symbolIndex = null;
+async function symbols() {
+  if (!symbolIndex) symbolIndex = fetch('/symbols/index.json').then((r) => r.json()).catch(() => { symbolIndex = null; return []; });
+  return symbolIndex;
+}
+// Every word typed must start a word in the symbol's name. Whole-word matches and shorter names come first.
+function searchSymbols(all, query, max = 30) {
+  const words = String(query).toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
+  if (!words.length) return [];
+  const hits = [];
+  for (const [slug, label] of all) {
+    const lw = label.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
+    if (!words.every((w) => lw.some((x) => x.startsWith(w)))) continue;
+    const exact = words.filter((w) => lw.includes(w)).length;
+    hits.push({ slug, label, score: exact * 100 - lw.length * 3 - label.length * 0.1 });
+  }
+  return hits.sort((a, b) => b.score - a.score).slice(0, max);
+}
 function imagePicker(it, key, urls, multiple, redraw) {
   const thumbs = h('div', { class: 'thumbs' });
+  const set = (id, url) => {
+    urls[id] = url;
+    if (multiple) (it[key] = it[key] || []).push(id); else it[key] = id;
+    draw();
+    root.dispatchEvent(new Event('change', { bubbles: true }));
+  };
   const draw = () => {
     const ids = multiple ? (it[key] || []) : (it[key] ? [it[key]] : []);
-    thumbs.replaceChildren(...ids.map((id, i) => h('div', {}, h('img', { src: urls[id], alt: `Picture ${i + 1}` }),
-      h('button', { class: 'btn btn-quiet', onclick: () => { if (multiple) it[key].splice(i, 1); else delete it[key]; draw(); } }, 'Remove'))));
+    thumbs.replaceChildren(...ids.map((id, i) => h('div', {}, h('img', { src: urls[id] || (String(id).startsWith('sym:') ? `/symbols/${String(id).slice(4)}.svg` : ''), alt: `Picture ${i + 1}`, class: String(id).startsWith('sym:') ? 'sym' : null }),
+      h('button', { type: 'button', class: 'btn btn-quiet', onclick: () => { if (multiple) it[key].splice(i, 1); else delete it[key]; draw(); } }, 'Remove'))));
+    findBtn.hidden = !multiple && !!it[key];
+    upload.hidden = !multiple && !!it[key];
   };
-  const input = h('input', { type: 'file', accept: 'image/*', multiple: multiple || null, onchange: run(async (e) => {
+  const input = h('input', { type: 'file', accept: 'image/*', multiple: multiple || null, class: 'visually-hidden', onchange: run(async (e) => {
     for (const file of e.target.files) {
       const form = new FormData(); form.append('image', file);
       const r = await api('/adult/images', { method: 'POST', form });
-      urls[r.id] = r.url;
-      if (multiple) (it[key] = it[key] || []).push(r.id); else it[key] = r.id;
+      set(r.id, r.url);
     }
-    e.target.value = ''; draw();
+    e.target.value = '';
   }) });
+  const upload = h('label', { class: 'btn' }, input, 'Upload a photo');
+  // The search box opens with a guess from what the team has already typed (the object's name, the topic…).
+  const guess = () => it.name || it.topic || it.title || '';
+  const q = h('input', { type: 'search', placeholder: 'e.g. toothbrush, bus, caf\u00E9', 'aria-label': 'Search the pictures' });
+  const results = h('div', { class: 'sym-results' });
+  const panel = h('div', { class: 'sym-panel', hidden: true },
+    h('div', { class: 'row-actions' }, q, h('button', { type: 'button', class: 'btn btn-quiet', onclick: () => { panel.hidden = true; } }, 'Close')),
+    results, h('small', { class: 'muted' }, SYMBOL_CREDIT));
+  let t = null;
+  const show = async () => {
+    const all = await symbols();
+    const hits = searchSymbols(all, q.value);
+    results.replaceChildren(...(q.value.trim()
+      ? hits.length ? hits.map((x) => h('button', { type: 'button', class: 'sym-hit', title: x.label, onclick: () => { set(`sym:${x.slug}`, `/symbols/${x.slug}.svg`); if (!multiple) panel.hidden = true; } },
+        h('img', { src: `/symbols/${x.slug}.svg`, alt: '', loading: 'lazy' }), h('span', {}, x.label)))
+        : [h('p', { class: 'muted' }, 'No pictures match. Try a simpler word, or upload a photo.')]
+      : [h('p', { class: 'muted' }, 'Type what the picture should show.')]));
+  };
+  q.addEventListener('input', (e) => { e.stopPropagation(); clearTimeout(t); t = setTimeout(show, 150); });
+  const findBtn = h('button', { type: 'button', class: 'btn', onclick: () => { panel.hidden = false; if (!q.value) q.value = guess(); q.focus(); show(); } }, 'Find a picture');
+  const root = h('div', { 'data-group': '1', class: 'picker' }, thumbs, h('div', { class: 'row-actions' }, findBtn, upload), panel);
   draw();
-  return h('div', {}, thumbs, input);
+  return root;
 }
 
 function bind(it, key, el, transform = (v) => v, show = (v) => v) {
@@ -571,12 +621,26 @@ const blankStory = () => ({ questions: Array.from({ length: 5 }, () => ({ questi
 const F_COLOURS = ['red', 'blue', 'green', 'yellow', 'purple', 'orange'];
 const F_SHAPES = ['circle', 'square', 'triangle', 'star', 'heart'];
 const F_TYPES = [
-  ['touch', 'Touch a shape'], ['box', 'Put a shape in a box'], ['next_to', 'Put a shape next to another'],
-  ['left_of', 'Put a shape on the left of another'], ['right_of', 'Put a shape on the right of another'],
+  ['touch', 'Touch one'], ['box', 'Put one in a box'], ['next_to', 'Put one next to another'],
+  ['left_of', 'Put one on the left of another'], ['right_of', 'Put one on the right of another'],
   ['say_left', 'Tell me which one is on the left'], ['say_right', 'Tell me which one is on the right'], ['say_box', 'Tell me which one is in a box'],
 ];
 const blankFollow = () => ({ tokens: ['red-circle', 'blue-square', 'green-triangle'], steps: [{ type: 'box', token: 'red-circle', box: 1 }, { type: 'next_to', token: 'blue-square', target: 'red-circle' }] });
-const tName = (id) => String(id).replace('-', ' ');
+// Everyday objects (Mulberry Symbols) come from the server with the modes: { id: "obj-key", name, img }.
+const fObjects = () => modes.follow?.objects || [];
+const fObject = (id) => fObjects().find((o) => o.id === id);
+const tName = (id) => fObject(id)?.name || String(id).replace('-', ' ');
+const F_FILL = { red: '#d63c3c', blue: '#2f6fd6', green: '#2e9d57', yellow: '#f2c230', purple: '#8a4fd0', orange: '#ee8a2a' };
+const F_PATH = { circle: '<circle cx="24" cy="24" r="18"/>', square: '<rect x="7" y="7" width="34" height="34" rx="4"/>', triangle: '<path d="M24 5 L43 40 H5 Z"/>',
+  star: '<path d="M24 4l5.9 12.6 13.7 1.6-10.1 9.4 2.7 13.6L24 34.4l-12.2 6.8 2.7-13.6L4.4 18.2l13.7-1.6z"/>', heart: '<path d="M24 42S6 31 6 18a9 9 0 0 1 18-3 9 9 0 0 1 18 3c0 13-18 24-18 24z"/>' };
+function tokenThumb(id) {
+  const o = fObject(id);
+  if (o) return h('img', { class: 'tok-thumb sym', src: o.img, alt: '' });
+  const [c, sh] = String(id).split('-');
+  const el = h('span', { class: 'tok-thumb' });
+  el.innerHTML = `<svg viewBox="0 0 48 48" aria-hidden="true"><g fill="${F_FILL[c] || '#888'}" stroke="rgba(0,0,0,.35)" stroke-width="1.5">${F_PATH[sh] || F_PATH.circle}</g></svg>`; // trusted constants
+  return el;
+}
 function followEditor(it) {
   it.tokens = Array.isArray(it.tokens) ? it.tokens : [];
   it.steps = Array.isArray(it.steps) ? it.steps : [];
@@ -588,11 +652,12 @@ function followEditor(it) {
     const toks = it.tokens;
     const tokOpts = toks.map((t) => [t, tName(t)]);
     const shapes = h('div', { class: 'q-list' }, toks.map((t, i) => {
-      const [c, sh] = t.split('-');
+      // One list: Buddy's coloured shapes, then everyday objects. Taken ones are still listed so the current one shows.
+      const pick = h('select', { onchange: (e) => replaceTok(t, e.target.value) },
+        h('optgroup', { label: 'Shapes' }, F_COLOURS.flatMap((c) => F_SHAPES.map((x) => `${c}-${x}`)).map((v) => h('option', { value: v, selected: v === t }, tName(v)))),
+        fObjects().length ? h('optgroup', { label: 'Everyday objects' }, fObjects().map((o) => h('option', { value: o.id, selected: o.id === t }, o.name))) : null);
       return h('div', { class: 'q-row' }, h('div', { class: 'q-num' }, String(i + 1)), h('div', { class: 'q-fields' }, h('div', { class: 'grid2' },
-        field('Colour and shape', h('div', { style: 'display:grid;grid-template-columns:1fr 1fr;gap:8px' },
-          sel(F_COLOURS.map((x) => [x, x]), c, (v) => { replaceTok(t, `${v}-${sh}`); }),
-          sel(F_SHAPES.map((x) => [x, x]), sh, (v) => { replaceTok(t, `${c}-${v}`); }))),
+        field('Shape or object', h('div', { class: 'tok-pick' }, tokenThumb(t), pick)),
         field('Starts in', sel([['', 'The tray'], ...[1, 2, 3, 4].map((n) => [n, `Box ${n}`])], it.start[t] || '', (v) => { if (v) it.start[t] = Number(v); else delete it.start[t]; draw(); })))),
         h('button', { class: 'btn btn-quiet', onclick: () => { it.tokens.splice(i, 1); delete it.start[t]; draw(); } }, 'Remove'));
     }));
@@ -603,25 +668,28 @@ function followEditor(it) {
       return h('div', { class: 'q-row' }, h('div', { class: 'q-num' }, String(i + 1)), h('div', { class: 'q-fields' },
         h('div', { class: 'grid2' },
           field('Step', sel(F_TYPES, st.type, (v) => { st.type = v; draw(); })),
-          needsTok ? field('Shape', sel(tokOpts, st.token, (v) => { st.token = v; draw(); })) : h('div')),
+          needsTok ? field('Which one', sel(tokOpts, st.token, (v) => { st.token = v; draw(); })) : h('div')),
         needsBox || needsTarget ? h('div', { class: 'grid2' },
           needsBox ? field('Box', sel([1, 2, 3, 4].map((n) => [n, `Box ${n}`]), st.box, (v) => { st.box = Number(v); draw(); })) : h('div'),
-          needsTarget ? field('Which other shape', sel(tokOpts.filter(([t]) => t !== st.token), st.target, (v) => { st.target = v; draw(); })) : h('div')) : null),
+          needsTarget ? field('Next to which', sel(tokOpts.filter(([t]) => t !== st.token), st.target, (v) => { st.target = v; draw(); })) : h('div')) : null),
         h('button', { class: 'btn btn-quiet', onclick: () => { it.steps.splice(i, 1); draw(); } }, 'Remove'));
     }));
     wrap.replaceChildren(
       field('Short title', txt(it, 'title'), 'For the team, e.g. "Red circle, blue square"'),
-      h('h4', { class: 'q-head' }, 'Shapes (2 to 4)'),
+      h('h4', { class: 'q-head' }, 'Shapes or objects (2 to 4)'),
+      h('p', { class: 'muted', style: 'margin:0' }, `Everyday objects make it more like real life: "Put the key next to the phone."`),
       shapes,
-      toks.length < 4 ? h('button', { class: 'btn', onclick: () => { const free = F_COLOURS.flatMap((c) => F_SHAPES.map((x) => `${c}-${x}`)).find((x) => !toks.includes(x)); it.tokens.push(free); draw(); } }, 'Add a shape') : null,
+      toks.length < 4 ? h('div', { class: 'row-actions' },
+        h('button', { class: 'btn', onclick: () => { const free = F_COLOURS.flatMap((c) => F_SHAPES.map((x) => `${c}-${x}`)).find((x) => !toks.includes(x)); it.tokens.push(free); draw(); } }, 'Add a shape'),
+        fObjects().length ? h('button', { class: 'btn', onclick: () => { const free = fObjects().map((o) => o.id).find((x) => !toks.includes(x)); if (free) { it.tokens.push(free); draw(); } } }, 'Add an object') : null) : '',
       h('h4', { class: 'q-head' }, 'Steps (1 to 4)'),
       h('p', { class: 'muted', style: 'margin:0' }, 'Two steps is the plan\u2019s target; three is the trial. A "Tell me" step is answered by speaking, so put it last.'),
       steps,
-      it.steps.length < 4 ? h('button', { class: 'btn', onclick: () => { it.steps.push({ type: 'box', token: toks[0], box: 1 }); draw(); } }, 'Add a step') : null,
+      it.steps.length < 4 ? h('button', { class: 'btn', onclick: () => { it.steps.push({ type: 'box', token: toks[0], box: 1 }); draw(); } }, 'Add a step') : '',
     );
   };
   const replaceTok = (from, to) => {
-    if (it.tokens.includes(to)) { toast('That shape is already in this instruction.'); draw(); return; }
+    if (it.tokens.includes(to)) { toast('That one is already in this instruction.'); draw(); return; }
     it.tokens = it.tokens.map((t) => (t === from ? to : t));
     for (const st of it.steps) { if (st.token === from) st.token = to; if (st.target === from) st.target = to; }
     if (from in it.start) { it.start[to] = it.start[from]; delete it.start[from]; }

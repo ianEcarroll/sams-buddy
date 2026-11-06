@@ -349,3 +349,25 @@ details.layer > summary small, details.fine-tune > summary small { font-weight: 
 .preview ol { margin: 6px 0; padding-left: 22px; }
 .preview li { margin: 2px 0; }
 .save-row { margin-top: 18px; }
+
+/* ---------- Pictures: built-in Mulberry symbols ---------- */
+.visually-hidden { position: absolute !important; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.picker { display: grid; gap: 8px; }
+.picker .row-actions input[type="search"] { flex: 1 1 200px; }
+.sym-panel { border: 1px solid var(--line); border-radius: 12px; padding: 10px; background: var(--paper); display: grid; gap: 8px; }
+.sym-results { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 8px; max-height: 320px; overflow: auto; }
+.sym-results p { grid-column: 1 / -1; margin: 4px 0; }
+.sym-hit { display: grid; justify-items: center; gap: 4px; padding: 6px; border: 1.5px solid var(--line); border-radius: 10px; background: #fff; color: #14305a; font-size: .8rem; line-height: 1.2; text-align: center; }
+.sym-hit:hover, .sym-hit:focus-visible { border-color: var(--talk); }
+.sym-hit img { width: 64px; height: 64px; object-fit: contain; }
+.thumbs img.sym, img[src^="/symbols/"] { object-fit: contain; background: #fff; }
+.adult .credits { margin-top: 28px; font-size: .85rem; }
+.shape.obj { display: grid; place-items: center; background: #fff; border-radius: 10px; }
+.shape.obj img { width: 100%; height: 100%; object-fit: contain; }
+.tok-pick { display: grid; grid-template-columns: 44px 1fr; gap: 8px; align-items: center; }
+.tok-thumb { width: 44px; height: 44px; display: grid; place-items: center; border-radius: 8px; background: #fff; border: 1px solid var(--line); object-fit: contain; }
+.tok-thumb svg { width: 34px; height: 34px; }
+/* Elements with the hidden attribute stay hidden even when a class gives them a display value. */
+[hidden] { display: none !important; }
+/* A tall neighbour (e.g. the picture picker) must not stretch an input in the same row. */
+.grid2 > .field > input, .grid2 > .field > select { align-self: start; }

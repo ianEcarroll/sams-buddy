@@ -7,7 +7,7 @@ import { sign, hmac, hashPassword, checkPassword, requireAdult, requireOwner, re
 import { transcribe, speak, voiceEnabled, listVoices, defaultVoiceId } from './voice.js';
 import { createSession, respond, confirmHeard, control, act, finish, previewLines, ENGINE_DEFAULTS } from './coach/engine.js';
 import { judgeFromEnv } from './coach/judge.js';
-import { MODES, STARTER_STORIES, STARTER_SCENARIOS, STARTER_EXPLAIN, STARTER_FOLLOW, FOLLOW_COLOURS, FOLLOW_SHAPES, FOLLOW_STEP_TYPES, FOLLOW_BOXES, stampMemories } from './coach/modes.js';
+import { MODES, STARTER_STORIES, STARTER_SCENARIOS, STARTER_EXPLAIN, STARTER_FOLLOW, STARTER_OBJECTS, FOLLOW_OBJECTS, isFollowToken, FOLLOW_STEP_TYPES, FOLLOW_BOXES, stampMemories } from './coach/modes.js';
 import { PLAN_GOALS, GOAL_KEYS, SUPPORT_CODES } from './coach/goals.js';
 import { emailEnabled, sendEmail, recipientsFor, practiceEmail } from './email.js';
 import { isPlatformAdmin, newInviteToken, INVITE_DAYS, estimateCost, validateFamily, ageFrom, cleanInterests } from './families.js';
@@ -44,22 +44,24 @@ export const SETTING_DEFAULTS = {
 };
 const SETTING_KEYS = Object.keys(SETTING_DEFAULTS);
 const settingsOf = (learner) => ({ ...SETTING_DEFAULTS, ...(learner?.settings || {}) });
-// Listen Buddy on screen: 2–4 shapes, 1–4 steps, each step naming shapes that are in the item.
+// Listen Buddy on screen: 2–4 shapes or objects, 1–4 steps, each step naming ones that are in the item.
 function followItemError(it) {
   const toks = Array.isArray(it.tokens) ? it.tokens : [];
-  const valid = (t) => { const [c, sh] = String(t).split('-'); return FOLLOW_COLOURS.includes(c) && FOLLOW_SHAPES.includes(sh); };
-  if (toks.length < 2 || toks.length > 4 || !toks.every(valid) || new Set(toks).size !== toks.length) return 'choose 2 to 4 different shapes.';
+  if (toks.length < 2 || toks.length > 4 || !toks.every(isFollowToken) || new Set(toks).size !== toks.length) return 'choose 2 to 4 different shapes or objects.';
   const steps = Array.isArray(it.steps) ? it.steps : [];
   if (!steps.length || steps.length > 4) return 'add 1 to 4 steps.';
   for (const [k, st] of steps.entries()) {
     if (!FOLLOW_STEP_TYPES.includes(st?.type)) return `step ${k + 1} needs a type.`;
-    if (!st.type.startsWith('say_') && !toks.includes(st.token)) return `step ${k + 1}: choose one of this instruction's shapes.`;
+    if (!st.type.startsWith('say_') && !toks.includes(st.token)) return `step ${k + 1}: choose one of this instruction's shapes or objects.`;
     if (['box', 'say_box'].includes(st.type) && !(Number(st.box) >= 1 && Number(st.box) <= FOLLOW_BOXES)) return `step ${k + 1}: choose a box from 1 to ${FOLLOW_BOXES}.`;
-    if (['next_to', 'left_of', 'right_of'].includes(st.type) && (!toks.includes(st.target) || st.target === st.token)) return `step ${k + 1}: choose a different shape to put it next to.`;
+    if (['next_to', 'left_of', 'right_of'].includes(st.type) && (!toks.includes(st.target) || st.target === st.token)) return `step ${k + 1}: choose a different one to put it next to.`;
   }
   return null;
 }
-const imageUrl = (id) => `/api/images/${id}?s=${hmac(id)}`;
+// Pictures are either a family's own upload (a uuid) or a built-in Mulberry symbol ("sym:<name>", served by the web app).
+const SYMBOL_ID = /^sym:[a-z0-9-]{1,80}$/;
+const isSymbol = (id) => SYMBOL_ID.test(String(id));
+const imageUrl = (id) => (isSymbol(id) ? `/symbols/${String(id).slice(4)}.svg` : `/api/images/${id}?s=${hmac(id)}`);
 // Every picture an activity item uses: its own, a story's sequence, and Memory Buddy's photo clues.
 const imageIdsOf = (it) => [it?.image_id, ...(it?.image_ids || []), ...(it?.memories || []).map((m) => m?.image_id)].filter(Boolean);
 
@@ -295,7 +297,18 @@ async function ensureStarterFollow(learnerId) {
   const modes = settingsOf(l).enabled_modes;
   await q('update learners set settings = settings || $1::jsonb where id=$2', [{ follow_seeded: true, enabled_modes: modes.includes('follow') ? modes : [...modes, 'follow'] }, learnerId]);
 }
-const ensureStarters = async (learnerId) => { await ensureStarterStories(learnerId); await ensureStarterScenarios(learnerId); await ensureRecallEnabled(learnerId); await ensureStarterExplain(learnerId); await ensureStarterFollow(learnerId); };
+// Explain Buddy's "Describe a Picture" starts with two sets of everyday objects (Mulberry Symbols). Added once, as drafts,
+// so the therapist can check the names, groups and uses before the learner sees them.
+async function ensureStarterObjects(learnerId) {
+  const l = await one('select settings from learners where id=$1', [learnerId]);
+  if (!l || l.settings?.object_seeded) return;
+  for (const a of STARTER_OBJECTS) {
+    await q("insert into activities(learner_id, mode, title, goal, plan_goal, status, content) values ($1,'object',$2,$3,'other','draft',$4)", [learnerId, a.title, a.goal, { items: a.items }]);
+  }
+  // Describe a Picture is already on by default; a family that turned it off keeps it off.
+  await q('update learners set settings = settings || $1::jsonb where id=$2', [{ object_seeded: true }, learnerId]);
+}
+const ensureStarters = async (learnerId) => { await ensureStarterStories(learnerId); await ensureStarterScenarios(learnerId); await ensureRecallEnabled(learnerId); await ensureStarterExplain(learnerId); await ensureStarterFollow(learnerId); await ensureStarterObjects(learnerId); };
 
 function validateActivity(b) {
   if (!MODES[b.mode]) return 'Choose a practice type.';
@@ -330,9 +343,11 @@ function validateActivity(b) {
   }
   return null;
 }
-// Pictures in an activity must be this family's own uploads.
+// Pictures in an activity must be this family's own uploads or built-in symbols.
 async function imagesOwned(content, learnerId) {
-  const ids = [...new Set((content?.items || []).flatMap(imageIdsOf).map(String))];
+  const all = [...new Set((content?.items || []).flatMap(imageIdsOf).map(String))];
+  if (all.some((id) => id.startsWith('sym:') && !isSymbol(id))) return false;
+  const ids = all.filter((id) => !isSymbol(id));
   if (!ids.length) return true;
   if (!ids.every((id) => /^[0-9a-f-]{36}$/i.test(id))) return false;
   const n = await one('select count(*)::int n from images where id = any($1::uuid[]) and learner_id=$2', [ids, learnerId]);
@@ -363,7 +378,8 @@ adult.delete('/activities/:id', wrap(async (req, res) => {
   res.json({ ok: true });
 }));
 adult.get('/modes', (req, res) => {
-  res.json(Object.fromEntries(Object.entries(MODES).map(([k, m]) => [k, { label: m.label, tagline: m.tagline, activityName: m.activityName, defaultGoal: m.defaultGoal, defaultCues: m.defaultCues }])));
+  const extra = { follow: { objects: Object.entries(FOLLOW_OBJECTS).map(([k, o]) => ({ id: `obj-${k}`, name: o.name, img: `/symbols/${o.file}.svg` })) } };
+  res.json(Object.fromEntries(Object.entries(MODES).map(([k, m]) => [k, { label: m.label, tagline: m.tagline, activityName: m.activityName, defaultGoal: m.defaultGoal, defaultCues: m.defaultCues, ...(extra[k] || {}) }])));
 });
 // "Buddy will say…" in the activity editor: the opening lines for one item, from the real engine,
 // so the preview always matches what the learner hears. Nothing is saved.

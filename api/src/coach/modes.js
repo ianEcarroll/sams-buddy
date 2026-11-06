@@ -375,6 +375,41 @@ const explain = {
   itemLabel: (item) => item.title || item.question || 'explanation',
 };
 
+// Describe a Picture starters: everyday objects with Mulberry Symbols pictures ("sym:<name>", served from /symbols).
+// Name, group and use are the team's answer key; Buddy accepts the alternatives and anything with the same meaning.
+// Added as drafts so the therapist can check the wording before the learner sees them.
+const obj = (pic, name, names, category, categories, fn, keywords) => ({ image_id: `sym:${pic}`, name, name_alternatives: names, category, category_alternatives: categories, function: fn, function_keywords: keywords });
+export const STARTER_OBJECTS = [
+  {
+    title: 'Around the house',
+    goal: 'Name, group and use in one sentence',
+    items: [
+      obj('toothbrush', 'toothbrush', ['tooth brush', 'electric toothbrush'], 'bathroom things', ['bathroom', 'things for washing', 'things for keeping clean', 'personal care', 'hygiene'], 'brush your teeth', ['teeth', 'tooth', 'brush', 'clean']),
+      obj('kettle', 'kettle', [], 'kitchen things', ['kitchen', 'appliances', 'electrical things', 'things for cooking'], 'boil water for tea or coffee', ['boil', 'water', 'tea', 'coffee', 'hot']),
+      obj('frying-pan', 'frying pan', ['pan', 'skillet'], 'kitchen things', ['kitchen', 'things for cooking', 'cooking things', 'pots and pans'], 'cook food like eggs on the hob', ['cook', 'fry', 'eggs', 'food']),
+      obj('washing-machine', 'washing machine', ['washer'], 'appliances', ['appliance', 'electrical things', 'machine', 'machines', 'household things', 'laundry things'], 'wash dirty clothes', ['wash', 'clean', 'clothes', 'laundry']),
+      obj('toaster', 'toaster', [], 'kitchen things', ['kitchen', 'appliances', 'electrical things'], 'make toast from bread', ['toast', 'bread', 'heat']),
+      obj('torch', 'torch', ['flashlight'], 'tools', ['tool', 'things that make light', 'lights', 'household things'], 'see in the dark', ['dark', 'light', 'see', 'shine']),
+      obj('hammer', 'hammer', [], 'tools', ['tool', 'DIY things', 'building things'], 'bang nails into wood', ['nail', 'nails', 'bang', 'hit', 'wood', 'build']),
+      obj('plaster', 'plaster', ['band-aid', 'bandage', 'sticking plaster'], 'first aid', ['first aid things', 'medical things', 'things for when you are hurt'], 'cover a small cut', ['cut', 'cover', 'hurt', 'wound', 'bleeding']),
+    ],
+  },
+  {
+    title: 'Out and about',
+    goal: 'Name, group and use in one sentence',
+    items: [
+      obj('mobile-phone', 'phone', ['mobile', 'mobile phone', 'smartphone', 'cell phone'], 'technology', ['electronics', 'gadget', 'gadgets', 'device', 'devices', 'things for talking to people'], 'call or message people', ['call', 'ring', 'message', 'text', 'talk']),
+      obj('headphones', 'headphones', ['earphones', 'headset'], 'technology', ['electronics', 'music things', 'gadget', 'gadgets'], 'listen to music without other people hearing', ['listen', 'music', 'hear']),
+      obj('wallet', 'wallet', ['purse'], 'things you carry', ['accessories', 'accessory', 'things for money', 'personal things'], 'keep your money and cards safe', ['money', 'cards', 'cash', 'keep', 'carry']),
+      obj('umbrella', 'umbrella', ['brolly'], 'things for the weather', ['weather', 'rain things', 'accessories', 'things you carry'], 'keep you dry in the rain', ['rain', 'dry', 'wet']),
+      obj('bicycle', 'bike', ['bicycle'], 'transport', ['vehicles', 'ways to travel', 'sports things'], 'ride to get somewhere', ['ride', 'cycle', 'travel', 'go', 'get']),
+      obj('calculator', 'calculator', [], 'school things', ['school', 'maths things', 'stationery', 'technology'], 'work out sums', ['sum', 'sums', 'maths', 'math', 'add', 'numbers', 'count']),
+      obj('scissors', 'scissors', [], 'school things', ['school', 'stationery', 'craft things', 'tools', 'tool'], 'cut paper', ['cut', 'paper', 'card']),
+      obj('guitar', 'guitar', ['electric guitar', 'acoustic guitar'], 'musical instruments', ['instrument', 'instruments', 'music things'], 'play music', ['play', 'music', 'song', 'strum']),
+    ],
+  },
+];
+
 // Three everyday explanations every learner starts with. The team can edit them or add their own (e.g. from the
 // child's interests: "Tell me how you make one of your paper characters").
 export const STARTER_EXPLAIN = {
@@ -420,8 +455,44 @@ export const STARTER_EXPLAIN = {
 export const FOLLOW_COLOURS = ['red', 'blue', 'green', 'yellow', 'purple', 'orange'];
 export const FOLLOW_SHAPES = ['circle', 'square', 'triangle', 'star', 'heart'];
 export const FOLLOW_BOXES = 4;
-export const tokenName = (id) => String(id || '').replace('-', ' ');
-export const tokenParts = (id) => { const [colour, shape] = String(id || '').split('-'); return { colour, shape }; };
+// Everyday objects (Mulberry Symbols, served by the web app from /symbols) can be used instead of, or with, shapes.
+// Token id "obj-<key>". `words` are what the learner might say for it.
+export const FOLLOW_OBJECTS = {
+  key: { name: 'key', file: 'key-1', words: ['key', 'keys'] },
+  phone: { name: 'phone', file: 'mobile-phone', words: ['phone', 'mobile'] },
+  mug: { name: 'mug', file: 'mug-2', words: ['mug', 'cup'] },
+  apple: { name: 'apple', file: 'apple', words: ['apple'] },
+  banana: { name: 'banana', file: 'banana', words: ['banana'] },
+  ball: { name: 'ball', file: 'football', words: ['ball', 'football'] },
+  pencil: { name: 'pencil', file: 'pencil', words: ['pencil'] },
+  scissors: { name: 'scissors', file: 'scissors', words: ['scissors'] },
+  toothbrush: { name: 'toothbrush', file: 'toothbrush', words: ['toothbrush', 'tooth brush', 'brush'] },
+  watch: { name: 'watch', file: 'watch', words: ['watch'] },
+  sandwich: { name: 'sandwich', file: 'sandwich', words: ['sandwich'] },
+  bus: { name: 'bus', file: 'bus', words: ['bus'] },
+  money: { name: 'money', file: 'money', words: ['money', 'cash'] },
+  umbrella: { name: 'umbrella', file: 'umbrella', words: ['umbrella'] },
+  cap: { name: 'cap', file: 'cap', words: ['cap', 'hat'] },
+  headphones: { name: 'headphones', file: 'headphones', words: ['headphones', 'headphone'] },
+  drum: { name: 'drum', file: 'drum', words: ['drum'] },
+  glasses: { name: 'glasses', file: 'glasses', words: ['glasses'] },
+  wallet: { name: 'wallet', file: 'wallet', words: ['wallet'] },
+  guitar: { name: 'guitar', file: 'guitar', words: ['guitar'] },
+  camera: { name: 'camera', file: 'camera', words: ['camera'] },
+  clock: { name: 'clock', file: 'clock', words: ['clock'] },
+};
+const objectOf = (id) => (String(id || '').startsWith('obj-') ? FOLLOW_OBJECTS[String(id).slice(4)] || null : null);
+export const isFollowToken = (id) => {
+  if (objectOf(id)) return true;
+  const [c, sh] = String(id || '').split('-');
+  return FOLLOW_COLOURS.includes(c) && FOLLOW_SHAPES.includes(sh);
+};
+export const tokenName = (id) => objectOf(id)?.name || String(id || '').replace('-', ' ');
+export const tokenImage = (id) => (objectOf(id) ? `/symbols/${objectOf(id).file}.svg` : null);
+// The words that name a token: its colour and shape ("red", "circle"), or the object's words ("phone", "mobile").
+export const tokenWords = (id) => objectOf(id)?.words || String(id || '').split('-').filter(Boolean);
+// "shape" when an instruction only has shapes, otherwise "picture".
+export const followThing = (item) => ((item?.tokens || []).some((t) => objectOf(t)) ? 'picture' : 'shape');
 export const FOLLOW_STEP_TYPES = ['touch', 'box', 'next_to', 'left_of', 'right_of', 'say_left', 'say_right', 'say_box'];
 // One step in words. `prevToken` lets "Then put it in box 3" follow "touch the green triangle".
 export function followStepText(step, prevToken = null) {
@@ -455,14 +526,14 @@ const follow = {
   elementLabel: new Proxy({}, { get: (t, k) => (String(k).startsWith('step_') ? `Step ${Number(String(k).slice(5)) + 1}` : k) }),
   cueCardIndex: (el) => (String(el).startsWith('step_') ? Number(el.slice(5)) : null),
   prompt: () => 'Now you do it.',
-  simplePrompt: () => 'Touch a shape, then touch a box.',
+  simplePrompt: (item) => `Touch a ${followThing(item)}, then touch a box.`,
   defaultCues: {},
   achieved: {},
   evidenceLabel: new Proxy({}, { get: (t, k) => (String(k).startsWith('step_') ? `Step ${Number(String(k).slice(5)) + 1}` : undefined) }),
   itemLabel: (item) => item.title || followInstruction(item).slice(0, 60),
 };
 
-// Three starter instructions: two 2-step (plan goal 2's target) and one 3-step trial, like Ray's example.
+// Starter instructions: two 2-step (plan goal 2's target), one 3-step trial like Ray's example, and one with everyday objects.
 export const STARTER_FOLLOW = {
   title: 'Shapes and boxes',
   goal: 'Listen to the whole instruction, then follow the steps in order',
@@ -473,6 +544,8 @@ export const STARTER_FOLLOW = {
       steps: [{ type: 'touch', token: 'green-triangle' }, { type: 'box', token: 'green-triangle', box: 3 }] },
     { title: 'Three steps', tokens: ['red-circle', 'blue-square', 'yellow-star'], start: { 'blue-square': 3 },
       steps: [{ type: 'touch', token: 'red-circle' }, { type: 'left_of', token: 'red-circle', target: 'blue-square' }, { type: 'say_left' }] },
+    { title: 'Key and phone', tokens: ['obj-key', 'obj-phone', 'obj-wallet'],
+      steps: [{ type: 'box', token: 'obj-key', box: 2 }, { type: 'next_to', token: 'obj-phone', target: 'obj-key' }] },
   ],
 };
 
