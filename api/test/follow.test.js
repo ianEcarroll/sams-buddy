@@ -111,3 +111,49 @@ test('tapping a box with no shape chosen, or talking during a tap step, is not c
 test('Listen Buddy on screen counts toward plan goal 2', () => {
   assert.ok(PLAN_GOALS.instructions.modes.includes('follow'));
 });
+
+// ---- everyday objects (Mulberry Symbols) instead of, or with, shapes
+const objects = STARTER_FOLLOW.items[3];
+
+test('everyday objects: named in the instruction, with their picture on the board', () => {
+  assert.equal(followInstruction(objects), 'First, put the key in box 2. Then, put the phone next to the key.');
+  const { turn } = createSession({ activity: one(objects) });
+  const phone = turn.ui.board.tokens.find((t) => t.id === 'obj-phone');
+  assert.equal(phone.name, 'phone');
+  assert.equal(phone.img, '/symbols/mobile-phone.svg');
+  assert.equal(turn.ui.board.tokens.find((t) => t.id === 'red-circle'), undefined);
+  assert.equal(createSession({ activity: one(twoStep) }).turn.ui.board.tokens[0].img, null, 'shapes have no picture');
+});
+
+test('everyday objects: done right is code I', () => {
+  let { state } = createSession({ activity: one(objects) });
+  act(state, { type: 'token', token: 'obj-key' });
+  act(state, { type: 'box', box: 1 });
+  act(state, { type: 'token', token: 'obj-phone' });
+  act(state, { type: 'box', box: 2 });
+  const rec = state.completed[0];
+  assert.equal(rec.support_code, 'I');
+  assert.equal(rec.success, true);
+});
+
+test('everyday objects: saying it back with another word for the object counts', async () => {
+  let { state } = createSession({ activity: one(objects) });
+  act(state, { type: 'token', token: 'obj-key' });
+  let { turn } = act(state, { type: 'box', box: 3 });
+  assert.equal(turn.lines.at(-1).text, 'What did I ask you to do?');
+  ({ turn } = await say(state, 'Put the keys in box two'));
+  assert.equal(turn.lines.at(-1).text, "Yes, that's right. Have another go.");
+});
+
+test('everyday objects: "tell me which one" accepts the object\'s name', async () => {
+  const item = { tokens: ['obj-mug', 'obj-apple'], start: { 'obj-mug': 1 }, steps: [{ type: 'say_box', box: 1 }] };
+  let { state } = createSession({ activity: one(item) });
+  const { turn } = await say(state, 'The cup');
+  assert.equal(state.completed[0].success, true, `got: ${turn.lines.map((l) => l.text).join(' / ')}`);
+});
+
+test('wording says "picture" when an instruction has objects', async () => {
+  let { state } = createSession({ activity: one(objects) });
+  const { turn } = act(state, { type: 'box', box: 0 });
+  assert.equal(turn.lines[0].text, 'Touch a picture first, then touch a box.');
+});

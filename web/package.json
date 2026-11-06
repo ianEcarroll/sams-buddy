@@ -5,5 +5,8 @@
     "deploy": "wrangler deploy",
     "dev": "wrangler dev"
   },
-  "devDependencies": { "wrangler": "^4.0.0" }
+  "devDependencies": {
+    "svgo": "^3.3.5",
+    "wrangler": "^4.0.0"
+  }
 }

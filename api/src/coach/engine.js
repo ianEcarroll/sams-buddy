@@ -4,7 +4,7 @@
 
 import { RECALL_FRESH_DAYS as RECALL_DAYS } from './modes.js';
 import { detectHelp } from './judge.js';
-import { FOLLOW_BOXES, followSteps, followStepText, followInstruction, tokenName, tokenParts } from './modes.js';
+import { FOLLOW_BOXES, followSteps, followStepText, followInstruction, tokenName, tokenImage, tokenWords, followThing } from './modes.js';
 import { MODES, LEVELS, TEAM_PHRASE, DEFAULT_CLARIFY_PHRASES, cueLadder, describe, labelFor, freshMemories, whenNoun } from './modes.js';
 import { PLAN_GOALS, supportCode, successFor } from './goals.js';
 
@@ -892,7 +892,7 @@ function makeTurn(state, lines, expect = null) {
       clarifyPhrases: state.mode === 'task' ? (item.clarify_phrases || DEFAULT_CLARIFY_PHRASES) : null,
       board: state.mode === 'follow' && it?.board ? {
         boxes: FOLLOW_BOXES,
-        tokens: (item.tokens || []).map((id) => ({ id, name: tokenName(id) })),
+        tokens: (item.tokens || []).map((id) => ({ id, name: tokenName(id), img: tokenImage(id) })),
         pos: it.board.pos,
         selected: it.board.selected,
         highlight: it.board.highlight,
@@ -974,7 +974,7 @@ export function act(state, action = {}) {
     const slot = Number(action.box);
     if (!Number.isInteger(slot) || slot < 0 || slot >= FOLLOW_BOXES) return { state, turn: followTurn(state, []) };
     const tok = it.board.selected;
-    if (!tok) return { state, turn: followTurn(state, [line('Touch a shape first, then touch a box.', 'clarify')]) };
+    if (!tok) return { state, turn: followTurn(state, [line(`Touch a ${followThing(curItem(state))} first, then touch a box.`, 'clarify')]) };
     if (isSay(cur.step)) return { state, turn: followTurn(state, [line('Now tell me. Press Talk.', 'clarify')]) };
     it.attempts += 1;
     it.responses.push({ text: `[put] ${tokenName(tok)} in box ${slot + 1}`, afterSupport: it.anySupport });
@@ -1071,9 +1071,9 @@ function followSpeech(state, text) {
     it.attempts += 1;
     const ans = sayAnswer(state, cur.step);
     const others = (curItem(state).tokens || []).filter((t) => t !== ans);
-    const partsOf = (tok) => Object.values(tokenParts(tok));
+    const partsOf = (tok) => tokenWords(tok);
     const mentions = (w) => new RegExp(`\\b${w}\\b`, 'i').test(text);
-    // Right if it names the answer (colour or shape) and names nothing that only belongs to another shape.
+    // Right if it names the answer (colour, shape or object word) and names nothing that only belongs to another one.
     const right = ans && partsOf(ans).some(mentions);
     const wrong = ans && others.flatMap(partsOf).filter((w) => !partsOf(ans).includes(w)).some(mentions);
     if (right && !wrong) return followTurn(state, followMet(state, cur, text));
@@ -1081,13 +1081,13 @@ function followSpeech(state, text) {
   }
   // A tap step, but Sam spoke: point him back to the screen without counting it.
   it.responses.pop();
-  return followTurn(state, [line(cur.step.type === 'touch' ? 'Touch the shape on the screen.' : 'Touch a shape, then touch a box.', 'clarify')]);
+  return followTurn(state, [line(cur.step.type === 'touch' ? `Touch the ${followThing(curItem(state))} on the screen.` : `Touch a ${followThing(curItem(state))}, then touch a box.`, 'clarify')]);
 }
 
-// Did Sam say the step back? He needs the shape (its colour or shape word) and the key word of the action.
+// Did Sam say the step back? He needs the shape or object (a word that names it) and the key word of the action.
 function retellMatches(text, step) {
   const t = String(text).toLowerCase();
-  const names = (tok) => { const { colour, shape } = tokenParts(tok); return t.includes(colour) || t.includes(shape); };
+  const names = (tok) => tokenWords(tok).some((w) => t.includes(w));
   const num = (n) => new RegExp(`\\b(${n}|${['zero', 'one', 'two', 'three', 'four', 'five'][n]})\\b`).test(t);
   switch (step.type) {
     case 'touch': return names(step.token) && /\b(touch|tap|press|choose|pick|find|point)/.test(t);

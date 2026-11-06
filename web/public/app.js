@@ -208,6 +208,7 @@ function renderSettings() {
       if (!confirm('Delete all your practice notes? This cannot be undone.')) return;
       await api('/records', { method: 'DELETE' }); toast('Your practice notes are deleted.');
     } }, 'Delete my practice notes'),
+    h('p', { class: 'muted', style: 'font-size:.85rem' }, 'Pictures: Mulberry Symbols \u00A9 Steve Lee, CC BY-SA 4.0 (mulberrysymbols.org)'),
   );
 }
 
@@ -454,6 +455,12 @@ function shapeSvg(id) {
   el.innerHTML = `<svg viewBox="0 0 48 48" aria-hidden="true"><g fill="${f}" stroke="rgba(0,0,0,.35)" stroke-width="1.5">${d}</g></svg>`;
   return el;
 }
+// A token is one of Buddy's shapes, or an everyday object picture (Mulberry Symbols) when the server sends `img`.
+function tokenEl(b, id) {
+  const t = b.tokens.find((x) => x.id === id);
+  if (!t?.img) return shapeSvg(id);
+  return h('span', { class: 'shape obj' }, h('img', { src: t.img, alt: '' }));
+}
 function drawBoard(b, locked) {
   const at = {};
   for (const [tok, p] of Object.entries(b.pos || {})) if (p != null) at[p] = tok;
@@ -464,10 +471,10 @@ function drawBoard(b, locked) {
       class: 'box', 'data-highlight': String(b.highlight === i), 'data-selected': String(!!tok && tok === b.selected), disabled: locked,
       'aria-label': tok ? `Box ${i + 1}, ${name(tok)}` : `Box ${i + 1}, empty`,
       onclick: () => (b.selected && b.selected !== tok ? sendAct({ type: 'box', box: i }) : tok ? sendAct({ type: 'token', token: tok }) : sendAct({ type: 'box', box: i })),
-    }, h('span', { class: 'box-num' }, String(i + 1)), tok ? shapeSvg(tok) : null);
+    }, h('span', { class: 'box-num' }, String(i + 1)), tok ? tokenEl(b, tok) : null);
   }));
-  const tray = h('div', { class: 'tray', 'aria-label': 'Shapes' }, b.tokens.filter((t) => b.pos?.[t.id] == null).map((t) =>
-    h('button', { class: 'token', 'data-selected': String(b.selected === t.id), disabled: locked, 'aria-label': t.name, 'aria-pressed': String(b.selected === t.id), onclick: () => sendAct({ type: 'token', token: t.id }) }, shapeSvg(t.id))));
+  const tray = h('div', { class: 'tray', 'aria-label': b.tokens.some((t) => t.img) ? 'Pictures' : 'Shapes' }, b.tokens.filter((t) => b.pos?.[t.id] == null).map((t) =>
+    h('button', { class: 'token', 'data-selected': String(b.selected === t.id), disabled: locked, 'aria-label': t.name, 'aria-pressed': String(b.selected === t.id), onclick: () => sendAct({ type: 'token', token: t.id }) }, tokenEl(b, t.id))));
   return h('div', { class: 'board' },
     b.showStep ? h('p', { class: 'show-step' }, b.showStep) : null,
     boxes, tray);
