@@ -49,6 +49,20 @@ export function createSession({ activity, settings = {}, learnerName = 'Sam', le
   return { state, turn: state.mode === 'listen' ? listenTurn(state, lines) : state.mode === 'follow' ? followTurn(state, lines) : makeTurn(state, lines) };
 }
 
+// What Buddy says when an item starts, plus the simpler wording used for "I don't understand".
+// Used by the activity editor's preview; it runs the same code as a real practice.
+export function previewLines({ mode, content = {}, item, learnerName = 'Sam', learnerAge = null, learnerInterests = [], settings = {} }) {
+  try {
+    const activity = { id: null, title: '', goal: '', plan_goal: 'other', mode, content: { ...content, items: [item] } };
+    const { turn } = createSession({ activity, settings, learnerName, learnerAge, learnerInterests });
+    const lines = turn.lines.filter((l) => String(l.text || '').trim()).map((l) => ({ text: l.text, kind: l.kind }));
+    const simple = MODES[mode].simplePrompt ? MODES[mode].simplePrompt(item) : null;
+    return { lines, simple: simple && String(simple).trim() ? simple : null };
+  } catch {
+    return { lines: [], simple: null };
+  }
+}
+
 function newItemState(state) {
   const m = MODES[state.mode];
   const item = curItem(state);
