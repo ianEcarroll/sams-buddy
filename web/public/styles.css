@@ -321,3 +321,31 @@ details > summary { cursor: pointer; font-weight: 700; padding: 6px 0; }
 .box .shape { width: 62%; height: 62%; }
 .show-step { margin: 0; padding: 10px 14px; border-radius: 12px; background: var(--sun-soft, #fdf0cf); font-weight: 600; font-size: 1.1rem; text-align: center; }
 .tap-hint { margin: 0; text-align: center; font-weight: 600; color: var(--ink-soft); padding: 14px; }
+
+/* ---------- Team: Activities as the learner's six module tiles ---------- */
+.mod-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 440px), 1fr)); gap: 14px; margin-top: 12px; }
+.mod-card { background: var(--surface); border: 1px solid var(--line); border-top: 6px solid var(--mod); border-radius: var(--radius); padding: 14px 16px; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.mod-head, .edit-head { display: flex; align-items: center; gap: 12px; }
+.mod-head .card-icon, .edit-head .card-icon { width: 44px; height: 44px; border-radius: 12px; }
+.mod-head .card-icon svg, .edit-head .card-icon svg { width: 26px; height: 26px; }
+.adult .mod-head h2, .adult .edit-head h2 { margin: 0; font-size: 1.15rem; color: var(--mod); }
+.mod-card .list li { flex-wrap: wrap; }
+.mod-row { min-width: 0; flex: 1 1 200px; }
+.mod-note { margin: 0; padding: 6px 10px; border-radius: 8px; background: var(--notyet-soft, var(--sun-soft)); font-size: .92rem; }
+.mod-empty { margin: 4px 0; }
+.mod-add { margin-top: auto; padding-top: 6px; }
+.mod-add .btn { border-color: color-mix(in srgb, var(--mod) 45%, var(--line)); color: var(--mod); }
+.start-tag { margin-left: 6px; background: var(--met-soft, var(--sky-soft)); color: var(--met, var(--ink)); font-weight: 600; }
+.edit-head { margin: 22px 0 4px; }
+
+/* ---------- Team: the activity editor's layers ---------- */
+.goal-line { margin: 14px 0 0; }
+.linkish { border: 0; background: none; padding: 0; color: var(--ink); font-weight: 700; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+details.layer { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 10px 16px; margin: 16px 0; }
+details.fine-tune { border-top: 1px solid var(--line); padding-top: 6px; }
+details.layer > summary small, details.fine-tune > summary small { font-weight: 400; }
+.layer-body { display: grid; gap: 16px; padding: 8px 0 6px; }
+.preview { padding: 10px 14px; border-radius: 10px; background: var(--sky-soft); font-size: .95rem; }
+.preview ol { margin: 6px 0; padding-left: 22px; }
+.preview li { margin: 2px 0; }
+.save-row { margin-top: 18px; }

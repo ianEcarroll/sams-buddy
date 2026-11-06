@@ -5,7 +5,7 @@ import { q, one, many, pool } from './db.js';
 import { migrate } from './migrate.js';
 import { sign, hmac, hashPassword, checkPassword, requireAdult, requireOwner, requireDevice, requireRecordAccess, rateLimit } from './auth.js';
 import { transcribe, speak, voiceEnabled, listVoices, defaultVoiceId } from './voice.js';
-import { createSession, respond, confirmHeard, control, act, finish, ENGINE_DEFAULTS } from './coach/engine.js';
+import { createSession, respond, confirmHeard, control, act, finish, previewLines, ENGINE_DEFAULTS } from './coach/engine.js';
 import { judgeFromEnv } from './coach/judge.js';
 import { MODES, STARTER_STORIES, STARTER_SCENARIOS, STARTER_EXPLAIN, STARTER_FOLLOW, FOLLOW_COLOURS, FOLLOW_SHAPES, FOLLOW_STEP_TYPES, FOLLOW_BOXES, stampMemories } from './coach/modes.js';
 import { PLAN_GOALS, GOAL_KEYS, SUPPORT_CODES } from './coach/goals.js';
@@ -365,6 +365,15 @@ adult.delete('/activities/:id', wrap(async (req, res) => {
 adult.get('/modes', (req, res) => {
   res.json(Object.fromEntries(Object.entries(MODES).map(([k, m]) => [k, { label: m.label, tagline: m.tagline, activityName: m.activityName, defaultGoal: m.defaultGoal, defaultCues: m.defaultCues }])));
 });
+// "Buddy will say…" in the activity editor: the opening lines for one item, from the real engine,
+// so the preview always matches what the learner hears. Nothing is saved.
+adult.post('/preview', wrap(async (req, res) => {
+  const { mode, content = {}, item } = req.body || {};
+  if (!MODES[mode] || !item || typeof item !== 'object') return res.status(400).json({ error: 'Nothing to preview.' });
+  const l = await one('select name, birth_year, settings from learners where id=$1', [req.learnerId]);
+  const s = settingsOf(l);
+  res.json(previewLines({ mode, content, item, learnerName: l.name, learnerAge: ageFrom(l.birth_year), learnerInterests: s.interests, settings: s }));
+}));
 // Voice picker: the account's ElevenLabs voices, and a short sample in Buddy's own words.
 const voiceSample = (name) => `Hi ${name}, I'm Buddy. Make a movie in your mind. When you're ready, press to talk.`;
 adult.get('/voices', wrap(async (req, res) => {
