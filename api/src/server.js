@@ -88,11 +88,16 @@ app.post('/api/setup', rateLimit(5), wrap(async (req, res) => {
 
 // ------------------------------------------------------------------ adult sign-in & team
 
+const ADULT_SESSION_SECONDS = 12 * 3600;
+const ADULT_REMEMBER_SECONDS = 30 * 24 * 3600;
+
 app.post('/api/adult/login', rateLimit(10), wrap(async (req, res) => {
-  const { email, password } = req.body || {};
+  const { email, password, remember } = req.body || {};
   const a = await one('select id, pass_hash from adults where email=lower($1)', [String(email || '').trim()]);
   if (!a || !checkPassword(password || '', a.pass_hash)) return res.status(401).json({ error: 'That email and password do not match.' });
-  res.json({ token: sign({ kind: 'adult', sub: a.id }, 12 * 3600) });
+  // "Keep me signed in on this device": 30 days, for the team app on a phone. Otherwise 12 hours.
+  const ttl = remember === true ? ADULT_REMEMBER_SECONDS : ADULT_SESSION_SECONDS;
+  res.json({ token: sign({ kind: 'adult', sub: a.id }, ttl), remember: remember === true });
 }));
 
 // ------------------------------------------------------------------ joining by invite (new families)
@@ -202,8 +207,10 @@ adult.post('/password', wrap(async (req, res) => {
   const a = await one('select pass_hash from adults where id=$1', [req.adult.id]);
   if (!checkPassword(current || '', a.pass_hash)) return res.status(400).json({ error: 'Your current password is not correct.' });
   if (!next || next.length < 10) return res.status(400).json({ error: 'New passwords need at least 10 characters.' });
-  await q('update adults set pass_hash=$1 where id=$2', [hashPassword(next), req.adult.id]);
-  res.json({ ok: true });
+  // Signs this person out everywhere else; this device gets a fresh sign-in of the same kind.
+  await q("update adults set pass_hash=$1, password_changed_at=date_trunc('second', now()) where id=$2", [hashPassword(next), req.adult.id]);
+  const remember = req.body?.remember === true;
+  res.json({ ok: true, token: sign({ kind: 'adult', sub: req.adult.id }, remember ? ADULT_REMEMBER_SECONDS : ADULT_SESSION_SECONDS) });
 }));
 
 // ------------------------------------------------------------------ Sam's device (iPad)

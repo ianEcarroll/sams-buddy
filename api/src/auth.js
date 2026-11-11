@@ -10,7 +10,8 @@ const SECRET = process.env.SESSION_SECRET || (() => {
 const b64 = (b) => Buffer.from(b).toString('base64url');
 
 export function sign(payload, ttlSeconds) {
-  const body = b64(JSON.stringify({ ...payload, exp: ttlSeconds ? Math.floor(Date.now() / 1000) + ttlSeconds : undefined }));
+  const now = Math.floor(Date.now() / 1000);
+  const body = b64(JSON.stringify({ ...payload, iat: now, exp: ttlSeconds ? now + ttlSeconds : undefined }));
   const sig = crypto.createHmac('sha256', SECRET).update(body).digest('base64url');
   return `${body}.${sig}`;
 }
@@ -39,13 +40,19 @@ export function checkPassword(pw, stored) {
   return crypto.timingSafeEqual(hash, Buffer.from(h, 'base64'));
 }
 
+// A sign-in from before the latest password change no longer counts (tokens from before this check have no iat).
+export const signedInBeforePasswordChange = (payload, changedAt) =>
+  !!changedAt && (payload.iat || 0) < Math.floor(new Date(changedAt).getTime() / 1000);
+
 const bearer = (req) => (req.headers.authorization || '').replace(/^Bearer\s+/i, '');
 
 export async function requireAdult(req, res, next) {
   const p = verify(bearer(req));
   if (!p || p.kind !== 'adult') return res.status(401).json({ error: 'Please sign in again.' });
-  const adult = await one('select a.id, a.learner_id, a.name, a.email, a.role, a.is_owner, a.email_after_practice, l.disabled_at from adults a join learners l on l.id=a.learner_id where a.id=$1', [p.sub]);
+  const adult = await one('select a.id, a.learner_id, a.name, a.email, a.role, a.is_owner, a.email_after_practice, a.password_changed_at, l.disabled_at from adults a join learners l on l.id=a.learner_id where a.id=$1', [p.sub]);
   if (!adult) return res.status(401).json({ error: 'This account no longer exists.' });
+  if (signedInBeforePasswordChange(p, adult.password_changed_at)) return res.status(401).json({ error: 'Your password was changed. Please sign in again.' });
+  delete adult.password_changed_at;
   if (adult.disabled_at && !isPlatformAdmin(adult.email)) return res.status(403).json({ error: 'This Buddy account is paused. Contact Buddy support to turn it back on.', paused: true });
   delete adult.disabled_at;
   req.adult = adult;
