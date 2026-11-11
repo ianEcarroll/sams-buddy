@@ -2,7 +2,7 @@
 // Run: npm test   (uses the offline keyword judge, so no API keys are needed)
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createSession, respond, control, finish, confirmHeard } from '../src/coach/engine.js';
+import { createSession, respond, control, finish, confirmHeard, previewLines } from '../src/coach/engine.js';
 import { keywordJudge } from '../src/coach/judge.js';
 import { spoonActivity, storyActivity, taskActivity, convActivity } from './fixtures.js';
 
@@ -77,7 +77,7 @@ test('6. Sam can pause, repeat or stop at any point', async () => {
   assert.equal(turn.lines.length, 0, 'Buddy stays quiet while Sam thinks');
   ({ turn } = control(state, 'ready'));
   ({ turn } = control(state, 'repeat'));
-  assert.deepEqual(texts(turn), texts(first), 'repeat replays the same instruction without adding information');
+  assert.deepEqual(texts(turn), first.lines.filter((l) => l.kind !== 'welcome').map((l) => l.text), 'repeat replays the same instruction (not the welcome) without adding information');
   await say(state, 'At the park the boy builds a kite.');
   const { records } = finish(state, 'finished');
   assert.equal(records.length, 1, 'a partial record is saved when Sam stops');
@@ -123,5 +123,30 @@ test('story: the team opening line comes before the movie phrase', () => {
   const act = structuredClone(storyActivity);
   act.content.items[0].intro = "Let's tell the story of your trip to Ireland.";
   const { turn } = createSession({ activity: act });
-  assert.deepEqual(turn.lines.slice(0, 2).map((l) => l.text), ["Let's tell the story of your trip to Ireland.", 'Make a movie in your mind.']);
+  assert.deepEqual(turn.lines.filter((l) => l.kind !== 'welcome').slice(0, 2).map((l) => l.text), ["Let's tell the story of your trip to Ireland.", 'Make a movie in your mind.']);
+});
+
+test('every practice starts with a warm welcome using the learner\'s name, then explains the four buttons', () => {
+  const { turn } = createSession({ activity: storyActivity, learnerName: 'Maya' });
+  const w = turn.lines.filter((l) => l.kind === 'welcome').map((l) => l.text);
+  assert.equal(w[0], "Hi Maya! It's great to see you. Take your time, and remember, you can always ask me for help.");
+  assert.match(w[1], /Repeat.*Help me.*Let me think.*Try again/);
+  assert.equal(turn.lines[0].kind, 'welcome', 'the welcome comes first');
+});
+
+test('the team can turn off the button explanation', () => {
+  const { turn } = createSession({ activity: storyActivity, learnerName: 'Maya', settings: { explain_buttons: false } });
+  assert.equal(turn.lines.filter((l) => l.kind === 'welcome').length, 1);
+});
+
+test('the editor preview leaves out the welcome', () => {
+  const p = previewLines({ mode: 'story', content: storyActivity.content, item: storyActivity.content.items[0], learnerName: 'Maya' });
+  assert.ok(!p.lines.some((l) => /great to see you/.test(l.text)));
+});
+
+test('no hard-coded name when none is given', () => {
+  const { state, turn } = createSession({ activity: storyActivity });
+  assert.ok(!turn.lines.some((l) => /\bSam\b/.test(l.text)));
+  const { records } = finish(state, 'finished');
+  assert.ok(!JSON.stringify(records).includes('Sam '));
 });

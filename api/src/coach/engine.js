@@ -15,7 +15,12 @@ const DEFAULTS = {
   session_minutes: 15,     // checked only between items — never shown as a timer
   turns_per_topic: 3,      // conversation
   cue_cards: true,
+  explain_buttons: true,   // at the start of each practice, Buddy explains Repeat / Help me / Let me think / Try again
 };
+
+// Story questions: how many extra rounds at the missed questions the team allows (0 = none). Set per activity.
+const DEFAULT_LISTEN_RETRIES = 2;
+const MAX_LISTEN_RETRIES = 4;
 
 const line = (text, kind = 'say', extra = {}) => ({ text, kind, ...extra });
 const cap = (s) => (s ? s[0].toUpperCase() + s.slice(1) : s);
@@ -24,7 +29,7 @@ const cap = (s) => (s ? s[0].toUpperCase() + s.slice(1) : s);
 
 const learnerOf = (state) => ({ name: state.learnerName, age: state.learnerAge, interests: state.learnerInterests || [] });
 
-export function createSession({ activity, settings = {}, learnerName = 'Sam', learnerAge = null, learnerInterests = [], now = Date.now() }) {
+export function createSession({ activity, settings = {}, learnerName = '', learnerAge = null, learnerInterests = [], now = Date.now() }) {
   const items = activity.content?.items || [];
   if (!items.length) throw new Error('This activity has no items yet.');
   const state = {
@@ -45,17 +50,28 @@ export function createSession({ activity, settings = {}, learnerName = 'Sam', le
     learnerAge,
     learnerInterests,
   };
-  const lines = openItem(state);
+  // Welcome lines come first but stay out of lastLines, so Repeat replays the task, not the greeting.
+  const lines = [...welcomeLines(state), ...openItem(state)];
   return { state, turn: state.mode === 'listen' ? listenTurn(state, lines) : state.mode === 'follow' ? followTurn(state, lines) : makeTurn(state, lines) };
+}
+
+// A warm start to every practice, and (if the team leaves it on) what the four buttons do.
+function welcomeLines(state) {
+  const name = state.learnerName ? ` ${state.learnerName}` : '';
+  const lines = [line(`Hi${name}! It's great to see you. Take your time, and remember, you can always ask me for help.`, 'welcome')];
+  if (state.settings.explain_buttons) {
+    lines.push(line('You can use the buttons at the bottom whenever you like. Repeat, to hear it again. Help me, for a clue. Let me think, for extra time. And Try again, to have another go.', 'welcome'));
+  }
+  return lines;
 }
 
 // What Buddy says when an item starts, plus the simpler wording used for "I don't understand".
 // Used by the activity editor's preview; it runs the same code as a real practice.
-export function previewLines({ mode, content = {}, item, learnerName = 'Sam', learnerAge = null, learnerInterests = [], settings = {} }) {
+export function previewLines({ mode, content = {}, item, learnerName = '', learnerAge = null, learnerInterests = [], settings = {} }) {
   try {
     const activity = { id: null, title: '', goal: '', plan_goal: 'other', mode, content: { ...content, items: [item] } };
     const { turn } = createSession({ activity, settings, learnerName, learnerAge, learnerInterests });
-    const lines = turn.lines.filter((l) => String(l.text || '').trim()).map((l) => ({ text: l.text, kind: l.kind }));
+    const lines = turn.lines.filter((l) => l.kind !== 'welcome' && String(l.text || '').trim()).map((l) => ({ text: l.text, kind: l.kind }));
     const simple = MODES[mode].simplePrompt ? MODES[mode].simplePrompt(item) : null;
     return { lines, simple: simple && String(simple).trim() ? simple : null };
   } catch {
@@ -207,7 +223,7 @@ async function process_(state, { text, displayText, confirmed }, judge) {
     : false;
 
   const history = state.mode === 'conversation'
-    ? [{ who: 'Buddy', text: item.opener }, ...conv.turns.flatMap((t) => [{ who: 'Sam', text: t.text }, ...(t.reply ? [{ who: 'Buddy', text: t.reply }] : [])])]
+    ? [{ who: 'Buddy', text: item.opener }, ...conv.turns.flatMap((t) => [{ who: state.learnerName || 'Learner', text: t.text }, ...(t.reply ? [{ who: 'Buddy', text: t.reply }] : [])])]
     : [];
 
   const judgeElements = state.mode === 'conversation' ? ['turn'] : state.mode === 'recall' ? ['memory'] : it.elements.filter((e) => e !== 'order' && e !== 'clarify');
@@ -460,17 +476,20 @@ export function control(state, action) {
       return { state, turn: makeTurn(state, []) };
     case 'try_again':
       state.paused = false;
-      if (state.mode === 'listen') return { state, turn: listenTurn(state, [line('Okay. Here is the question again.', 'ack'), ...state.lastLines]) };
-      return { state, turn: makeTurn(state, [line('Okay. Have another go whenever you are ready.', 'ack')]) };
+      if (state.mode === 'listen') return { state, turn: listenTurn(state, [line('Of course. Here is the question again.', 'ack'), ...state.lastLines]) };
+      return { state, turn: makeTurn(state, [line('Of course. Have another go whenever you are ready.', 'ack')]) };
     case 'start_questions':
       if (state.mode !== 'listen' || it.listen.phase !== 'story') return { state, turn: makeTurn(state, []) };
       return { state, turn: listenTurn(state, startQuestions(state)) };
     case 'listen_retry':
       if (state.mode !== 'listen' || it.listen.phase !== 'offer') return { state, turn: makeTurn(state, []) };
       return { state, turn: listenTurn(state, retryRound(state)) };
+    case 'listen_retry_questions':
+      if (state.mode !== 'listen' || it.listen.phase !== 'offer') return { state, turn: makeTurn(state, []) };
+      return { state, turn: listenTurn(state, retryRound(state, { story: false })) };
     case 'listen_finish':
       if (state.mode !== 'listen' || it.listen.phase !== 'offer') return { state, turn: makeTurn(state, []) };
-      return { state, turn: listenTurn(state, finishListen(state, [line("Okay. Thanks for listening so carefully.", 'feedback')])) };
+      return { state, turn: listenTurn(state, finishListen(state, [line(LISTEN_THANKS, 'feedback')])) };
     default:
       throw new Error(`Unknown control: ${action}`);
   }
@@ -541,10 +560,17 @@ function completeConversationItem(state, lines) {
 
 // ---------------------------------------------------------------- listen to a story
 // Buddy reads the story → Sam presses "I'm ready" → questions one at a time → score.
-// If any were missed, Buddy offers to read the story again and ask only those (up to MAX_LISTEN_ROUNDS rounds).
+// If any were missed, Buddy offers to read the story again and ask only those (as many rounds as the team allows for the activity).
 
-const MAX_LISTEN_ROUNDS = 3;
-const ACKS = ['Thank you.', 'Okay.', 'Thanks.', 'Got it.'];
+// Rounds in all = the first go + the retries the team allows for this activity.
+const listenRounds = (state) => {
+  const r = Number(state.activity.content?.listen_retries ?? DEFAULT_LISTEN_RETRIES);
+  return 1 + (Number.isFinite(r) ? Math.min(MAX_LISTEN_RETRIES, Math.max(0, Math.round(r))) : DEFAULT_LISTEN_RETRIES);
+};
+// Said after each answer, right or wrong: warm but neutral, so it doesn't give the answer away.
+const ACKS = ['Thank you.', 'Thanks for that answer.', 'Got it, thank you.', 'Thanks, {name}.'];
+const ackFor = (state, i) => ACKS[i % ACKS.length].replace(state.learnerName ? '{name}' : ', {name}', state.learnerName || '');
+const LISTEN_THANKS = "That's fine. Thanks for listening so carefully.";
 const questionsOf = (state) => curItem(state).questions || [];
 
 function listenTurn(state, lines) {
@@ -561,7 +587,7 @@ function storyLines(state) {
   if (L.round === 1) lines.push(line(item.title ? `This story is called: ${item.title}.` : 'Here is a story. Listen carefully.', 'intro'));
   else lines.push(line('Here is the story again. Listen carefully.', 'intro'));
   lines.push(line(item.story || '', 'story'));
-  lines.push(line(MODES.listen.prompt(item), 'prompt'));
+  lines.push(line(L.round === 1 ? MODES.listen.prompt(item) : `When you're ready to answer the ${missedCount(state) === 1 ? 'question' : 'questions'} again, press I'm ready.`, 'prompt'));
   state.lastLines = lines;
   return lines;
 }
@@ -607,7 +633,7 @@ async function listenAnswer(state, { text, displayText, confirmed }, judge) {
     helped: L.helped,
     firstTry: prev ? prev.firstTry : (correct && !L.helped),
   };
-  const lines = [line(ACKS[(L.pos + L.round) % ACKS.length], 'ack')];
+  const lines = [line(ackFor(state, L.pos + L.round), 'ack')];
   L.pos += 1;
   if (L.pos < L.queue.length) return { state, turn: listenTurn(state, lines.concat(askLines(state))) };
   return endRound(state, lines);
@@ -622,31 +648,38 @@ function endRound(state, lines) {
     lines.push(line(L.round === 1 ? `You got all ${total} right. Well done!` : `That's all ${total} right now. Well done!`, 'feedback'));
     return { state, turn: listenTurn(state, finishListen(state, lines)) };
   }
-  lines.push(line(`You got ${right} out of ${total} right.`, 'feedback'));
-  if (L.round >= MAX_LISTEN_ROUNDS) {
+  lines.push(line(right ? `You got ${right} out of ${total} right. Good listening.` : 'Those questions were tricky.', 'feedback'));
+  if (L.round >= listenRounds(state)) {
     lines.push(line('Thanks for listening so carefully.', 'feedback'));
     return { state, turn: listenTurn(state, finishListen(state, lines)) };
   }
   L.phase = 'offer';
-  const offer = line(`Would you like to hear the story again and try the ${missed === 1 ? 'one' : missed} you missed?`, 'prompt');
+  const them = missed === 1 ? 'the one' : `the ${missed}`;
+  const offer = line(`Would you like to hear the story again and try ${them} you missed? Or you can try ${missed === 1 ? 'it' : 'them'} again straight away, or finish.`, 'prompt');
   lines.push(offer);
   state.lastLines = [offer];
   return { state, turn: listenTurn(state, lines) };
 }
 
-function retryRound(state) {
+const missedCount = (state) => questionsOf(state).filter((_, i) => !state.item.listen.results[i]?.correct).length;
+
+// Another round at the missed questions: with the story read again (counts as support), or straight to the questions.
+function retryRound(state, { story = true } = {}) {
   const it = state.item;
   const L = it.listen;
   L.round += 1;
+  if (!story) return startQuestions(state);
   it.supportGiven.push({ el: 'story', level: 1, text: 'Heard the story again', by: 'sam' });
   it.anySupport = true;
   return storyLines(state);
 }
 
 function listenOfferSpoken(state, text) {
-  if (/\b(yes|yeah|yep|ok|okay|sure|please|again|try)\b/i.test(text)) return { state, turn: listenTurn(state, retryRound(state)) };
-  if (/\b(no|nope|finish|finished|stop|done)\b/i.test(text)) return { state, turn: listenTurn(state, finishListen(state, [line('Okay. Thanks for listening so carefully.', 'feedback')])) };
-  return { state, turn: listenTurn(state, [line('Press Yes to hear the story again, or No to finish.', 'clarify')]) };
+  // "without the story", "just the questions", "straight away" → questions only; checked before a plain "yes".
+  if (/\b(without|just the|only the|straight|skip|no story)\b/i.test(text)) return { state, turn: listenTurn(state, retryRound(state, { story: false })) };
+  if (/\b(yes|yeah|yep|ok|okay|sure|please|again|try|story|hear)\b/i.test(text)) return { state, turn: listenTurn(state, retryRound(state)) };
+  if (/\b(no|nope|finish|finished|stop|done)\b/i.test(text)) return { state, turn: listenTurn(state, finishListen(state, [line(LISTEN_THANKS, 'feedback')])) };
+  return { state, turn: listenTurn(state, [line('Press Hear the story, Just the questions, or Finish.', 'clarify')]) };
 }
 
 function listenHelp(state, kind, text, source) {
@@ -698,7 +731,7 @@ function advance(state, lines) {
     return lines.concat(openItem(state));
   }
   state.done = true;
-  lines.push(line(`That's the end of this practice. Thanks for practising with me, ${state.learnerName || 'Sam'}.`, 'closing'));
+  lines.push(line(`That's the end of this practice. Thanks for practising with me${state.learnerName ? `, ${state.learnerName}` : ''}. See you next time!`, 'closing'));
   return lines;
 }
 
