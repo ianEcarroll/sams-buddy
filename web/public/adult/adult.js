@@ -1,7 +1,22 @@
 // Buddy — support-team area (parents, speech therapist, teachers, job coach).
 const $app = document.getElementById('app');
 const TOKEN_KEY = 'buddy.adult';
-let token = sessionStorage.getItem(TOKEN_KEY);
+// "Keep me signed in on this device" keeps the sign-in in localStorage (30 days); otherwise it lasts until the tab closes.
+const store = (kind) => { try { return kind === 'local' ? localStorage : sessionStorage; } catch { return null; } };
+const readToken = () => store('local')?.getItem(TOKEN_KEY) || store('session')?.getItem(TOKEN_KEY) || null;
+const remembered = () => !!store('local')?.getItem(TOKEN_KEY);
+function saveToken(t, remember = remembered()) {
+  token = t;
+  store(remember ? 'local' : 'session')?.setItem(TOKEN_KEY, t);
+  store(remember ? 'session' : 'local')?.removeItem(TOKEN_KEY);
+}
+function signOut() {
+  token = null;
+  store('local')?.removeItem(TOKEN_KEY);
+  store('session')?.removeItem(TOKEN_KEY);
+  boot();
+}
+let token = readToken();
 let me = null;
 let modes = null;
 let goals = null;   // { goals: {key: {n,label,short,target,cue,allowed}}, codes: {I,M,P,F} }
@@ -60,7 +75,7 @@ async function api(path, { method = 'GET', body, form } = {}) {
     body: form || (body ? JSON.stringify(body) : undefined),
   });
   const data = res.headers.get('content-type')?.includes('json') ? await res.json() : null;
-  if (res.status === 401 && path.startsWith('/adult/') && path !== '/adult/login') { sessionStorage.removeItem(TOKEN_KEY); token = null; boot(); throw new Error(data?.error); }
+  if (res.status === 401 && path.startsWith('/adult/') && path !== '/adult/login') { signOut(); throw new Error(data?.error); }
   if (!res.ok) throw new Error(data?.error || 'Something went wrong. Try again.');
   return data;
 }
@@ -78,7 +93,7 @@ async function boot() {
     me = await api('/adult/me');
   } catch (e) {
     return $app.replaceChildren(brand(), h('h1', {}, 'Buddy'), h('p', { class: 'panel' }, e.message),
-      h('button', { class: 'btn btn-quiet', onclick: () => { sessionStorage.removeItem(TOKEN_KEY); token = null; boot(); } }, 'Sign out'));
+      h('button', { class: 'btn btn-quiet', onclick: signOut }, 'Sign out'));
   }
   modes = modes || await api('/adult/modes');
   goals = goals || await api('/adult/goals');
@@ -88,9 +103,12 @@ async function boot() {
 function renderLogin() {
   const email = h('input', { type: 'email', autocomplete: 'username' });
   const pw = h('input', { type: 'password', autocomplete: 'current-password' });
-  const go = run(async () => { const r = await api('/adult/login', { method: 'POST', body: { email: email.value, password: pw.value } }); token = r.token; sessionStorage.setItem(TOKEN_KEY, token); boot(); });
+  const keep = h('input', { type: 'checkbox', checked: true });
+  const go = run(async () => { const r = await api('/adult/login', { method: 'POST', body: { email: email.value, password: pw.value, remember: keep.checked } }); saveToken(r.token, keep.checked); boot(); });
   pw.addEventListener('keydown', (e) => e.key === 'Enter' && go());
-  $app.replaceChildren(brand(), h('h1', {}, 'Support team sign in'), h('div', { class: 'panel', style: 'max-width:420px;display:grid;gap:18px' }, field('Email', email), field('Password', pw), h('button', { class: 'btn btn-primary', onclick: go }, 'Sign in')));
+  $app.replaceChildren(brand(), h('h1', {}, 'Support team sign in'), h('div', { class: 'panel', style: 'max-width:420px;display:grid;gap:18px' }, field('Email', email), field('Password', pw),
+    h('label', { class: 'switch' }, keep, h('span', {}, 'Keep me signed in on this device', h('br'), h('small', { class: 'muted' }, 'For 30 days. Untick on a shared computer.'))),
+    h('button', { class: 'btn btn-primary', onclick: go }, 'Sign in')));
 }
 
 function renderSetup() {
@@ -103,7 +121,7 @@ function renderSetup() {
       field("Learner's first name", f.learnerName), field('Your name', f.ownerName), field('Your email', f.email), field('Password (10+ characters)', f.password),
       h('button', { class: 'btn btn-primary', onclick: run(async () => {
         const r = await api('/setup', { method: 'POST', body: Object.fromEntries(Object.entries(f).map(([k, v]) => [k, v.value])) });
-        token = r.token; sessionStorage.setItem(TOKEN_KEY, token); boot();
+        saveToken(r.token, false); boot();
       }) }, 'Create account')));
 }
 
@@ -129,11 +147,54 @@ async function renderInvite(inviteToken) {
       field('Your name', f.ownerName), field('Your email', f.email), field('Password (10+ characters)', f.password),
       h('button', { class: 'btn btn-primary', onclick: run(async () => {
         const r = await api(`/invite/${encodeURIComponent(inviteToken)}`, { method: 'POST', body: Object.fromEntries(Object.entries(f).map(([k, v]) => [k, v.value])) });
-        token = r.token; sessionStorage.setItem(TOKEN_KEY, token);
+        saveToken(r.token, false);
         history.replaceState(null, '', '/adult/'); tab = 'team'; boot();
       }) }, 'Create our account')),
     h('button', { class: 'btn btn-quiet', onclick: toSignIn }, 'I already have an account'));
 }
+
+// ------------------------------------------------------------ the team app on a phone or computer
+// Installing as "Buddy Team" (its own icon, separate from the learner's Buddy), and a notice when offline.
+const isStandalone = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+const isIOS = () => /iPad|iPhone|iPod/.test(navigator.userAgent) || (/Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 1);
+const INSTALL_HIDDEN = 'buddy.team.install-hidden';
+let installPrompt = null;
+// The browser may offer installing after the page has drawn: add the banner in place (never redraw, which would lose edits).
+addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault(); installPrompt = e;
+  const nav = document.querySelector('nav.tabs');
+  if (nav && !document.querySelector('.install-help')) { const b = installHelp(); if (b) nav.before(b); }
+});
+addEventListener('appinstalled', () => { installPrompt = null; document.querySelector('.install-help')?.remove(); });
+const SHARE_ICON = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-4px"><path d="M12 3v12M8 7l4-4 4 4"/><path d="M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7"/></svg>';
+function installHelp() {
+  let hidden = false;
+  try { hidden = localStorage.getItem(INSTALL_HIDDEN) === '1'; } catch { /* no storage: just show it */ }
+  if (isStandalone() || hidden || (!isIOS() && !installPrompt)) return null;
+  const box = h('div', { class: 'install-help team-install' });
+  const hide = h('button', { class: 'btn btn-quiet', onclick: () => { try { localStorage.setItem(INSTALL_HIDDEN, '1'); } catch { /* ignore */ } box.remove(); } }, 'Not now');
+  box.append(h('strong', {}, 'Add Buddy Team to your home screen'));
+  if (isIOS()) {
+    const p = h('p', {}, 'Open this page in Safari, tap the Share button ');
+    p.insertAdjacentHTML('beforeend', SHARE_ICON);
+    p.append(', then \u201cAdd to Home Screen\u201d. It gets its own navy icon, separate from the learner\u2019s Buddy.');
+    box.append(p, h('div', { class: 'row-actions' }, hide));
+  } else {
+    box.append(h('p', {}, 'Open the team area straight from its own icon, like an app.'), h('div', { class: 'row-actions' },
+      h('button', { class: 'btn', onclick: async () => {
+        installPrompt.prompt(); const r = await installPrompt.userChoice; installPrompt = null;
+        if (r.outcome === 'accepted') box.remove();
+      } }, 'Install Buddy Team'), hide));
+  }
+  return box;
+}
+function offlineNotice(on) {
+  document.getElementById('offline')?.remove();
+  if (on) document.body.append(h('div', { id: 'offline', class: 'toast', role: 'alert' }, 'You\u2019re offline. Changes can\u2019t be saved until the internet is back.'));
+}
+addEventListener('offline', () => offlineNotice(true));
+addEventListener('online', () => offlineNotice(false));
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
 
 // ------------------------------------------------------------ shell
 const TABS = [['activities', 'Activities'], ['plan', 'Practice plan'], ['review', 'Review practice'], ['notes', 'Observations'], ['team', 'Team & privacy']];
@@ -145,7 +206,8 @@ function renderShell() {
   $app.replaceChildren(
     h('header', { class: 'adult-head' },
       h('div', {}, h('h1', {}, brand(me.learner.name)), h('span', { class: 'muted' }, `${me.adult.name} · ${ROLE[me.adult.role]}`)),
-      h('button', { class: 'btn btn-quiet', onclick: () => { sessionStorage.removeItem(TOKEN_KEY); token = null; boot(); } }, 'Sign out')),
+      h('button', { class: 'btn btn-quiet', onclick: signOut }, 'Sign out')),
+    ...[installHelp()].filter(Boolean),
     h('nav', { class: 'tabs', role: 'tablist' }, tabsFor().map(([k, l]) => h('button', { role: 'tab', 'aria-selected': String(tab === k), onclick: () => { tab = k; renderShell(); } }, l))),
     body,
     h('p', { class: 'muted credits' }, SYMBOL_CREDIT, ' \u00B7 ', h('a', { href: 'https://creativecommons.org/licenses/by-sa/4.0/', target: '_blank', rel: 'noopener' }, 'Licence')),
@@ -1094,7 +1156,7 @@ async function renderTeam(root) {
 
     h('h2', {}, 'My password'),
     h('div', { class: 'panel grid2' }, field('Current password', cur), field('New password', nxt),
-      h('button', { class: 'btn', onclick: run(async () => { await api('/adult/password', { method: 'POST', body: { current: cur.value, next: nxt.value } }); toast('Password changed.'); cur.value = nxt.value = ''; }) }, 'Change password')),
+      h('button', { class: 'btn', onclick: run(async () => { const r = await api('/adult/password', { method: 'POST', body: { current: cur.value, next: nxt.value, remember: remembered() } }); if (r.token) saveToken(r.token); toast('Password changed. You\u2019ve been signed out on your other devices.'); cur.value = nxt.value = ''; }) }, 'Change password')),
 
     owner ? h('div', {}, h('h2', {}, 'Delete practice records'),
       h('div', { class: 'panel' }, h('p', { style: 'margin-top:0' }, 'Deletes every practice session, transcript, recording and record. Activities and observations stay.'),
