@@ -70,11 +70,12 @@ export async function requireDevice(req, res, next) {
   next();
 }
 
-// Sam decides which roles can see his practice records.
+// The learner decides which roles can see their practice records.
 export async function requireRecordAccess(req, res, next) {
-  const c = await one('select agreed_at, can_view from consent where learner_id=$1', [req.learnerId]);
-  if (!c?.agreed_at) return res.status(403).json({ error: 'Sam has not set up his privacy choices yet.' });
-  if (!c.can_view?.[req.adult.role]) return res.status(403).json({ error: `Sam has chosen not to share practice records with ${req.adult.role.replace('_', ' ')}s.` });
+  const c = await one('select c.agreed_at, c.can_view, l.name from learners l left join consent c on c.learner_id = l.id where l.id=$1', [req.learnerId]);
+  const name = c?.name || 'Your learner';
+  if (!c?.agreed_at) return res.status(403).json({ error: `${name} has not made their privacy choices yet.` });
+  if (!c.can_view?.[req.adult.role]) return res.status(403).json({ error: `${name} has chosen not to share practice records with ${req.adult.role.replace('_', ' ')}s.` });
   next();
 }
 

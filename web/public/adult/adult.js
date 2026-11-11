@@ -1,11 +1,11 @@
-// Sam's Buddy — support-team area (parents, speech therapist, teachers, job coach).
+// Buddy — support-team area (parents, speech therapist, teachers, job coach).
 const $app = document.getElementById('app');
 const TOKEN_KEY = 'buddy.adult';
 let token = sessionStorage.getItem(TOKEN_KEY);
 let me = null;
 let modes = null;
 let goals = null;   // { goals: {key: {n,label,short,target,cue,allowed}}, codes: {I,M,P,F} }
-let tab = 'plan';
+let tab = 'activities';
 
 function h(tag, attrs = {}, ...kids) {
   const el = document.createElement(tag);
@@ -27,7 +27,24 @@ function brand(name) {
   return el;
 }
 // A group of controls (e.g. the picture picker) sits in a <div>, so a click on the label doesn't open the file chooser.
-const field = (label, input, hint) => h(input?.dataset?.group ? 'div' : 'label', { class: 'field' }, h('span', {}, label), input, hint ? h('small', { class: 'muted' }, hint) : null);
+const field = (label, input, hint) => h(input?.dataset?.group ? 'div' : 'label', { class: 'field' }, h('span', {}, label), input?.type === 'password' ? withEye(input) : input, hint ? h('small', { class: 'muted' }, hint) : null);
+// Every password box gets an eye button to show or hide what was typed.
+const EYE = '<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>';
+const EYE_OFF = '<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3l18 18"/><path d="M10.6 5.1A10.8 10.8 0 0 1 12 5c6.4 0 10 7 10 7a17.6 17.6 0 0 1-3.2 4.1M6.6 6.6C3.9 8.3 2 12 2 12s3.6 7 10 7a10 10 0 0 0 5.4-1.6"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/></svg>';
+function withEye(input) {
+  const btn = h('button', { type: 'button', class: 'pw-eye', 'aria-label': 'Show password', 'aria-pressed': 'false' });
+  btn.innerHTML = EYE; // trusted constant
+  btn.addEventListener('click', (e) => {
+    e.preventDefault();
+    const show = input.type === 'password';
+    input.type = show ? 'text' : 'password';
+    btn.innerHTML = show ? EYE_OFF : EYE; // trusted constants
+    btn.setAttribute('aria-label', show ? 'Hide password' : 'Show password');
+    btn.setAttribute('aria-pressed', String(show));
+    input.focus();
+  });
+  return h('span', { class: 'pw-wrap' }, input, btn);
+}
 const toast = (msg) => { const t = h('div', { class: 'toast', role: 'status' }, msg); document.body.append(t); setTimeout(() => t.remove(), 4000); };
 const list = (s) => String(s || '').split(',').map((x) => x.trim()).filter(Boolean);
 const lines = (s) => String(s || '').split('\n').map((x) => x.trim()).filter(Boolean);
@@ -107,7 +124,7 @@ async function renderInvite(inviteToken) {
     brand(), h('h1', {}, 'Welcome to Buddy'),
     h('p', { class: 'muted', style: 'max-width:60ch' }, 'Set up Buddy for your child. You\u2019ll have the main account, and can add their speech therapist, teachers and job coach afterwards.'),
     h('div', { class: 'panel', style: 'max-width:460px;display:grid;gap:18px' },
-      field('Your child\u2019s first name', f.learnerName, 'Buddy uses it in the app: \u201cSam\u2019s Buddy\u201d, \u201cHi Sam\u201d.'),
+      field('Your child\u2019s first name', f.learnerName, 'Buddy uses it in the app, e.g. \u201cWelcome back, Alex!\u201d'),
       field('Year of birth (optional)', f.birthYear, 'Helps Buddy talk at the right level for their age.'),
       field('Your name', f.ownerName), field('Your email', f.email), field('Password (10+ characters)', f.password),
       h('button', { class: 'btn btn-primary', onclick: run(async () => {
@@ -119,7 +136,7 @@ async function renderInvite(inviteToken) {
 }
 
 // ------------------------------------------------------------ shell
-const TABS = [['plan', 'Practice plan'], ['activities', 'Activities'], ['review', 'Review practice'], ['notes', 'Observations'], ['team', 'Team & privacy']];
+const TABS = [['activities', 'Activities'], ['plan', 'Practice plan'], ['review', 'Review practice'], ['notes', 'Observations'], ['team', 'Team & privacy']];
 const tabsFor = () => (me.admin ? [...TABS, ['families', 'Families']] : TABS);
 function renderShell() {
   const body = h('div', {});
@@ -146,7 +163,7 @@ async function renderPlan(root) {
   const f = {
     think_seconds: num('think_seconds', 2, 60), speech_speed: num('speech_speed', 0.7, 1.2, 0.05), session_minutes: num('session_minutes', 3, 60),
     max_attempts: num('max_attempts', 2, 10), turns_per_topic: num('turns_per_topic', 1, 10),
-    fade_support: chk('fade_support'), cue_cards: chk('cue_cards'), captions: chk('captions'),
+    fade_support: chk('fade_support'), cue_cards: chk('cue_cards'), captions: chk('captions'), explain_buttons: chk('explain_buttons'),
     voice_id: h('input', { value: settings.voice_id || '', placeholder: 'Default voice' }),
     reminder_time: h('input', { type: 'time', value: settings.reminder_time || '' }),
   };
@@ -173,6 +190,7 @@ async function renderPlan(root) {
       h('label', { class: 'switch' }, f.fade_support, 'Reduce support on later items'),
       h('label', { class: 'switch' }, f.cue_cards, 'Show visual cue cards'),
       h('label', { class: 'switch' }, f.captions, 'Show captions'),
+      h('label', { class: 'switch' }, f.explain_buttons, 'Explain the four buttons (Repeat, Help me, Let me think, Try again) at the start of each practice'),
     ),
     h('button', { class: 'btn btn-primary', onclick: run(async () => {
       const s = {};
@@ -353,6 +371,10 @@ function editActivity(root, a) {
   const reviewFocus = h('textarea', { rows: 2 }, content.review_focus || '');
   const practiseQ = h('input', { type: 'checkbox', checked: !!content.practise_questions });
   // Story Buddy: fade the First → Next → Then → Finally organiser as the learner gets more independent.
+  // Memory Buddy (Listen to a Story): how many more goes at the missed questions after the first round.
+  const listenRetries = h('select', {},
+    [['0', 'No retries'], ['1', 'Once'], ['2', 'Twice'], ['3', 'Three times']]
+      .map(([v, l]) => h('option', { value: v, selected: String(content.listen_retries ?? 2) === v }, l)));
   const organiser = h('select', {},
     [['show', 'Show it from the start'], ['when_stuck', 'Only if they get stuck (after Buddy’s first cue)'], ['off', 'Don’t show it']]
       .map(([v, l]) => h('option', { value: v, selected: (content.organiser || 'show') === v }, l)));
@@ -383,6 +405,7 @@ function editActivity(root, a) {
         field('Title', title, `${name} sees this on the ${modes[a.mode].label} tile.`),
         field('Status', status),
         a.mode === 'conversation' ? h('label', { class: 'switch' }, practiseQ, 'Also practise asking follow-up questions') : null,
+        a.mode === 'listen' ? field('Retries at the missed questions', listenRetries, `After the questions, Buddy offers ${name} another go at the ones they missed: with the story read again, or straight to the questions.`) : null,
         a.mode === 'story' ? field('Story organiser on screen', organiser, `Fade it out as ${name} gets more independent: from the start → only if stuck → off.`) : null),
       goalLine, goalPicker),
     h('h3', {}, { conversation: 'Topics, in the order Buddy moves between them', listen: 'Stories', think: 'Situations', recall: 'What to remember', explain: 'Explanations', follow: 'Instructions', task: 'Tasks', story: 'Stories', object: 'Pictures' }[a.mode] || 'Items'),
@@ -398,6 +421,7 @@ function editActivity(root, a) {
         content.review_focus = reviewFocus.value.trim();
         if (a.mode === 'conversation') content.practise_questions = practiseQ.checked;
         if (a.mode === 'story') content.organiser = organiser.value;
+        if (a.mode === 'listen') content.listen_retries = Number(listenRetries.value);
         content.cues = {};
         for (const [key, inputs] of Object.entries(cueInputs)) {
           const vals = inputs.map((i) => i.value.trim());

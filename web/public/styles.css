@@ -275,7 +275,7 @@ details > summary { cursor: pointer; font-weight: 700; padding: 6px 0; }
 
 /* ---------- Sam: listen to a story ---------- */
 .bubble[data-kind="story"] { font-size: 1.15rem; line-height: 1.55; max-height: 38vh; overflow-y: auto; }
-.choice { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.choice { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
 .choice .btn { min-height: 88px; font-size: 1.15rem; flex-direction: column; }
 .cards > .card:first-child:nth-last-child(odd) { grid-column: 1 / -1; min-height: 110px; }
 
@@ -371,3 +371,10 @@ details.layer > summary small, details.fine-tune > summary small { font-weight: 
 [hidden] { display: none !important; }
 /* A tall neighbour (e.g. the picture picker) must not stretch an input in the same row. */
 .grid2 > .field > input, .grid2 > .field > select { align-self: start; }
+
+/* Show / hide password */
+.pw-wrap { position: relative; display: block; min-width: 0; align-self: start; }
+.pw-wrap > input { padding-right: 52px !important; }
+.pw-eye { position: absolute; top: 50%; right: 4px; transform: translateY(-50%); width: 44px; height: 44px; border: 0; background: none; color: var(--ink-soft); display: grid; place-items: center; border-radius: 10px; cursor: pointer; }
+.pw-eye svg { width: 22px; height: 22px; }
+.pw-eye:focus-visible { outline: 3px solid var(--talk); outline-offset: 1px; }

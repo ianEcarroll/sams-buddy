@@ -1,4 +1,4 @@
-// Sam's Buddy — Sam's practice app. No build step: plain ES modules.
+// Buddy — the learner's practice app. No build step: plain ES modules.
 const $app = document.getElementById('app');
 const $voice = document.getElementById('voice');
 const TOKEN_KEY = 'buddy.device';
@@ -156,6 +156,14 @@ const MODE_INFO = {
 const MODE_ORDER = Object.keys(MODE_INFO);
 const modesOf = (mod) => MODE_INFO[mod].modes || [mod];
 
+// "Welcome back" once this device has been used before; a plain hello the very first time.
+const SEEN_KEY = 'buddy.seen';
+function greeting() {
+  let seen = false;
+  try { seen = localStorage.getItem(SEEN_KEY) === '1'; localStorage.setItem(SEEN_KEY, '1'); } catch { /* storage unavailable: just say hi */ }
+  return seen ? `Welcome back, ${home.name}!` : `Hi ${home.name}!`;
+}
+
 function renderHome() {
   const current = home.activities.find((a) => a.id === home.current_activity_id);
   const cards = MODE_ORDER.map((mode) => {
@@ -167,7 +175,7 @@ function renderHome() {
   });
   mount(
     brand(home.name),
-    h('div', {}, h('h1', { class: 'hello' }, `Hi ${home.name}`), h('p', { class: 'hello-sub' }, 'Ready when you are.')),
+    h('div', {}, h('h1', { class: 'hello' }, greeting()), h('p', { class: 'hello-sub' }, 'Ready when you are.')),
     h('button', { class: 'start', disabled: !current, onclick: () => startPractice(current.id) },
       h('strong', {}, 'Start My Practice'), h('span', {}, current ? current.title : 'Your team has not picked one yet')),
     h('div', { class: 'cards' }, cards),
@@ -297,7 +305,8 @@ function drawPractice() {
     recording: { icon: null, label: 'I\u2019m done', sub: 'Listening \u2014 press when you have finished' },
     busy: { icon: 'wait', label: 'Buddy is thinking\u2026', sub: 'Got it' },
   }[state];
-  // Listen to a Story: after the story Sam presses "I'm ready"; after a round with misses he chooses to try again or finish.
+  // Listen to a Story: after the story the learner presses "I'm ready"; after a round with misses they choose:
+  // hear the story and retry, retry the missed questions straight away, or finish.
   const speakingNow = P.talk === 'idle' && P.speaking;
   const readyBtn = turn.expect === 'ready'
     ? h('button', { class: 'talk', 'data-state': speakingNow ? 'speaking' : 'idle', disabled: speakingNow, onclick: () => sendControl('start_questions'), 'aria-label': "I'm ready" },
@@ -306,8 +315,9 @@ function drawPractice() {
     : null;
   const choice = turn.expect === 'choice'
     ? h('div', { class: 'choice' },
-      h('button', { class: 'btn btn-primary', disabled: speakingNow, onclick: () => sendControl('listen_retry') }, icon('repeat'), 'Yes, try again'),
-      h('button', { class: 'btn', disabled: speakingNow, onclick: () => sendControl('listen_finish') }, icon('stop'), 'No, I\u2019m finished'))
+      h('button', { class: 'btn btn-primary', disabled: speakingNow, onclick: () => sendControl('listen_retry') }, icon('listen'), 'Hear the story'),
+      h('button', { class: 'btn', disabled: speakingNow, onclick: () => sendControl('listen_retry_questions') }, icon('again'), 'Just the questions'),
+      h('button', { class: 'btn', disabled: speakingNow, onclick: () => sendControl('listen_finish') }, icon('stop'), 'I\u2019m finished'))
     : null;
   // Listen Buddy on screen: Sam answers by tapping, so the board replaces the Talk button for those steps.
   const board = ui.board ? drawBoard(ui.board, speakingNow) : null;
