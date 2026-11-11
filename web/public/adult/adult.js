@@ -83,6 +83,9 @@ const run = (fn) => async (...a) => { try { await fn(...a); } catch (e) { if (e.
 
 // ------------------------------------------------------------ sign in / setup
 async function boot() {
+  // Password reset link from the email: /adult/#reset=<token> (kept out of the address bar once read).
+  const reset = location.hash.match(/^#reset=([\w-]+)$/)?.[1];
+  if (reset) { history.replaceState(null, '', location.pathname + location.search); return renderReset(reset); }
   const invite = new URLSearchParams(location.search).get('invite');
   if (invite && !token) return renderInvite(invite);
   if (!token) {
@@ -108,7 +111,52 @@ function renderLogin() {
   pw.addEventListener('keydown', (e) => e.key === 'Enter' && go());
   $app.replaceChildren(brand(), h('h1', {}, 'Support team sign in'), h('div', { class: 'panel', style: 'max-width:420px;display:grid;gap:18px' }, field('Email', email), field('Password', pw),
     h('label', { class: 'switch' }, keep, h('span', {}, 'Keep me signed in on this device', h('br'), h('small', { class: 'muted' }, 'For 30 days. Untick on a shared computer.'))),
-    h('button', { class: 'btn btn-primary', onclick: go }, 'Sign in')));
+    h('button', { class: 'btn btn-primary', onclick: go }, 'Sign in'),
+    h('button', { class: 'btn btn-quiet', type: 'button', onclick: () => renderForgot(email.value) }, 'Forgot your password?')));
+}
+
+// Forgot password: send a link by email. The reply is the same whether or not the address has an account.
+function renderForgot(prefill = '') {
+  const email = h('input', { type: 'email', autocomplete: 'username', value: prefill });
+  const msg = h('div', { role: 'status' });
+  const send = h('button', { class: 'btn btn-primary' }, 'Send me a link');
+  const go = run(async () => {
+    if (!/\S+@\S+\.\S+/.test(email.value)) throw new Error('Enter the email address you sign in with.');
+    send.disabled = true;
+    try {
+      const r = await api('/adult/forgot', { method: 'POST', body: { email: email.value } });
+      msg.replaceChildren(h('p', { class: 'panel' }, r.ok
+        ? `If ${email.value.trim()} belongs to a Buddy team member, we\u2019ve sent a link to choose a new password. It works for an hour. Check your junk folder if it doesn\u2019t arrive in a few minutes.`
+        : r.error));
+    } finally { send.disabled = false; }
+  });
+  send.addEventListener('click', go);
+  email.addEventListener('keydown', (e) => e.key === 'Enter' && go());
+  $app.replaceChildren(brand(), h('h1', {}, 'Forgot your password?'),
+    h('div', { class: 'panel', style: 'max-width:420px;display:grid;gap:18px' },
+      h('p', { style: 'margin:0' }, 'Enter the email you sign in with and we\u2019ll send you a link to choose a new password.'),
+      field('Email', email), send, msg,
+      h('button', { class: 'btn btn-quiet', type: 'button', onclick: renderLogin }, 'Back to sign in')));
+}
+
+function renderReset(resetToken) {
+  const pw = h('input', { type: 'password', autocomplete: 'new-password' });
+  const pw2 = h('input', { type: 'password', autocomplete: 'new-password' });
+  const go = run(async () => {
+    if (pw.value.length < 10) throw new Error('New passwords need at least 10 characters.');
+    if (pw.value !== pw2.value) throw new Error('The two passwords don\u2019t match.');
+    const r = await api('/adult/reset', { method: 'POST', body: { token: resetToken, password: pw.value } });
+    signOut(); // clears any old sign-in on this device, then shows sign in
+    toast('Password changed. Sign in with your new password.');
+    const box = document.querySelector('input[type=email]');
+    if (box && r.email) box.value = r.email;
+  });
+  pw2.addEventListener('keydown', (e) => e.key === 'Enter' && go());
+  $app.replaceChildren(brand(), h('h1', {}, 'Choose a new password'),
+    h('div', { class: 'panel', style: 'max-width:420px;display:grid;gap:18px' },
+      field('New password', pw, 'At least 10 characters.'), field('New password again', pw2),
+      h('button', { class: 'btn btn-primary', onclick: go }, 'Save new password'),
+      h('small', { class: 'muted' }, 'This signs you out on your other devices.')));
 }
 
 function renderSetup() {
@@ -195,6 +243,8 @@ function offlineNotice(on) {
 addEventListener('offline', () => offlineNotice(true));
 addEventListener('online', () => offlineNotice(false));
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
+// A reset link opened while the team app is already showing in this tab.
+addEventListener('hashchange', () => { if (/^#reset=/.test(location.hash)) boot(); });
 
 // ------------------------------------------------------------ shell
 const TABS = [['activities', 'Activities'], ['plan', 'Practice plan'], ['review', 'Review practice'], ['notes', 'Observations'], ['team', 'Team & privacy']];
@@ -347,13 +397,26 @@ const newActivity = (m) => ({ mode: m, title: '', goal: modes[m].defaultGoal, pl
 const ITEM_WORDS = { conversation: ['topic', 'topics'], listen: ['story', 'stories'], story: ['story', 'stories'], think: ['situation', 'situations'], recall: ['practice', 'practices'], explain: ['explanation', 'explanations'], follow: ['instruction', 'instructions'], task: ['task', 'tasks'], object: ['picture', 'pictures'] };
 const itemWord = (mode, n) => (ITEM_WORDS[mode] || ['item', 'items'])[n === 1 ? 0 : 1];
 
+// "today", "yesterday", "3 days ago", or a date for anything older than a week.
+function whenUsed(iso) {
+  const d = new Date(iso);
+  const days = Math.round((new Date().setHours(0, 0, 0, 0) - new Date(d).setHours(0, 0, 0, 0)) / 86400000);
+  if (days <= 0) return 'today';
+  if (days === 1) return 'yesterday';
+  if (days < 7) return `${days} days ago`;
+  return d.toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+}
+
 async function renderActivities(root) {
   const acts = await api('/adult/activities');
   const name = me.learner.name;
   const enabled = me.learner.settings?.enabled_modes || Object.keys(modes);
   const cards = Object.entries(MODULES).map(([mod, M]) => {
     const two = M.modes.length > 1;
-    const mine = acts.filter((a) => M.modes.includes(a.mode));
+    // Recently used first (by when the learner last practised it), then the rest by last edit.
+    const mine = acts.filter((a) => M.modes.includes(a.mode)).sort((x, y) =>
+      (y.last_practised_at ? Date.parse(y.last_practised_at) : 0) - (x.last_practised_at ? Date.parse(x.last_practised_at) : 0)
+      || Date.parse(y.updated_at || 0) - Date.parse(x.updated_at || 0));
     const hidden = !M.modes.some((m) => enabled.includes(m));
     const row = (a) => {
       const n = a.content.items.length;
@@ -361,6 +424,7 @@ async function renderActivities(root) {
         two ? modes[a.mode].activityName : null,
         `${n} ${itemWord(a.mode, n)}`,
         a.status === 'draft' ? 'draft, not shown yet' : null,
+        a.last_practised_at ? `used ${whenUsed(a.last_practised_at)}` : 'not used yet',
         a.mode === 'recall' ? (a.content.items.every((it) => listStatus(it).fresh) ? 'list up to date' : 'list out of date') : null,
       ].filter(Boolean);
       return h('li', {},
@@ -433,6 +497,8 @@ function editActivity(root, a) {
   const reviewFocus = h('textarea', { rows: 2 }, content.review_focus || '');
   const practiseQ = h('input', { type: 'checkbox', checked: !!content.practise_questions });
   // Story Buddy: fade the First → Next → Then → Finally organiser as the learner gets more independent.
+  // Memory Buddy (Listen to a Story): a clue straight after a wrong answer (off unless the team turns it on).
+  const clueOnWrong = h('input', { type: 'checkbox', checked: content.clue_on_wrong === true });
   // Memory Buddy (Listen to a Story): how many more goes at the missed questions after the first round.
   const listenRetries = h('select', {},
     [['0', 'No retries'], ['1', 'Once'], ['2', 'Twice'], ['3', 'Three times']]
@@ -467,6 +533,8 @@ function editActivity(root, a) {
         field('Title', title, `${name} sees this on the ${modes[a.mode].label} tile.`),
         field('Status', status),
         a.mode === 'conversation' ? h('label', { class: 'switch' }, practiseQ, 'Also practise asking follow-up questions') : null,
+        a.mode === 'listen' ? h('label', { class: 'switch' }, clueOnWrong, h('span', {}, 'Give a clue straight after a wrong answer',
+          h('br'), h('small', { class: 'muted' }, `${name} hears the question\u2019s clue and has one more try, instead of waiting for the end. Counts as support. Check with ${name}\u2019s speech therapist before turning on.`))) : null,
         a.mode === 'listen' ? field('Retries at the missed questions', listenRetries, `After the questions, Buddy offers ${name} another go at the ones they missed: with the story read again, or straight to the questions.`) : null,
         a.mode === 'story' ? field('Story organiser on screen', organiser, `Fade it out as ${name} gets more independent: from the start → only if stuck → off.`) : null),
       goalLine, goalPicker),
@@ -483,7 +551,7 @@ function editActivity(root, a) {
         content.review_focus = reviewFocus.value.trim();
         if (a.mode === 'conversation') content.practise_questions = practiseQ.checked;
         if (a.mode === 'story') content.organiser = organiser.value;
-        if (a.mode === 'listen') content.listen_retries = Number(listenRetries.value);
+        if (a.mode === 'listen') { content.listen_retries = Number(listenRetries.value); content.clue_on_wrong = clueOnWrong.checked; }
         content.cues = {};
         for (const [key, inputs] of Object.entries(cueInputs)) {
           const vals = inputs.map((i) => i.value.trim());
@@ -865,28 +933,85 @@ function recallEditor(it, urls) {
 
 function storyEditor(it, urls) {
   it.questions = it.questions?.length ? it.questions : blankStory().questions;
-  const qBox = h('div', { class: 'q-list' });
-  const drawQs = () => qBox.replaceChildren(...it.questions.map((q, i) => h('div', { class: 'q-row' },
-    h('div', { class: 'q-num' }, `Q${i + 1}`),
-    h('div', { class: 'q-fields' },
-      field('Question', txt(q, 'question')),
-      h('div', { class: 'grid2' },
-        field('Accepted answers', csv(q, 'answers'), 'Comma separated, e.g. crow, bird'),
-        field('Clue (optional)', txt(q, 'clue'), `Buddy says this if ${me.learner.name} asks for help`)),
-    ),
-    h('button', { class: 'btn btn-quiet', onclick: () => { it.questions.splice(i, 1); drawQs(); } }, 'Remove'))));
-  drawQs();
-  const words = h('small', { class: 'muted' });
+  const name = me.learner.name;
   const story = bind(it, 'story', h('textarea', { rows: 9, placeholder: 'Write the story Buddy will read aloud. 100–200 words works well.' }));
-  const count = () => { const n = (story.value.match(/\S+/g) || []).length; words.textContent = `${n} words \u00B7 about ${Math.max(1, Math.round(n / 2.3 / 60 * 10) / 10)} min to listen`; };
+
+  // "Test this question": type what the learner might say and see whether Buddy would accept it.
+  const tester = (q) => {
+    const said = h('input', { type: 'text', placeholder: `What ${name} might say`, 'aria-label': 'Answer to test' });
+    const out = h('p', { class: 'test-result', role: 'status' });
+    const go = h('button', { class: 'btn', type: 'button' }, 'Test');
+    const test = run(async () => {
+      out.className = 'test-result'; out.textContent = 'Checking…';
+      go.disabled = true;
+      try {
+        const r = await api('/adult/test-answer', { method: 'POST', body: { story: it.story, question: q, answer: said.value } });
+        out.className = `test-result ${r.correct ? 'ok' : 'no'}`;
+        out.textContent = r.help ? `Buddy would treat this as asking for help, and give the clue.`
+          : r.correct ? `✔ Buddy would count this as right.` : `✖ Buddy would count this as not right yet.`;
+        if (r.checker === 'keyword') out.textContent += ' (Marked by the basic checker, not Claude, so it only matches the accepted answers.)';
+      } catch (e) { out.textContent = ''; throw e; } finally { go.disabled = false; }
+    });
+    go.addEventListener('click', test);
+    said.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); test(); } });
+    return h('div', { class: 'q-test' }, h('div', { class: 'q-test-row' }, said, go), out);
+  };
+
+  const qBox = h('div', { class: 'q-list' });
+  const drawQs = () => qBox.replaceChildren(...it.questions.map((q, i) => {
+    const isTitle = q.kind === 'title';
+    const titleOn = h('input', { type: 'checkbox', checked: isTitle });
+    titleOn.addEventListener('change', () => { if (titleOn.checked) { q.kind = 'title'; q.answers = []; } else delete q.kind; drawQs(); });
+    const question = txt(q, 'question');
+    if (isTitle) question.placeholder = 'Can you think of a new name for this story?';
+    return h('div', { class: 'q-row' },
+      h('div', { class: 'q-num' }, `Q${i + 1}`),
+      h('div', { class: 'q-fields' },
+        field('Question', question, isTitle ? 'Leave blank for Buddy’s wording.' : null),
+        h('label', { class: 'switch' }, titleOn, 'Give the story a new name (any sensible name counts)'),
+        isTitle
+          ? field('Clue (optional)', txt(q, 'clue'), `e.g. "Who was the story about?" Buddy says this if ${name} asks for help`)
+          : h('div', { class: 'grid2' },
+            field('Accepted answers', csv(q, 'answers'), 'Comma separated, e.g. crow, bird'),
+            field('Clue (optional)', txt(q, 'clue'), `Buddy says this if ${name} asks for help`)),
+        h('details', { class: 'q-test-wrap' }, h('summary', {}, 'Test this question'), tester(q)),
+      ),
+      h('button', { class: 'btn btn-quiet', onclick: () => { it.questions.splice(i, 1); drawQs(); } }, 'Remove'));
+  }));
+  drawQs();
+
+  const words = h('small', { class: 'muted' });
+  const count = () => { const n = (story.value.match(/\S+/g) || []).length; words.textContent = `${n} words · about ${Math.max(1, Math.round(n / 2.3 / 60 * 10) / 10)} min to listen`; };
   story.addEventListener('input', count); count();
+
+  // "Listen to the story": the learner's own voice and speed. Saved, so the learner hearing it later costs nothing extra.
+  let player = null;
+  const listen = h('button', { class: 'btn', type: 'button' }, '▶ Listen to the story');
+  const stop = () => { if (player) { player.pause(); player = null; } listen.textContent = '▶ Listen to the story'; };
+  listen.addEventListener('click', run(async () => {
+    if (player) { stop(); return; }
+    listen.disabled = true; listen.textContent = 'Loading…';
+    try {
+      const r = await fetch('/api/adult/listen', { method: 'POST', headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' }, body: JSON.stringify({ text: it.story || '' }) });
+      if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || 'Could not play the story.');
+      player = new Audio(URL.createObjectURL(await r.blob()));
+      player.addEventListener('ended', stop);
+      await player.play();
+      listen.textContent = '■ Stop';
+    } catch (e) { stop(); throw e; } finally { listen.disabled = false; }
+  }));
+  story.addEventListener('input', () => { if (player) stop(); });
+
   return [
-    h('div', { class: 'grid2' }, field('Story title', txt(it, 'title'), 'Buddy says "This story is called\u2026" first'), field('Picture (optional)', imagePicker(it, 'image_id', urls, false))),
-    field('The story', story), words,
+    h('div', { class: 'grid2' }, field('Story title', txt(it, 'title'), 'Buddy says "This story is called…" first'), field('Picture (optional)', imagePicker(it, 'image_id', urls, false))),
+    field('The story', story), h('div', { class: 'story-tools' }, words, me.voice ? listen : null),
     h('h4', { class: 'q-head' }, 'Questions Buddy asks afterwards'),
-    h('p', { class: 'muted', style: 'margin:0' }, `Five works well. ${me.learner.name}\u2019s answer counts as right if it matches the meaning of one of the accepted answers.`),
+    h('p', { class: 'muted', style: 'margin:0' }, `Five works well. ${name}’s answer counts as right if it matches the meaning of one of the accepted answers. Use “Test this question” to try an answer.`),
     qBox,
-    h('button', { class: 'btn', onclick: () => { it.questions.push({ question: '', answers: [], clue: '' }); drawQs(); } }, 'Add a question'),
+    h('div', { class: 'row-actions' },
+      h('button', { class: 'btn', onclick: () => { it.questions.push({ question: '', answers: [], clue: '' }); drawQs(); } }, 'Add a question'),
+      it.questions.some((q) => q.kind === 'title') ? null
+        : h('button', { class: 'btn btn-quiet', onclick: (e) => { it.questions.push({ kind: 'title', question: '', answers: [], clue: '' }); e.target.remove(); drawQs(); } }, 'Add “Give it a new name”')),
   ];
 }
 

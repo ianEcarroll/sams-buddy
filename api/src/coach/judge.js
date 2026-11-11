@@ -99,7 +99,10 @@ export function keywordJudge({ mode, item, elements, text, activity }) {
   }
 
   if (mode === 'listen') {
-    out.met.answer = findAny(text, item.answers || []);
+    // "Give the story a new name": no single right answer, so any real attempt counts.
+    out.met.answer = item.kind === 'title'
+      ? (/\w/.test(text) && !/\b(don'?t know|dunno|no idea|not sure|pass)\b/i.test(text) ? text.trim() : null)
+      : findAny(text, item.answers || []);
   }
 
   if (mode === 'explain') {
@@ -160,7 +163,9 @@ function answerKey(mode, item, activity) {
   };
   if (mode === 'task') return { steps_in_order: item.steps, instruction_given: MODES.task.instruction(item) };
   if (mode === 'conversation') return { topic: item.topic, buddy_last_said: null, practise_questions: !!c.practise_questions };
-  if (mode === 'listen') return { story: item.story, question: item.question, accepted_answers: item.answers || [] };
+  if (mode === 'listen') return item.kind === 'title'
+    ? { story: item.story, question: item.question, question_type: 'new_title' }
+    : { story: item.story, question: item.question, accepted_answers: item.answers || [] };
   if (mode === 'explain') return {
     question: item.question, parts_of_a_clear_explanation: (item.points || []).filter((pt) => pt?.text).map((pt, i) => ({ element: `point_${i}`, part: pt.text })),
   };
@@ -180,7 +185,7 @@ const ELEMENT_GUIDE = {
   object: 'name = the learner named the object (approved name or obvious variant e.g. plural, "a"/"the"). category = they named its group (approved group only, or an obvious synonym of it). use = they said what it is used for, in any wording with the same meaning.',
   story: 'who = they said who was there (any one of the people listed, or an obvious way of naming them such as "my dad" for Dad). ending = they said how it ended or the outcome (meaning, not exact words). where = the learner said where it happens. event_N = they described event N (meaning, not exact words). order = only judge in events_in_order. vocabulary = they used one of the target words or approved alternatives AND it fits the picture/action.',
   task: 'step_N = the learner\'s retelling includes step N (meaning, not exact words). order = only judge in events_in_order.',
-  listen: 'answer = the learner\'s response correctly answers the question, judged against the story and the accepted answers. Accept any wording, synonym or partial answer with the same meaning (e.g. "a bird" for "crow" only if bird is accepted; "Peter" for "Peter Pan"). A wrong or unrelated answer, or "I don\'t know", is not supplied. Evidence = their answer words.',
+  listen: 'answer = the learner\'s response correctly answers the question, judged against the story and the accepted answers. Accept any wording, synonym or partial answer with the same meaning (e.g. "a bird" for "crow" only if bird is accepted; "Peter" for "Peter Pan"). A wrong or unrelated answer, or "I don\'t know", is not supplied. Evidence = their answer words. If question_type is "new_title" there is no single right answer: answer = any short, sensible name for the story that fits what happened (the original title, a character or event from the story, or a playful but related name all count). "I don\'t know", unrelated words or a whole retelling instead of a name do not count.',
   explain: 'The learner is explaining how they do something. point_N = their explanation includes part N (meaning, not exact words; their own way of saying it counts, and an example counts for a general part such as "a filling like ham or cheese"). A very short answer that only hints at a part (e.g. "Cut paper." for "cut the character out with scissors") counts only if the meaning of that part is actually there. Do not credit a part just because it is implied by another.',
   recall: 'Memory practice: the learner is asked to remember real things they did. memory = they described at least one real thing they did or experienced (evidence = their words). Also fill "events": one entry per DIFFERENT thing they say they did in this response, as a short phrase in their own words (e.g. "went to the gym"). Set known to the index of the matching thing the family listed, or -1 if it is something else (it still counts: the family list is not complete). Leave out anything already_remembered_earlier, repeats, "I don\'t know", and simple yes/no answers. Several details about one activity are one event, not several.',
   think: 'This is a problem-solving role-play: Buddy described a situation and asked what the learner would do. The whole response may cover several parts at once. problem = they show they noticed what is wrong or unexpected (naming it, or giving a response that clearly deals with that specific problem). action = they say a safe, sensible thing they would do; asking a trusted adult, staff member, teacher or parent always counts; compare with the approved responses by meaning, not wording, and accept other safe, sensible ideas too. An unsafe idea (in not_safe, or plainly unsafe such as leaving alone, going with a stranger, or anything risky) is NOT an action: set unsafe_idea = true. reason = they explain why their idea would help ("because…", "so that…", or a clear reason in other words). backup = they say what they would do if their first idea did not work. Saying what they WOULD do in the situation (e.g. "I\'d ask my coach for help", "I need help so I\'d ask the staff") is an answer, not a help_request; help_request is only for asking Buddy itself (e.g. "Can you say that again?", "I don\'t understand the question").',

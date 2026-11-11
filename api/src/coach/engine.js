@@ -571,7 +571,13 @@ const listenRounds = (state) => {
 const ACKS = ['Thank you.', 'Thanks for that answer.', 'Got it, thank you.', 'Thanks, {name}.'];
 const ackFor = (state, i) => ACKS[i % ACKS.length].replace(state.learnerName ? '{name}' : ', {name}', state.learnerName || '');
 const LISTEN_THANKS = "That's fine. Thanks for listening so carefully.";
-const questionsOf = (state) => curItem(state).questions || [];
+// "Give the story a new name" questions (kind 'title') get Buddy's wording when the team leaves the question blank.
+const NEW_TITLE_QUESTION = 'Can you think of a new name for this story?';
+const questionsOf = (state) => (curItem(state).questions || []).map((q) =>
+  (q?.kind === 'title' && !String(q.question || '').trim() ? { ...q, question: NEW_TITLE_QUESTION } : q));
+// Team option (off by default): after a wrong answer, give the question's clue and one more try straight away,
+// instead of waiting for the retry round at the end.
+const clueOnWrong = (state) => state.activity.content?.clue_on_wrong === true;
 
 function listenTurn(state, lines) {
   const ph = state.item.listen.phase;
@@ -585,6 +591,7 @@ function storyLines(state) {
   const lines = [];
   if (L.round === 1 && item.intro) lines.push(line(item.intro, 'intro'));
   if (L.round === 1) lines.push(line(item.title ? `This story is called: ${item.title}.` : 'Here is a story. Listen carefully.', 'intro'));
+  if (L.round === 1 && questionsOf(state).some((q) => q?.kind === 'title')) lines.push(line("At the end, I'll ask you to give the story a new name.", 'intro'));
   else lines.push(line('Here is the story again. Listen carefully.', 'intro'));
   lines.push(line(item.story || '', 'story'));
   lines.push(line(L.round === 1 ? MODES.listen.prompt(item) : `When you're ready to answer the ${missedCount(state) === 1 ? 'question' : 'questions'} again, press I'm ready.`, 'prompt'));
@@ -633,6 +640,18 @@ async function listenAnswer(state, { text, displayText, confirmed }, judge) {
     helped: L.helped,
     firstTry: prev ? prev.firstTry : (correct && !L.helped),
   };
+  // Wrong, and the team wants a clue straight away: one clue and one more try at this question, then move on.
+  if (!correct && clueOnWrong(state) && !L.helped) {
+    L.helped = true;
+    it.anySupport = true;
+    it.supportGiven.push({ el: `q_${qi}`, level: 1, text: q.clue || 'Think back to the story.', by: 'buddy' });
+    const retry = [
+      line(q.clue ? `Good try. Here's a clue. ${q.clue}` : 'Good try. Think back to the story.', 'cue', { level: 'specific cue' }),
+      line(q.question, 'prompt'),
+    ];
+    state.lastLines = [retry[1]];
+    return { state, turn: listenTurn(state, retry) };
+  }
   const lines = [line(ackFor(state, L.pos + L.round), 'ack')];
   L.pos += 1;
   if (L.pos < L.queue.length) return { state, turn: listenTurn(state, lines.concat(askLines(state))) };
@@ -748,7 +767,7 @@ export function finish(state, reason = 'finished') {
 
 function buildListenRecord(state, it, stopNote) {
   const item = curItem(state);
-  const qs = item.questions || [];
+  const qs = questionsOf(state);
   const L = it.listen;
   const label = (i) => `Q${i + 1} "${qs[i]?.question || ''}"`;
   const res = qs.map((_, i) => L.results[i]);
@@ -756,7 +775,7 @@ function buildListenRecord(state, it, stopNote) {
   const right = res.filter((r) => r?.correct).length;
   const independent = res.flatMap((r, i) => (r?.firstTry ? [`${label(i)}: "${r.answer}"`] : []));
   const after = res.flatMap((r, i) => (r?.correct && !r.firstTry ? [`${label(i)}: "${r.answer}"`] : []));
-  const wrong = res.flatMap((r, i) => (r && !r.correct ? [`${label(i)}: "${r.answer}" (answer: ${(qs[i].answers || [])[0] || '?'})`] : []));
+  const wrong = res.flatMap((r, i) => (r && !r.correct ? [`${label(i)}: "${r.answer}" (answer: ${qs[i].kind === 'title' ? 'any sensible name' : (qs[i].answers || [])[0] || '?'})`] : []));
   const notes = [];
   if (stopNote) notes.push(stopNote);
   notes.push(`${first} of ${qs.length} right first time${right !== first ? `; ${right} of ${qs.length} by the end` : ''}.`);
