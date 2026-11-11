@@ -1,4 +1,5 @@
 // ElevenLabs speech-to-text (Scribe) and text-to-speech.
+import crypto from 'node:crypto';
 const KEY = () => process.env.ELEVENLABS_API_KEY;
 const STT_MODEL = () => process.env.ELEVENLABS_STT_MODEL || 'scribe_v2';
 const TTS_MODEL = () => process.env.ELEVENLABS_TTS_MODEL || 'eleven_multilingual_v2';
@@ -29,27 +30,49 @@ export async function transcribe(buffer, mime = 'audio/webm') {
   return { text, displayText, uncertain: !!text && (avg < AVG_THRESHOLD || low.some(Boolean)), avg };
 }
 
-// Small LRU so repeated prompts ("Make a movie in your mind.") are free and instant.
+// Speech is generated once and reused: a small in-memory LRU for the busiest lines, and (when the server
+// sets one) a saved store in Postgres that survives restarts and redeploys. The key includes the voice,
+// model and speed, so changing any of them generates fresh audio rather than replaying the old voice.
 const cache = new Map();
-export async function speak(text, { voiceId, speed = 1 } = {}) {
+let store = null;
+export function setSpeechStore(s) { store = s; }
+export const speechKey = ({ voiceId, model, speed, text }) =>
+  crypto.createHash('sha256').update(`${voiceId}|${model}|${speed}|${text}`).digest('hex');
+const remember = (key, buf) => {
+  cache.set(key, buf);
+  if (cache.size > 300) cache.delete(cache.keys().next().value);
+};
+
+export async function speak(text, { voiceId, speed = 1, fetchImpl = fetch } = {}) {
   const v = voiceId || DEFAULT_VOICE();
-  const key = `${v}|${speed}|${text}`;
+  const model = TTS_MODEL();
+  const sp = Math.min(1.2, Math.max(0.7, Number(speed) || 1));
+  const key = speechKey({ voiceId: v, model, speed: sp, text });
   if (cache.has(key)) { const b = cache.get(key); cache.delete(key); cache.set(key, b); return b; }
-  const res = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(v)}?output_format=mp3_44100_128`, {
+  if (store) {
+    try {
+      const saved = await store.get(key);
+      if (saved) { const b = Buffer.from(saved); remember(key, b); return b; }
+    } catch (e) { console.error('[tts] saved speech unavailable:', e.message); }
+  }
+  const res = await fetchImpl(`https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(v)}?output_format=mp3_44100_128`, {
     method: 'POST',
     headers: { 'xi-api-key': KEY(), 'content-type': 'application/json', accept: 'audio/mpeg' },
     body: JSON.stringify({
       text,
-      model_id: TTS_MODEL(),
-      voice_settings: { stability: 0.6, similarity_boost: 0.75, speed: Math.min(1.2, Math.max(0.7, Number(speed) || 1)) },
+      model_id: model,
+      voice_settings: { stability: 0.6, similarity_boost: 0.75, speed: sp },
     }),
   });
   if (!res.ok) throw new Error(`Text-to-speech failed (${res.status}): ${(await res.text()).slice(0, 200)}`);
   const buf = Buffer.from(await res.arrayBuffer());
-  cache.set(key, buf);
-  if (cache.size > 300) cache.delete(cache.keys().next().value);
+  remember(key, buf);
+  // Saving never holds up Buddy's reply.
+  if (store) store.put(key, buf, { model, voiceId: v, chars: text.length }).catch((e) => console.error('[tts] could not save speech:', e.message));
   return buf;
 }
+
+export const ttsModel = () => TTS_MODEL();
 
 // The voices available to this ElevenLabs account (premade ones plus any added from the Voice Library).
 let voiceList = null;

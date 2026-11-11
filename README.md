@@ -85,6 +85,18 @@ Add a custom domain in the Cloudflare dashboard if you want one.
 - Team & privacy → Create a connection code. On Sam's iPad: open the site, Add to Home Screen, enter the code.
 - Sam makes his own privacy choices on first launch.
 
+## Running costs
+
+- **Claude:** `ANTHROPIC_MODEL` checks every module (default `claude-sonnet-5-5`). Set `ANTHROPIC_CHAT_MODEL` to use a
+  different model for Chat Buddy only, e.g. `ANTHROPIC_MODEL=claude-haiku-5-5` with `ANTHROPIC_CHAT_MODEL=claude-sonnet-5-5`.
+  Before switching, compare the two on the same answers: `cd api && ANTHROPIC_API_KEY=... node scripts/compare-models.mjs`
+  (writes `model-comparison.md`).
+- **Speech:** `ELEVENLABS_TTS_MODEL` is `eleven_multilingual_v2` by default; `eleven_flash_v2_5` costs half as much per character.
+- **Saved speech:** every line Buddy speaks is stored in Postgres (`tts_cache`) and reused, so stories and standard
+  phrases are paid for once, not after every restart. Changing the voice, model or speed makes new audio. Lines never
+  reused are removed after 3 days, others after 60 days unused, oldest first above 300 MB
+  (`TTS_CACHE_ONE_OFF_DAYS`, `TTS_CACHE_KEEP_DAYS`, `TTS_CACHE_MAX_MB`).
+
 ## Privacy model
 
 - Sam (18) decides which roles can read his records, and whether audio is saved (off by default). Only his device can change this.
