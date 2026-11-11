@@ -16,6 +16,11 @@ export const COST_RATES = {
   judgePerResponse: 0.011, // Claude Sonnet: ~3k tokens in, ~500 out per check
   sttPerResponse: 0.0006,  // ElevenLabs Scribe, ~10 s of speech
 };
+// Flash and Turbo cost half as much per character as Multilingual v2 / v3. Saved speech isn't counted,
+// so the estimate is an upper bound once lines are being reused.
+export function ratesFor({ ttsModel = '' } = {}, base = COST_RATES) {
+  return { ...base, ttsPer1kChars: /flash|turbo/i.test(ttsModel) ? 0.05 : base.ttsPer1kChars };
+}
 export function estimateCost({ buddyChars = 0, responses = 0 }, r = COST_RATES) {
   return Math.round(((buddyChars / 1000) * r.ttsPer1kChars + responses * (r.judgePerResponse + r.sttPerResponse)) * 100) / 100;
 }

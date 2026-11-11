@@ -312,12 +312,27 @@ export function makeClaudeJudge({ apiKey, model, workspaceId, fetchImpl = fetch 
   };
 }
 
+// Which Claude model checks each module. ANTHROPIC_MODEL is used everywhere; ANTHROPIC_CHAT_MODEL (optional)
+// overrides it for Chat Buddy, the one module where Claude follows an open conversation rather than an answer key.
+export const DEFAULT_MODEL = 'claude-sonnet-5-5';
+export function modelsFromEnv(env = process.env) {
+  const main = (env.ANTHROPIC_MODEL || '').trim() || DEFAULT_MODEL;
+  const chat = (env.ANTHROPIC_CHAT_MODEL || '').trim() || main;
+  return { main, chat };
+}
+export const modelForMode = (mode, models) => (mode === 'conversation' ? models.chat : models.main);
+
 // Pick the judge from the environment. Keyword judge keeps the app usable without a model key.
-export function judgeFromEnv(env = process.env) {
+export function judgeFromEnv(env = process.env, { fetchImpl = fetch } = {}) {
   if (env.ANTHROPIC_API_KEY && env.JUDGE !== 'keyword') {
-    const claude = makeClaudeJudge({ apiKey: env.ANTHROPIC_API_KEY, model: env.ANTHROPIC_MODEL || 'claude-sonnet-5-5', workspaceId: env.ANTHROPIC_WORKSPACE_ID });
+    const models = modelsFromEnv(env);
+    const judges = new Map();
+    const judgeFor = (model) => {
+      if (!judges.has(model)) judges.set(model, makeClaudeJudge({ apiKey: env.ANTHROPIC_API_KEY, model, workspaceId: env.ANTHROPIC_WORKSPACE_ID, fetchImpl }));
+      return judges.get(model);
+    };
     return async (args) => {
-      try { return await claude(args); }
+      try { return await judgeFor(modelForMode(args.mode, models))(args); }
       catch (err) { console.error('[judge] falling back to keyword judge:', err.message); return keywordJudge(args); }
     };
   }
