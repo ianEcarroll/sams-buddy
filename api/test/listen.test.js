@@ -159,3 +159,61 @@ test('no correct answers: no "0 out of 5"', async () => {
   assert.ok(!texts(turn).some((t) => /0 out of/.test(t)));
   assert.ok(texts(turn).includes('Those questions were tricky.'));
 });
+
+test('clue straight after a wrong answer (team option): one clue, one more try, recorded as support', async () => {
+  const a = act(); a.content.clue_on_wrong = true;
+  a.content.items[0].questions[3].clue = 'It was a big black bird.';
+  const { state } = createSession({ activity: a });
+  control(state, 'start_questions');
+  for (const x of ['Neverland', 'a thimble', 'Peter']) await say(state, x);
+  let { turn } = await say(state, 'a dog');
+  assert.deepEqual(texts(turn), ["Good try. Here's a clue. It was a big black bird.", 'What animal had the thimble?']);
+  ({ turn } = await say(state, 'a crow'));
+  assert.match(texts(turn).at(-1), /Question 5 of 5/);
+  ({ turn } = await say(state, 'glows'));
+  const r = state.completed[0];
+  assert.equal(r.score_correct, 5); assert.equal(r.score_first, 4);
+  assert.ok(r.support_provided.some((s) => /Clue for Q4/.test(s)));
+  assert.ok(r.after_support.some((s) => /crow/.test(s)));
+});
+
+test('clue after a wrong answer: still wrong after the clue moves on (no second clue)', async () => {
+  const a = act(); a.content.clue_on_wrong = true;
+  const { state } = createSession({ activity: a });
+  control(state, 'start_questions');
+  let { turn } = await say(state, 'Paris');
+  assert.match(texts(turn)[0], /^Good try\./);
+  ({ turn } = await say(state, 'London'));
+  assert.match(texts(turn).at(-1), /Question 2 of 5/);
+});
+
+test('clue after a wrong answer is off by default (scores as before)', async () => {
+  const { state } = createSession({ activity: act() });
+  control(state, 'start_questions');
+  const { turn } = await say(state, 'Paris');
+  assert.match(texts(turn).at(-1), /Question 2 of 5/);
+});
+
+test('"Give the story a new name": announced up front, Buddy\'s wording, any sensible name counts', async () => {
+  const a = act();
+  a.content.items[0].questions = [a.content.items[0].questions[0], { kind: 'title', question: '', answers: [] }];
+  const { state, turn: first } = createSession({ activity: a });
+  assert.ok(texts(first).includes("At the end, I'll ask you to give the story a new name."));
+  control(state, 'start_questions');
+  let { turn } = await say(state, 'Neverland');
+  assert.match(texts(turn).at(-1), /Question 2 of 2\. Can you think of a new name for this story\?/);
+  ({ turn } = await say(state, 'The crow and the thimble'));
+  assert.equal(state.completed[0].score_correct, 2);
+});
+
+test('"Give the story a new name": "I don\'t know" doesn\'t count, and the record says any sensible name', async () => {
+  const a = act();
+  a.content.items[0].questions = [{ kind: 'title', question: 'What would you call this story?', answers: [] }];
+  a.content.listen_retries = 0;
+  const { state } = createSession({ activity: a });
+  control(state, 'start_questions');
+  await say(state, "I don't know");
+  const r = state.completed[0];
+  assert.equal(r.score_correct, 0);
+  assert.match(r.review_note, /answer: any sensible name/);
+});

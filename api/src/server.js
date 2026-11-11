@@ -10,7 +10,7 @@ import { createSession, respond, confirmHeard, control, act, finish, previewLine
 import { judgeFromEnv } from './coach/judge.js';
 import { MODES, STARTER_STORIES, STARTER_SCENARIOS, STARTER_EXPLAIN, STARTER_FOLLOW, STARTER_OBJECTS, FOLLOW_OBJECTS, isFollowToken, FOLLOW_STEP_TYPES, FOLLOW_BOXES, stampMemories } from './coach/modes.js';
 import { PLAN_GOALS, GOAL_KEYS, SUPPORT_CODES } from './coach/goals.js';
-import { emailEnabled, sendEmail, recipientsFor, practiceEmail } from './email.js';
+import { emailEnabled, sendEmail, recipientsFor, practiceEmail, resetEmail } from './email.js';
 import { isPlatformAdmin, newInviteToken, INVITE_DAYS, estimateCost, ratesFor, validateFamily, ageFrom, cleanInterests } from './families.js';
 import { pushEnabled, pushPublicKey, sendPush, reminderDue, reminderMessage } from './push.js';
 
@@ -29,6 +29,8 @@ app.use('/api', (req, res, next) => {
 if (process.env.WEB_DIR) app.use(express.static(process.env.WEB_DIR, { extensions: ['html'] }));
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 8 * 1024 * 1024 } });
 const judge = judgeFromEnv();
+// Shown with editor tests: whether answers are being marked by Claude or by the basic keyword checker.
+const judgeKind = () => (process.env.ANTHROPIC_API_KEY && process.env.JUDGE !== 'keyword' ? 'claude' : 'keyword');
 
 const wrap = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
 const ROLES = ['parent', 'therapist', 'teacher', 'job_coach'];
@@ -103,6 +105,39 @@ app.post('/api/adult/login', rateLimit(10), wrap(async (req, res) => {
 // ------------------------------------------------------------------ joining by invite (new families)
 
 const inviteByToken = (token) => one(`select id, note from invites where token_hash=$1 and used_at is null and expires_at > now()`, [hmac(String(token || ''))]);
+// ------------------------------------------------------------------ forgot password
+// The same reply whether or not the email belongs to someone, so the form can't be used to find accounts.
+const RESET_MINUTES = 60;
+const sha = (t) => crypto.createHash('sha256').update(t).digest('hex');
+app.post('/api/adult/forgot', rateLimit(5), wrap(async (req, res) => {
+  if (!emailEnabled()) return res.json({ ok: false, error: 'Password reset by email isn\u2019t set up yet. Ask the family\u2019s account owner to remove you from the team and add you again with a new temporary password.' });
+  const email = String(req.body?.email || '').trim().toLowerCase();
+  const a = email ? await one('select a.id, a.name from adults a where a.email=$1', [email]) : null;
+  if (a) {
+    const recent = await one("select count(*)::int as n from password_resets where adult_id=$1 and created_at > now() - interval '15 minutes'", [a.id]);
+    if (recent.n < 3) {
+      const token = crypto.randomBytes(32).toString('base64url');
+      await q("insert into password_resets(token_hash, adult_id, expires_at) values ($1,$2, now() + make_interval(mins => $3))", [sha(token), a.id, RESET_MINUTES]);
+      const base = (process.env.APP_URL || `${req.protocol}://${req.get('host')}`).replace(/\/$/, '');
+      const link = `${base}/adult/#reset=${token}`;
+      sendEmail({ to: email, ...resetEmail({ name: a.name, link, minutes: RESET_MINUTES }) })
+        .catch((e) => console.error('[reset] email failed:', e.message));
+    }
+  }
+  res.json({ ok: true });
+}));
+app.post('/api/adult/reset', rateLimit(10), wrap(async (req, res) => {
+  const { token, password } = req.body || {};
+  if (!password || String(password).length < 10) return res.status(400).json({ error: 'New passwords need at least 10 characters.' });
+  const r = await one('select token_hash, adult_id from password_resets where token_hash=$1 and used_at is null and expires_at > now()', [sha(String(token || ''))]);
+  if (!r) return res.status(400).json({ error: 'This link has expired or has already been used. Ask for a new one.' });
+  await q('update password_resets set used_at=now() where adult_id=$1 and used_at is null', [r.adult_id]);
+  // Signs this person out on every device; they sign in again with the new password.
+  await q("update adults set pass_hash=$1, password_changed_at=date_trunc('second', now()) where id=$2", [hashPassword(String(password)), r.adult_id]);
+  const a = await one('select email from adults where id=$1', [r.adult_id]);
+  res.json({ ok: true, email: a.email });
+}));
+
 app.get('/api/invite/:token', rateLimit(30), wrap(async (req, res) => {
   const inv = await inviteByToken(req.params.token);
   res.json({ valid: !!inv });
@@ -257,7 +292,10 @@ adult.put('/settings', wrap(async (req, res) => {
 
 adult.get('/activities', wrap(async (req, res) => {
   await ensureStarters(req.learnerId);
-  const rows = await many("select id, mode, title, goal, plan_goal, status, content, updated_at from activities where learner_id=$1 and status<>'archived' order by mode, updated_at desc", [req.learnerId]);
+  // last_practised_at: when the learner last started this activity, for "Recently used" in each module.
+  const rows = await many(`select a.id, a.mode, a.title, a.goal, a.plan_goal, a.status, a.content, a.updated_at,
+      (select max(s.started_at) from practice_sessions s where s.activity_id = a.id) as last_practised_at
+    from activities a where a.learner_id=$1 and a.status<>'archived' order by a.mode, a.updated_at desc`, [req.learnerId]);
   for (const r of rows) {
     const ids = (r.content.items || []).flatMap(imageIdsOf);
     r.image_urls = Object.fromEntries(ids.map((id) => [id, imageUrl(id)]));
@@ -413,6 +451,32 @@ adult.get('/voices/:id/sample', wrap(async (req, res) => {
   const l = await one('select name, settings from learners where id=$1', [req.learnerId]);
   const audio = await speak(voiceSample(l.name), { voiceId: id, speed: settingsOf(l).speech_speed });
   res.set('content-type', 'audio/mpeg').set('cache-control', 'private, max-age=86400').send(audio);
+}));
+// Story editor: hear the story in the learner's own voice and speed. The audio is saved, so when the
+// learner later hears the same story it costs nothing extra.
+const MAX_LISTEN_CHARS = 4000;
+adult.post('/listen', wrap(async (req, res) => {
+  if (!voiceEnabled()) return res.status(503).json({ error: 'Voice is not set up yet.' });
+  const text = String(req.body?.text || '').trim();
+  if (!text) return res.status(400).json({ error: 'Write the story first.' });
+  if (text.length > MAX_LISTEN_CHARS) return res.status(400).json({ error: `Stories can be up to ${MAX_LISTEN_CHARS} characters to listen to here.` });
+  const st = settingsOf(await one('select settings from learners where id=$1', [req.learnerId]));
+  const audio = await speak(text, { voiceId: st.voice_id, speed: st.speech_speed });
+  res.set('content-type', 'audio/mpeg').set('cache-control', 'private, no-store').send(audio);
+}));
+
+// Story editor: "Test this question". Marks a typed answer with the same checking the learner gets.
+adult.post('/test-answer', wrap(async (req, res) => {
+  const { story, question, answer } = req.body || {};
+  const q = question && typeof question === 'object' ? { ...question } : null;
+  if (q?.kind === 'title' && !String(q.question || '').trim()) q.question = 'Can you think of a new name for this story?';
+  const text = String(answer || '').trim().slice(0, 500);
+  if (!q || !String(q.question || '').trim() || !text) return res.status(400).json({ error: 'Add a question and type an answer to test.' });
+  if (!String(story || '').trim()) return res.status(400).json({ error: 'Write the story first.' });
+  const l = await one('select name, birth_year, settings from learners where id=$1', [req.learnerId]);
+  const item = { question: String(q.question).slice(0, 300), answers: Array.isArray(q.answers) ? q.answers.map(String).slice(0, 20) : [], kind: q.kind === 'title' ? 'title' : undefined, story: String(story).slice(0, MAX_LISTEN_CHARS), clarify_phrases: [] };
+  const j = await judge({ mode: 'listen', item, elements: ['answer'], text, activity: { content: {} }, history: [], learner: { name: l.name, age: ageFrom(l.birth_year), interests: settingsOf(l).interests } });
+  res.json({ correct: !!j.met.answer, evidence: typeof j.met.answer === 'string' && j.met.answer !== '(supplied)' ? j.met.answer : null, help: j.help && j.help !== 'none' ? j.help : null, checker: judgeKind() });
 }));
 adult.get('/goals', (req, res) => res.json({ goals: PLAN_GOALS, codes: SUPPORT_CODES }));
 
