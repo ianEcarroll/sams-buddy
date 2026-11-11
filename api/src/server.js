@@ -7,7 +7,7 @@ import { sign, hmac, hashPassword, checkPassword, requireAdult, requireOwner, re
 import { transcribe, speak, voiceEnabled, listVoices, defaultVoiceId, setSpeechStore, ttsModel } from './voice.js';
 import { pgSpeechStore, pruneSpeech } from './speechStore.js';
 import { createSession, respond, confirmHeard, control, act, finish, previewLines, ENGINE_DEFAULTS } from './coach/engine.js';
-import { judgeFromEnv } from './coach/judge.js';
+import { judgeFromEnv, modelsFromEnv } from './coach/judge.js';
 import { MODES, STARTER_STORIES, STARTER_SCENARIOS, STARTER_EXPLAIN, STARTER_FOLLOW, STARTER_OBJECTS, FOLLOW_OBJECTS, isFollowToken, FOLLOW_STEP_TYPES, FOLLOW_BOXES, stampMemories } from './coach/modes.js';
 import { PLAN_GOALS, GOAL_KEYS, SUPPORT_CODES } from './coach/goals.js';
 import { emailEnabled, sendEmail, recipientsFor, practiceEmail } from './email.js';
@@ -174,7 +174,7 @@ adult.get('/admin/families', requirePlatformAdmin, wrap(async (req, res) => {
       (select coalesce(sum(length(e.text)),0)::int from practice_events e join practice_sessions s on s.id=e.session_id where s.learner_id=l.id and e.who='buddy' and e.created_at > now() - interval '30 days') as buddy_chars_30d,
       (select count(*)::int from practice_events e join practice_sessions s on s.id=e.session_id where s.learner_id=l.id and e.who='sam' and e.kind='response' and e.created_at > now() - interval '30 days') as responses_30d
     from learners l order by l.created_at`);
-  const rates = ratesFor({ ttsModel: ttsModel() });
+  const rates = ratesFor({ ttsModel: ttsModel(), judgeModel: modelsFromEnv().main });
   res.json(rows.map((r) => ({ ...r, est_cost_30d: estimateCost({ buddyChars: r.buddy_chars_30d, responses: r.responses_30d }, rates) })));
 }));
 adult.post('/admin/families/:id/pause', requirePlatformAdmin, wrap(async (req, res) => {

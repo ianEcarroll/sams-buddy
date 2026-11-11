@@ -25,10 +25,10 @@ services:
         sync: false
       - key: ANTHROPIC_API_KEY
         sync: false
-      - key: ANTHROPIC_MODEL
+      - key: ANTHROPIC_MODEL        # marks every module except Chat Buddy (compared with Sonnet 11 Nov 2026: same results)
+        value: claude-haiku-5-5
+      - key: ANTHROPIC_CHAT_MODEL   # Chat Buddy only (blank = ANTHROPIC_MODEL)
         value: claude-sonnet-5-5
-      - key: ANTHROPIC_CHAT_MODEL   # optional: a different model for Chat Buddy only (blank = ANTHROPIC_MODEL)
-        sync: false
       - key: ELEVENLABS_TTS_MODEL   # optional: eleven_multilingual_v2 (default) or eleven_flash_v2_5 (half the price)
         sync: false
       - key: ELEVENLABS_API_KEY

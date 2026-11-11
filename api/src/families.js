@@ -13,13 +13,19 @@ export const INVITE_DAYS = 14;
 // List prices used for the estimate (USD). Rough, for spotting heavy use; not a bill.
 export const COST_RATES = {
   ttsPer1kChars: 0.10,   // ElevenLabs Multilingual v2
-  judgePerResponse: 0.011, // Claude Sonnet: ~3k tokens in, ~500 out per check
+  judgePerResponse: 0.007, // Claude Sonnet 5.5: ~1.9k tokens in, ~350 out per check ($2 / $10 per M)
   sttPerResponse: 0.0006,  // ElevenLabs Scribe, ~10 s of speech
 };
 // Flash and Turbo cost half as much per character as Multilingual v2 / v3. Saved speech isn't counted,
 // so the estimate is an upper bound once lines are being reused.
-export function ratesFor({ ttsModel = '' } = {}, base = COST_RATES) {
-  return { ...base, ttsPer1kChars: /flash|turbo/i.test(ttsModel) ? 0.05 : base.ttsPer1kChars };
+// Haiku 5.5 marks a check for ~$0.0005 ($0.10 / $0.50 per M tokens). Chat Buddy may use a different model,
+// but the estimate doesn't split by module, so it uses the main marking model.
+export function ratesFor({ ttsModel = '', judgeModel = '' } = {}, base = COST_RATES) {
+  return {
+    ...base,
+    ttsPer1kChars: /flash|turbo/i.test(ttsModel) ? 0.05 : base.ttsPer1kChars,
+    judgePerResponse: /haiku/i.test(judgeModel) ? 0.0005 : base.judgePerResponse,
+  };
 }
 export function estimateCost({ buddyChars = 0, responses = 0 }, r = COST_RATES) {
   return Math.round(((buddyChars / 1000) * r.ttsPer1kChars + responses * (r.judgePerResponse + r.sttPerResponse)) * 100) / 100;
