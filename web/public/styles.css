@@ -392,3 +392,13 @@ details.layer > summary small, details.fine-tune > summary small { font-weight: 
 .test-result { margin: 0; min-height: 1.4em; color: var(--ink-soft); }
 .test-result.ok { color: #0f6b4f; font-weight: 600; }
 .test-result.no { color: #9a3b1d; font-weight: 600; }
+
+/* Activities: "+ New activity" in tiles with two kinds of practice */
+.kind-choice { display: grid; gap: 8px; }
+.kind-choice[hidden] { display: none; }
+.kind-q { margin: 0; font-weight: 600; }
+.kind-opt { display: grid; gap: 2px; text-align: left; padding: 12px 14px; border: 2px solid var(--line, #d5dde8); border-radius: 12px; background: var(--surface, #fff); color: inherit; font: inherit; cursor: pointer; }
+.kind-opt:hover, .kind-opt:focus-visible { border-color: var(--mod, currentColor); outline: none; }
+.kind-opt strong { color: var(--mod, inherit); }
+.kind-opt small { color: var(--ink-soft); }
+.kind-choice > .btn-quiet { justify-self: start; }

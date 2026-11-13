@@ -407,6 +407,27 @@ function whenUsed(iso) {
   return d.toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
 }
 
+// Every tile has the same "+ New activity" button. Tiles with two kinds of practice then ask which kind.
+const KIND_BLURB = {
+  recall: 'Recall real things they did, with clues and the family\u2019s photos.',
+  listen: 'Buddy reads a short story, then asks questions about it.',
+  explain: 'Explain how to do something everyday, step by step.',
+  object: 'Name a picture, say its group and what it\u2019s used for.',
+  follow: 'Follow spoken instructions by moving pictures on screen.',
+  task: 'Talk through the steps of a real task, such as making a drink.',
+};
+function addActivity(root, M) {
+  const start = (m) => editActivity(root, newActivity(m));
+  if (M.modes.length === 1) return h('div', { class: 'row-actions mod-add' }, h('button', { class: 'btn', onclick: () => start(M.modes[0]) }, '+ New activity'));
+  const choose = h('div', { class: 'kind-choice', hidden: true, role: 'group', 'aria-label': `What kind of ${M.label} activity?` },
+    h('p', { class: 'kind-q' }, 'What kind of activity?'),
+    ...M.modes.map((m) => h('button', { class: 'kind-opt', type: 'button', onclick: () => start(m) },
+      h('strong', {}, modes[m].activityName), h('small', {}, KIND_BLURB[m] || ''))),
+    h('button', { class: 'btn btn-quiet', type: 'button', onclick: () => { choose.hidden = true; add.hidden = false; } }, 'Cancel'));
+  const add = h('button', { class: 'btn', 'aria-expanded': 'false', onclick: () => { add.hidden = true; choose.hidden = false; choose.querySelector('.kind-opt').focus(); } }, '+ New activity');
+  return h('div', { class: 'mod-add' }, h('div', { class: 'row-actions' }, add), choose);
+}
+
 async function renderActivities(root) {
   const acts = await api('/adult/activities');
   const name = me.learner.name;
@@ -442,8 +463,7 @@ async function renderActivities(root) {
       h('header', { class: 'mod-head' }, moduleIcon(mod), h('div', {}, h('h2', {}, M.label), h('small', { class: 'muted' }, M.tagline))),
       hidden ? h('p', { class: 'mod-note' }, `Hidden from ${name}. Turn it on in Practice plan → Buddy modules.`) : null,
       mine.length ? h('ul', { class: 'list' }, mine.map(row)) : h('p', { class: 'muted mod-empty' }, `Nothing here yet, so ${name}’s tile says “Not yet”.`),
-      h('div', { class: 'row-actions mod-add' }, M.modes.map((m) => h('button', { class: 'btn', onclick: () => editActivity(root, newActivity(m)) },
-        two ? `+ ${modes[m].activityName}` : '+ New activity'))));
+      addActivity(root, M));
   });
   root.append(
     h('p', { class: 'muted', style: 'margin:16px 0 0' }, `The six tiles ${name} sees, in the same order. Each activity you add appears inside its tile.`),
