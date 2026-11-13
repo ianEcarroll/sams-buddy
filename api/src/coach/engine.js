@@ -590,20 +590,30 @@ function storyLines(state) {
   L.phase = 'story';
   const lines = [];
   if (L.round === 1 && item.intro) lines.push(line(item.intro, 'intro'));
-  if (L.round === 1) lines.push(line(item.title ? `This story is called: ${item.title}.` : 'Here is a story. Listen carefully.', 'intro'));
-  if (L.round === 1 && questionsOf(state).some((q) => q?.kind === 'title')) lines.push(line("At the end, I'll ask you to give the story a new name.", 'intro'));
-  else lines.push(line('Here is the story again. Listen carefully.', 'intro'));
+  if (L.round === 1) {
+    lines.push(line(item.title ? `This story is called: ${item.title}.` : 'Here is a story. Listen carefully.', 'intro'));
+    if (questionsOf(state).some((q) => q?.kind === 'title')) lines.push(line("At the end, I'll ask you to give the story a new name.", 'intro'));
+  } else lines.push(line('Here is the story again. Listen carefully.', 'intro'));
   lines.push(line(item.story || '', 'story'));
   lines.push(line(L.round === 1 ? MODES.listen.prompt(item) : `When you're ready to answer the ${missedCount(state) === 1 ? 'question' : 'questions'} again, press I'm ready.`, 'prompt'));
   state.lastLines = lines;
   return lines;
 }
 
+// How Buddy leads into each story question: like a person talking, not "Question 2 of 5".
+const NEXT_LEADS = ['For the next question: ', 'Here\u2019s the next one. ', 'Next question: '];
+function questionLead(pos, total) {
+  if (total === 1) return '';
+  if (pos === 0) return 'The first question is: ';
+  if (pos === total - 1) return 'And the last question: ';
+  return NEXT_LEADS[(pos - 1) % NEXT_LEADS.length];
+}
+
 function askLines(state) {
   const L = state.item.listen;
   const qi = L.queue[L.pos];
   const q = questionsOf(state)[qi];
-  const lines = [line(`Question ${L.pos + 1} of ${L.queue.length}. ${q.question}`, 'prompt')];
+  const lines = [line(`${questionLead(L.pos, L.queue.length)}${q.question}`, 'prompt')];
   state.lastLines = lines;
   L.helped = false;
   return lines;
@@ -615,7 +625,9 @@ function startQuestions(state) {
   L.queue = L.round === 1 ? all : all.filter((i) => !L.results[i]?.correct);
   L.pos = 0;
   L.phase = 'question';
-  return [line(L.round === 1 ? "Here are the questions. Take your time with each one." : "Let's try the ones you missed.", 'intro'), ...askLines(state)];
+  const intro = L.round > 1 ? (L.queue.length === 1 ? "Let's try the one you missed." : "Let's try the ones you missed.")
+    : L.queue.length === 1 ? 'Here is the question. Take your time.' : 'Now some questions about the story. Take your time with each one.';
+  return [line(intro, 'intro'), ...askLines(state)];
 }
 
 async function listenAnswer(state, { text, displayText, confirmed }, judge) {

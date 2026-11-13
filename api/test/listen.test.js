@@ -20,7 +20,7 @@ test('reads the story, then waits for I\'m ready', () => {
 test('all five right first time ends the item with full marks', async () => {
   const { state } = createSession({ activity: act() });
   let { turn } = control(state, 'start_questions');
-  assert.match(texts(turn).at(-1), /Question 1 of 5\. Where does the story happen\?/);
+  assert.match(texts(turn).at(-1), /^The first question is: Where does the story happen\?$/);
   for (const a of ['In Neverland', 'a silver thimble', 'Peter Pan', 'a crow', 'she glows gold']) ({ turn } = await say(state, a));
   assert.ok(texts(turn).some((t) => /all 5 right/.test(t)));
   assert.equal(state.done, true);
@@ -39,7 +39,7 @@ test('misses are counted, retry replays the story and asks only the missed ones'
   assert.ok(texts(turn).some((t) => /story again/.test(t)));
   assert.equal(turn.expect, 'ready');
   ({ turn } = control(state, 'start_questions'));
-  assert.match(texts(turn).at(-1), /Question 1 of 2\. What was Tinker Bell's favourite thing\?/);
+  assert.match(texts(turn).at(-1), /^The first question is: What was Tinker Bell's favourite thing\?$/);
   await say(state, 'the thimble');
   ({ turn } = await say(state, 'a crow'));
   assert.ok(texts(turn).some((t) => /all 5 right now/.test(t)));
@@ -97,7 +97,7 @@ test('the offer gives three choices and "just the questions" skips the story', a
   assert.match(texts(turn).at(-1), /hear the story again and try the 2 you missed\? Or you can try them again straight away, or finish\./);
   ({ turn } = control(state, 'listen_retry_questions'));
   assert.ok(!texts(turn).some((t) => t.includes('Neverland')), 'story not read again');
-  assert.match(texts(turn).at(-1), /Question 1 of 2\./);
+  assert.match(texts(turn).at(-1), /^The first question is: /);
   await say(state, 'the thimble');
   ({ turn } = await say(state, 'a crow'));
   const r = state.completed[0];
@@ -110,7 +110,7 @@ test('saying "just the questions" out loud also skips the story', async () => {
   control(state, 'start_questions');
   for (const a of ['Neverland', 'a hat', 'Peter', 'a crow', 'glows']) await say(state, a);
   const { turn } = await say(state, 'just the questions please');
-  assert.match(texts(turn).at(-1), /Question 1 of 1\./);
+  assert.match(texts(turn).at(-1), /^What was Tinker Bell's favourite thing\?$/);
 });
 
 test('after the story is read again, Buddy asks to press I\'m ready to answer again', async () => {
@@ -169,7 +169,7 @@ test('clue straight after a wrong answer (team option): one clue, one more try, 
   let { turn } = await say(state, 'a dog');
   assert.deepEqual(texts(turn), ["Good try. Here's a clue. It was a big black bird.", 'What animal had the thimble?']);
   ({ turn } = await say(state, 'a crow'));
-  assert.match(texts(turn).at(-1), /Question 5 of 5/);
+  assert.match(texts(turn).at(-1), /^And the last question: /);
   ({ turn } = await say(state, 'glows'));
   const r = state.completed[0];
   assert.equal(r.score_correct, 5); assert.equal(r.score_first, 4);
@@ -184,14 +184,14 @@ test('clue after a wrong answer: still wrong after the clue moves on (no second 
   let { turn } = await say(state, 'Paris');
   assert.match(texts(turn)[0], /^Good try\./);
   ({ turn } = await say(state, 'London'));
-  assert.match(texts(turn).at(-1), /Question 2 of 5/);
+  assert.match(texts(turn).at(-1), /^For the next question: /);
 });
 
 test('clue after a wrong answer is off by default (scores as before)', async () => {
   const { state } = createSession({ activity: act() });
   control(state, 'start_questions');
   const { turn } = await say(state, 'Paris');
-  assert.match(texts(turn).at(-1), /Question 2 of 5/);
+  assert.match(texts(turn).at(-1), /^For the next question: /);
 });
 
 test('"Give the story a new name": announced up front, Buddy\'s wording, any sensible name counts', async () => {
@@ -201,7 +201,7 @@ test('"Give the story a new name": announced up front, Buddy\'s wording, any sen
   assert.ok(texts(first).includes("At the end, I'll ask you to give the story a new name."));
   control(state, 'start_questions');
   let { turn } = await say(state, 'Neverland');
-  assert.match(texts(turn).at(-1), /Question 2 of 2\. Can you think of a new name for this story\?/);
+  assert.match(texts(turn).at(-1), /^And the last question: Can you think of a new name for this story\?$/);
   ({ turn } = await say(state, 'The crow and the thimble'));
   assert.equal(state.completed[0].score_correct, 2);
 });
@@ -216,4 +216,36 @@ test('"Give the story a new name": "I don\'t know" doesn\'t count, and the recor
   const r = state.completed[0];
   assert.equal(r.score_correct, 0);
   assert.match(r.review_note, /answer: any sensible name/);
+});
+
+test('questions are led in like a person talking, not "Question 2 of 5"', async () => {
+  const { state } = createSession({ activity: act() });
+  const leads = [texts(control(state, 'start_questions').turn)];
+  for (const a of ['Neverland', 'a thimble', 'Peter', 'a crow']) leads.push(texts((await say(state, a)).turn));
+  const qs = leads.map((t) => t.at(-1));
+  assert.match(leads[0][0], /^Now some questions about the story\./);
+  assert.match(qs[0], /^The first question is: /);
+  assert.match(qs[1], /^For the next question: /);
+  assert.match(qs[2], /^Here\u2019s the next one\. /);
+  assert.match(qs[3], /^Next question: /);
+  assert.match(qs[4], /^And the last question: /);
+  assert.ok(!qs.some((q) => /Question \d of \d/.test(q)));
+});
+
+test('one missed question on retry: "the one you missed", then just the question', async () => {
+  const { state } = createSession({ activity: act() });
+  control(state, 'start_questions');
+  for (const a of ['Neverland', 'a thimble', 'Peter', 'a dog', 'glows']) await say(state, a);
+  const t = texts(control(state, 'listen_retry_questions').turn);
+  assert.deepEqual(t, ["Let's try the one you missed.", 'What animal had the thimble?']);
+});
+
+test('first reading: title, then the story (never "Here is the story again"); a re-read says it', async () => {
+  const { state, turn } = createSession({ activity: act(), settings: { explain_buttons: false } });
+  const t = texts(turn).filter((x) => !/great to see you/.test(x));
+  assert.equal(t[0], 'This story is called: Tinker Bell and the lost thimble.');
+  assert.ok(!t.some((x) => /story again/.test(x)));
+  control(state, 'start_questions');
+  for (const a of ['Neverland', 'a thimble', 'Peter', 'a dog', 'glows']) await say(state, a);
+  assert.ok(texts(control(state, 'listen_retry').turn).includes('Here is the story again. Listen carefully.'));
 });
