@@ -111,12 +111,29 @@ function newItemState(state) {
 
 const curItem = (s) => s.activity.content.items[s.itemIndex];
 
+// Each item in an activity is led in the same conversational way in every module:
+// "Here's the first situation." → "On to the next situation." → "And here's the last situation."
+// One item on its own gets no lead. Stories (Listen to a Story) lead in from storyLines.
+const ITEM_NOUN = { object: 'picture', story: 'story', task: 'job', follow: 'instruction', explain: 'question', recall: 'question', think: 'situation', conversation: 'topic', listen: 'story' };
+const NEXT_ITEM = ['On to the next {noun}.', "Here's the next {noun}.", 'Now for the next {noun}.'];
+export function itemLead(state) {
+  const total = state.activity.content.items?.length || 1;
+  const i = state.itemIndex;
+  const noun = ITEM_NOUN[state.mode] || 'one';
+  if (total <= 1) return null;
+  if (i === 0) return `Here's the first ${noun}.`;
+  if (i === total - 1) return `And here's the last ${noun}.`;
+  return NEXT_ITEM[(i - 1) % NEXT_ITEM.length].replace('{noun}', noun);
+}
+
 function openItem(state) {
   state.item = newItemState(state);
   const item = curItem(state);
   const m = MODES[state.mode];
   const think = state.settings.think_seconds;
   const lines = [];
+  const lead = state.mode === 'listen' ? null : itemLead(state);
+  if (lead) lines.push(line(lead, 'intro'));
   if (state.mode === 'object') {
     lines.push(line(m.prompt(item), 'prompt'));
   } else if (state.mode === 'story') {
@@ -125,7 +142,7 @@ function openItem(state) {
     lines.push(line(TEAM_PHRASE, 'movie', { pauseAfter: think }));
     lines.push(line(m.prompt(item), 'prompt'));
   } else if (state.mode === 'task') {
-    lines.push(line("Here's your job.", 'intro'));
+    if (!lead) lines.push(line("Here's your job.", 'intro'));
     if (state.item.phase === 'clarify') {
       lines.push(line(item.unclear_instruction, 'instruction'));
       lines.push(line(TEAM_PHRASE, 'movie', { pauseAfter: think }));
@@ -161,7 +178,7 @@ function openItem(state) {
     lines.push(line(m.prompt(item), 'prompt'));
   } else if (state.mode === 'think') {
     if (item.intro) lines.push(line(item.intro, 'intro'));
-    lines.push(line("Here's a situation.", 'intro'));
+    if (!lead) lines.push(line("Here's a situation.", 'intro'));
     lines.push(line(item.scenario || '', 'instruction'));
     lines.push(line(TEAM_PHRASE, 'movie', { pauseAfter: think }));
     lines.push(line(m.prompt(item), 'prompt'));
@@ -589,8 +606,10 @@ function storyLines(state) {
   const L = state.item.listen;
   L.phase = 'story';
   const lines = [];
-  if (L.round === 1 && item.intro) lines.push(line(item.intro, 'intro'));
   if (L.round === 1) {
+    const lead = itemLead(state);
+    if (lead) lines.push(line(lead, 'intro'));
+    if (item.intro) lines.push(line(item.intro, 'intro'));
     lines.push(line(item.title ? `This story is called: ${item.title}.` : 'Here is a story. Listen carefully.', 'intro'));
     if (questionsOf(state).some((q) => q?.kind === 'title')) lines.push(line("At the end, I'll ask you to give the story a new name.", 'intro'));
   } else lines.push(line('Here is the story again. Listen carefully.', 'intro'));
@@ -758,8 +777,7 @@ function advance(state, lines) {
   const timeUp = Date.now() - state.startedAt > state.settings.session_minutes * 60_000;
   if (state.itemIndex + 1 < items.length && !timeUp) {
     state.itemIndex += 1;
-    lines.push(line("Here's the next one.", 'intro'));
-    return lines.concat(openItem(state));
+    return lines.concat(openItem(state)); // openItem leads in: "On to the next situation." etc.
   }
   state.done = true;
   lines.push(line(`That's the end of this practice. Thanks for practising with me${state.learnerName ? `, ${state.learnerName}` : ''}. See you next time!`, 'closing'));
