@@ -23,7 +23,7 @@ test('sign-up needs a child name, adult name, email and a 10+ character password
 });
 
 test('cost estimate and age', () => {
-  assert.equal(estimateCost({ buddyChars: 5400, responses: 20 }), 0.77);
+  assert.equal(estimateCost({ buddyChars: 5400, responses: 20 }), 0.69);
   assert.equal(estimateCost({}), 0);
   assert.equal(ageFrom(2012, new Date('2026-11-04')), 14);
   assert.equal(ageFrom(null), null);

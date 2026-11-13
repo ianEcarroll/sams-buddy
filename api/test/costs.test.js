@@ -70,3 +70,8 @@ test('cost estimate halves the speech rate on Flash or Turbo', () => {
   assert.equal(ratesFor({ ttsModel: 'eleven_multilingual_v2' }).ttsPer1kChars, 0.10);
   assert.ok(estimateCost({ buddyChars: 10000 }, ratesFor({ ttsModel: 'eleven_flash_v2_5' })) < estimateCost({ buddyChars: 10000 }));
 });
+
+test('cost estimate uses the cheaper marking rate on Haiku', () => {
+  assert.equal(ratesFor({ judgeModel: 'claude-haiku-5-5' }).judgePerResponse, 0.0005);
+  assert.equal(ratesFor({ judgeModel: 'claude-sonnet-5-5' }).judgePerResponse, 0.007);
+});
