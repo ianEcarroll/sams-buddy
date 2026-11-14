@@ -19,10 +19,10 @@ const paper = {
   }] },
 };
 
-test('asks the question after "Make a movie in your mind"', () => {
+test('asks the question straight away, with no "Make a movie in your mind"', () => {
   const { turn } = createSession({ activity: paper });
   const t = turn.lines.map((l) => l.text);
-  assert.ok(t.includes('Make a movie in your mind.'));
+  assert.ok(!t.includes('Make a movie in your mind.'));
   assert.equal(t.at(-1), 'Tell me how you make one of your paper characters.');
 });
 
