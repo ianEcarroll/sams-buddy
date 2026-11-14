@@ -262,6 +262,15 @@ function reminderRefresh(old) { old.replaceWith(reminderBox()); }
 let P = null;          // current practice view-state
 let playGen = 0;       // bumps to interrupt playback
 let rec = null;        // { recorder, chunks, stream }
+// The microphone stays open for the whole practice: asking for it on every Press to talk makes an iPad home-screen
+// app show its permission box again and again. Closed when the practice ends.
+let micStream = null;
+async function getMic() {
+  if (micStream && micStream.getAudioTracks().some((t) => t.readyState === 'live')) return micStream;
+  micStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
+  return micStream;
+}
+function closeMic() { if (micStream) { micStream.getTracks().forEach((t) => t.stop()); micStream = null; } }
 const canRecord = () => home.voice && !!navigator.mediaDevices?.getUserMedia && !!window.MediaRecorder;
 const captionsOn = () => home.settings.captions || !home.voice;
 
@@ -285,7 +294,9 @@ function drawPractice() {
       : h('img', { src: ui.images[0], alt: 'Practice picture' });
 
   // Show the last two things Buddy said this turn, so feedback stays visible under the cue that follows it.
-  const bubble = captionsOn() && P.shown.length ? h('div', { style: 'display:grid;gap:10px' }, P.shown.slice(-2).map((l) =>
+  // A step's words are left out of the captions when a question about it follows (Task Buddy), so they can't be read off.
+  const said = P.shown.filter((l) => !l.noCaption);
+  const bubble = captionsOn() && said.length ? h('div', { style: 'display:grid;gap:10px' }, said.slice(-2).map((l) =>
     h('div', { class: 'bubble', 'data-kind': l.kind }, l.kind === 'movie' ? icon('film') : null, h('span', {}, l.text)))) : null;
 
   const cue = ui.cueCard ? h('ol', { class: 'cuecard', 'aria-label': 'Reminder card' },
@@ -312,7 +323,8 @@ function drawPractice() {
   const readyBtn = turn.expect === 'ready'
     ? h('button', { class: 'talk', 'data-state': speakingNow ? 'speaking' : 'idle', disabled: speakingNow, onclick: () => sendControl('start_questions'), 'aria-label': "I'm ready" },
       icon(speakingNow ? 'speaker' : 'play'),
-      h('span', { class: 'talk-text' }, h('span', {}, speakingNow ? 'Buddy is reading\u2026' : 'I\u2019m ready'), h('small', {}, speakingNow ? 'Listen to the story' : 'Start the questions')))
+      h('span', { class: 'talk-text' }, h('span', {}, speakingNow ? (P.mode === 'steps' ? 'Buddy is talking\u2026' : 'Buddy is reading\u2026') : 'I\u2019m ready'),
+        h('small', {}, speakingNow ? (P.mode === 'steps' ? 'Listen to the steps' : 'Listen to the story') : 'Start the questions')))
     : null;
   const choice = turn.expect === 'choice'
     ? h('div', { class: 'choice' },
@@ -352,8 +364,8 @@ function drawPractice() {
     h('span', { class: 'step-count' }, `Step ${ui.step.n} of ${ui.step.total}`),
     h('span', { class: 'step-dots', 'aria-hidden': 'true' }, Array.from({ length: ui.step.total }, (_, i) => h('i', { 'data-state': i < ui.step.n - 1 ? 'done' : i === ui.step.n - 1 ? 'now' : 'todo' })))) : null;
   const stepCard = ui.step?.text ? h('p', { class: 'step-card', 'data-visual': String(!!ui.step.visual) }, ui.step.text) : null;
-  const stepList = ui.stepList ? h('ol', { class: 'step-list', 'aria-label': 'The steps' }, ui.stepList.map((x) =>
-    h('li', {}, x.image ? h('img', { src: x.image, alt: '' }) : null, h('span', {}, x.text)))) : null;
+  const stepList = ui.stepList ? h('ol', { class: 'step-list', 'aria-label': 'The steps' }, ui.stepList.map((x, i) =>
+    h('li', { 'data-now': String(turn.expect === 'ready' && P.nowStep === i) }, x.image ? h('img', { src: x.image, alt: '' }) : null, h('span', {}, x.text)))) : null;
   mount(
     h('div', { class: 'p-top' }, h('p', { class: 'p-title' }, P.title), h('button', { class: 'btn', onclick: finishPractice }, icon('stop'), 'Finish')),
     stepBar,
@@ -394,10 +406,12 @@ function helpSheet() {
 // Play Buddy's lines in order. Any new action interrupts it.
 async function playLines(lines) {
   const gen = ++playGen;
-  const done = () => { if (gen === playGen && P) { P.speaking = false; drawPractice(); } };
+  const done = () => { if (gen === playGen && P) { P.speaking = false; P.nowStep = null; drawPractice(); } };
   for (const l of lines) {
     if (gen !== playGen) return;
-    P.shown.push(l); P.thinking = false; P.speaking = true; drawPractice();
+    P.shown.push(l); P.thinking = false; P.speaking = true;
+    if (l.step != null) P.nowStep = l.step;
+    drawPractice();
     if (l.audio) {
       try {
         const r = await fetch(l.audio, { headers: { authorization: `Bearer ${token}` } });
@@ -430,7 +444,7 @@ async function onTalk() {
   if (P.talk === 'idle') {
     stopVoice();
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
+      const stream = await getMic();
       const type = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4'].find((t) => MediaRecorder.isTypeSupported?.(t)) || '';
       const recorder = new MediaRecorder(stream, type ? { mimeType: type } : undefined);
       // Keep the chunks in this closure: the last chunk arrives AFTER stop(), when `rec` is already cleared.
@@ -447,7 +461,6 @@ async function onTalk() {
     const r = rec; rec = null;
     P.talk = 'busy'; drawPractice();
     const blob = await new Promise((res) => { r.recorder.onstop = () => res(new Blob(r.chunks, { type: r.recorder.mimeType || 'audio/webm' })); r.recorder.stop(); });
-    r.stream.getTracks().forEach((t) => t.stop());
     const form = new FormData();
     form.append('audio', blob, blob.type.includes('mp4') ? 'sam.mp4' : 'sam.webm');
     await sendResponse({ form });
@@ -516,19 +529,21 @@ async function sendAct(a) {
 
 function applyTurn(t) {
   P.turn = t; P.talk = 'idle';
-  if (t.lines.length) P.shown = [];
+  if (t.lines.length) { P.shown = []; P.nowStep = null; }
   drawPractice();
   playLines(t.lines).then(() => { if (t.done && P?.id === t.sessionId) renderDone(t); });
 }
 
 async function finishPractice() {
   stopVoice();
-  if (rec) { rec.recorder.stop(); rec.stream.getTracks().forEach((t) => t.stop()); rec = null; }
+  if (rec) { rec.recorder.stop(); rec = null; }
+  closeMic();
   try { await api(`/practice/${P.id}/finish`, { method: 'POST' }); } catch {}
   renderDone(null);
 }
 
 function renderDone(t) {
+  closeMic();
   const feedback = t?.lines?.filter((l) => l.kind === 'feedback').map((l) => l.text) || [];
   P = null;
   mount(

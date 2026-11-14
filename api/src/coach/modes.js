@@ -563,6 +563,11 @@ export const STEP_SKILLS = {
     when: 'before', // Buddy says the step, asks the question, then the learner does it
     question: () => 'What did I ask you to do?',
     clues: (s) => ['Think about what I just said.', `Here it is again. ${s.text}`, 'Look at the screen.', `I asked you to ${lowerFirst(firstSentence(s.text))}`],
+    // Learn the steps: Buddy has shown every step first, then asks about each one by number.
+    learn: {
+      question: (s, i) => `What did step ${i + 1} ask you to do?`,
+      clues: (s, i) => ['Think back to the movie in your mind.', `It starts like this: ${firstWords(s.text, 3)}\u2026`, 'Look at the picture.', `Step ${i + 1} was: ${s.text}`],
+    },
   },
   memory: {
     label: 'Memory',
@@ -570,6 +575,10 @@ export const STEP_SKILLS = {
     when: 'before', // Buddy asks for the step before saying it
     question: (s, i) => (i === 0 ? 'What is the first thing you need to do?' : 'What do you need to do next?'),
     clues: (s, i, prev) => [i === 0 ? 'Think about how this task starts.' : `Think about what you just did: ${lowerFirst(firstSentence(prev?.text || 'the last step'))}.`, `It starts like this: ${firstWords(s.text, 3)}…`, 'Look at the screen.', `The next step is: ${s.text}`],
+    learn: {
+      question: (s, i) => `What is step ${i + 1}?`,
+      clues: (s, i, prev) => [i === 0 ? 'Think about how this task starts.' : `Think about step ${i}: ${lowerFirst(firstSentence(prev?.text || 'the step before'))}.`, `It starts like this: ${firstWords(s.text, 3)}\u2026`, 'Look at the picture.', `Step ${i + 1} is: ${s.text}`],
+    },
   },
   expressive: {
     label: 'Expressive language',
@@ -577,6 +586,10 @@ export const STEP_SKILLS = {
     when: 'after',
     question: () => 'Tell me what you just did.',
     clues: (s) => ['Think about what your hands did.', 'Start with: I…', 'Look at the screen. What did you do?', `You could say: I ${lowerFirst(firstSentence(s.text))}`],
+    learn: {
+      question: (s, i) => `Tell me how you would do step ${i + 1}.`,
+      clues: (s) => ['Think about what your hands would do.', 'Start with: I would\u2026', 'Look at the picture. What would you do?', `You could say: I would ${lowerFirst(firstSentence(s.text))}`],
+    },
   },
   reasoning: {
     label: 'Reasoning',
@@ -584,6 +597,10 @@ export const STEP_SKILLS = {
     when: 'after',
     question: () => 'Why do we do that step?',
     clues: (s) => ['Think about what would happen if you skipped it.', 'It helps because…', 'Look at the screen. What does that step help with?', 'One reason is that it makes the next step easier.'],
+    learn: {
+      question: (s, i) => `Why do we do step ${i + 1}?`,
+      clues: () => ['Think about what would happen if you skipped it.', 'It helps because\u2026', 'Look at the picture. What does that step help with?', 'One reason is that it makes the next step easier.'],
+    },
   },
   independence: {
     label: 'Checking my own work',
@@ -591,6 +608,10 @@ export const STEP_SKILLS = {
     when: 'after',
     question: () => 'How do you know that step is finished?',
     clues: () => ['Look at what you have done.', 'What should it look like now?', 'Look at the screen. Does yours look like this?', 'I know it is finished because it looks like the picture.'],
+    learn: {
+      question: (s, i) => `How would you know step ${i + 1} is finished?`,
+      clues: () => ['Think about what it should look like.', 'What should it look like when it\u2019s done?', 'Look at the picture. What should it look like?', 'I would know it is finished because it looks like the picture.'],
+    },
   },
 };
 export const STEP_LEVELS = ['broad clue', 'specific clue', 'visual support', 'model'];
@@ -600,9 +621,14 @@ function firstSentence(t) { return String(t || '').split(/(?<=[.!?])\s/)[0].repl
 function firstWords(t, n) { return String(t || '').split(/\s+/).slice(0, n).join(' ').replace(/[.,;:!?]+$/, ''); }
 function lowerFirst(t) { const x = String(t || ''); return /^[A-Z][a-z]/.test(x) && !/^I\b/.test(x) ? x[0].toLowerCase() + x.slice(1) : x; }
 /** The question, example answer, clues and model for one step under the activity's chosen skill. Team wording wins. */
+// How Buddy runs a task: learn (show every step, then ask about each by number; the default),
+// practice (do it for real: Buddy says each step and the learner presses Done) or independence.
+export const STEP_RUNS = ['learn', 'practice', 'independence'];
+export const stepRunOf = (activity) => (STEP_RUNS.includes(activity?.content?.run) ? activity.content.run : 'learn');
 export function stepCoach(activity, item, i) {
   const skill = stepSkillOf(activity);
-  const k = STEP_SKILLS[skill];
+  const k0 = STEP_SKILLS[skill];
+  const k = stepRunOf(activity) === 'learn' ? { ...k0, ...k0.learn, when: 'learn' } : k0;
   const steps = item.steps || [];
   const s = steps[i] || {};
   const own = s.q?.[skill] || {};

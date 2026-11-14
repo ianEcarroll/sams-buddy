@@ -424,3 +424,5 @@ details.layer > summary small, details.fine-tune > summary small { font-weight: 
 @media (max-width: 560px) { .step-move { flex-direction: row; } }
 .step-row .q-fields, .step-row .grid2 > * { min-width: 0; }
 .step-row input, .step-row textarea { box-sizing: border-box; }
+.step-list li[data-now="true"] { border-color: #3f7a1f; box-shadow: 0 0 0 4px #e5f2dc; }
+@media (prefers-reduced-motion: no-preference) { .step-list li { transition: box-shadow .2s, border-color .2s; } }

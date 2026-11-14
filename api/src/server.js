@@ -362,7 +362,7 @@ async function ensureStarterSteps(learnerId) {
   const l = await one('select settings from learners where id=$1', [learnerId]);
   if (!l || l.settings?.steps_seeded) return;
   for (const a of STARTER_STEPS) {
-    await q("insert into activities(learner_id, mode, title, goal, plan_goal, status, content) values ($1,'steps',$2,$3,'instructions','draft',$4)", [learnerId, a.title, a.goal, { items: a.items, skill: 'understanding', run: 'practice' }]);
+    await q("insert into activities(learner_id, mode, title, goal, plan_goal, status, content) values ($1,'steps',$2,$3,'instructions','draft',$4)", [learnerId, a.title, a.goal, { items: a.items, skill: 'understanding', run: 'learn' }]);
   }
   const modes = settingsOf(l).enabled_modes;
   await q('update learners set settings = settings || $1::jsonb where id=$2', [{ steps_seeded: true, enabled_modes: modes.includes('steps') ? modes : [...modes, 'steps'] }, learnerId]);
@@ -444,7 +444,7 @@ adult.delete('/activities/:id', wrap(async (req, res) => {
 }));
 adult.get('/modes', (req, res) => {
   const extra = {
-    steps: { skills: Object.fromEntries(Object.entries(STEP_SKILLS).map(([k, v]) => [k, { label: v.label, goal: v.goal, when: v.when, question: v.question({ text: '' }, 1) }])), levels: STEP_LEVELS },
+    steps: { skills: Object.fromEntries(Object.entries(STEP_SKILLS).map(([k, v]) => [k, { label: v.label, goal: v.goal, when: v.when, question: v.question({ text: '' }, 1), learnQuestion: v.learn.question({ text: '' }, 0) }])), levels: STEP_LEVELS },
     follow: { objects: Object.entries(FOLLOW_OBJECTS).map(([k, o]) => ({ id: `obj-${k}`, name: o.name, img: `/symbols/${o.file}.svg` })) } };
   res.json(Object.fromEntries(Object.entries(MODES).map(([k, m]) => [k, { label: m.label, tagline: m.tagline, activityName: m.activityName, defaultGoal: m.defaultGoal, defaultCues: m.defaultCues, ...(extra[k] || {}) }])));
 });
@@ -501,11 +501,11 @@ adult.post('/test-answer', wrap(async (req, res) => {
 // Task Buddy editor: "Draft questions with Buddy" for the chosen skill. Only drafts; the team edits and saves.
 adult.post('/steps/draft', wrap(async (req, res) => {
   if (!process.env.ANTHROPIC_API_KEY || process.env.JUDGE === 'keyword') return res.status(503).json({ error: 'Drafting needs Claude, which isn\u2019t set up. Buddy\u2019s own questions are used for any step left blank.' });
-  const { task = '', steps = [], skill } = req.body || {};
+  const { task = '', steps = [], skill, run } = req.body || {};
   const l = await one('select birth_year from learners where id=$1', [req.learnerId]);
   const drafts = await draftStepQuestions({
     apiKey: process.env.ANTHROPIC_API_KEY, model: modelsFromEnv().main, workspaceId: process.env.ANTHROPIC_WORKSPACE_ID,
-    task: String(task).slice(0, 120), steps: (Array.isArray(steps) ? steps : []).map((x) => String(x || '').slice(0, 400)), skill: String(skill || ''), learner: { age: ageFrom(l?.birth_year) },
+    task: String(task).slice(0, 120), steps: (Array.isArray(steps) ? steps : []).map((x) => String(x || '').slice(0, 400)), skill: String(skill || ''), run: ['learn', 'practice', 'independence'].includes(run) ? run : 'learn', learner: { age: ageFrom(l?.birth_year) },
   });
   res.json({ drafts });
 }));
