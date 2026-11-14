@@ -8,7 +8,8 @@ import { transcribe, speak, voiceEnabled, listVoices, defaultVoiceId, setSpeechS
 import { pgSpeechStore, pruneSpeech } from './speechStore.js';
 import { createSession, respond, confirmHeard, control, act, finish, previewLines, ENGINE_DEFAULTS } from './coach/engine.js';
 import { judgeFromEnv, modelsFromEnv } from './coach/judge.js';
-import { MODES, STARTER_STORIES, STARTER_SCENARIOS, STARTER_EXPLAIN, STARTER_FOLLOW, STARTER_OBJECTS, FOLLOW_OBJECTS, isFollowToken, FOLLOW_STEP_TYPES, FOLLOW_BOXES, stampMemories } from './coach/modes.js';
+import { draftStepQuestions } from './coach/draft.js';
+import { MODES, STARTER_STORIES, STARTER_SCENARIOS, STARTER_EXPLAIN, STARTER_FOLLOW, STARTER_OBJECTS, STARTER_STEPS, STEP_SKILLS, STEP_LEVELS, FOLLOW_OBJECTS, isFollowToken, FOLLOW_STEP_TYPES, FOLLOW_BOXES, stampMemories } from './coach/modes.js';
 import { PLAN_GOALS, GOAL_KEYS, SUPPORT_CODES } from './coach/goals.js';
 import { emailEnabled, sendEmail, recipientsFor, practiceEmail, resetEmail } from './email.js';
 import { isPlatformAdmin, newInviteToken, INVITE_DAYS, estimateCost, ratesFor, validateFamily, ageFrom, cleanInterests } from './families.js';
@@ -42,7 +43,7 @@ export const SETTING_DEFAULTS = {
   reminder_time: '',          // 'HH:MM' in the learner's time zone; '' = no reminder
   timezone: 'Europe/Paris',
   voice_id: null,
-  enabled_modes: ['story', 'object', 'task', 'listen', 'think', 'recall', 'explain', 'follow'],
+  enabled_modes: ['story', 'object', 'task', 'listen', 'think', 'recall', 'explain', 'follow', 'steps'],
   interests: [],              // the child's interests and activities, used by Buddy in conversation
 };
 const SETTING_KEYS = Object.keys(SETTING_DEFAULTS);
@@ -66,7 +67,7 @@ const SYMBOL_ID = /^sym:[a-z0-9-]{1,80}$/;
 const isSymbol = (id) => SYMBOL_ID.test(String(id));
 const imageUrl = (id) => (isSymbol(id) ? `/symbols/${String(id).slice(4)}.svg` : `/api/images/${id}?s=${hmac(id)}`);
 // Every picture an activity item uses: its own, a story's sequence, and Memory Buddy's photo clues.
-const imageIdsOf = (it) => [it?.image_id, ...(it?.image_ids || []), ...(it?.memories || []).map((m) => m?.image_id)].filter(Boolean);
+const imageIdsOf = (it) => [it?.image_id, ...(it?.image_ids || []), ...(it?.memories || []).map((m) => m?.image_id), ...(it?.steps || []).map((x) => x?.image_id)].filter(Boolean);
 
 app.get('/api/health', (req, res) => res.json({ ok: true, voice: voiceEnabled(), judge: process.env.ANTHROPIC_API_KEY ? 'claude' : 'keyword' }));
 
@@ -355,7 +356,18 @@ async function ensureStarterObjects(learnerId) {
   // Describe a Picture is already on by default; a family that turned it off keeps it off.
   await q('update learners set settings = settings || $1::jsonb where id=$2', [{ object_seeded: true }, learnerId]);
 }
-const ensureStarters = async (learnerId) => { await ensureStarterStories(learnerId); await ensureStarterScenarios(learnerId); await ensureRecallEnabled(learnerId); await ensureStarterExplain(learnerId); await ensureStarterFollow(learnerId); await ensureStarterObjects(learnerId); };
+// Task Buddy: five ready-made everyday tasks (Mulberry Symbols). Added once, as drafts, so the therapist can check
+// the steps and questions first; Task Buddy is switched on once for existing families.
+async function ensureStarterSteps(learnerId) {
+  const l = await one('select settings from learners where id=$1', [learnerId]);
+  if (!l || l.settings?.steps_seeded) return;
+  for (const a of STARTER_STEPS) {
+    await q("insert into activities(learner_id, mode, title, goal, plan_goal, status, content) values ($1,'steps',$2,$3,'instructions','draft',$4)", [learnerId, a.title, a.goal, { items: a.items, skill: 'understanding', run: 'practice' }]);
+  }
+  const modes = settingsOf(l).enabled_modes;
+  await q('update learners set settings = settings || $1::jsonb where id=$2', [{ steps_seeded: true, enabled_modes: modes.includes('steps') ? modes : [...modes, 'steps'] }, learnerId]);
+}
+const ensureStarters = async (learnerId) => { await ensureStarterStories(learnerId); await ensureStarterScenarios(learnerId); await ensureRecallEnabled(learnerId); await ensureStarterExplain(learnerId); await ensureStarterFollow(learnerId); await ensureStarterObjects(learnerId); await ensureStarterSteps(learnerId); };
 
 function validateActivity(b) {
   if (!MODES[b.mode]) return 'Choose a practice type.';
@@ -380,6 +392,12 @@ function validateActivity(b) {
     }
     if (b.mode === 'think' && (!it.scenario?.trim() || !it.problem?.trim())) return `Situation ${i + 1}: describe the situation and what is unexpected about it.`;
     if (b.mode === 'conversation' && (!it.topic || !it.opener)) return `Topic ${i + 1}: add the topic and Buddy's opening line.`;
+    if (b.mode === 'steps') {
+      const n = (it.steps || []).filter((x) => String(x?.text || '').trim()).length;
+      if (!String(it.title || '').trim()) return `Task ${i + 1}: give the task a name, e.g. "Fold a jumper".`;
+      if (n < 2) return `Task ${i + 1}: add at least two steps.`;
+      if (n > 12) return `Task ${i + 1}: keep it to 12 steps or fewer. Split a long task into two.`;
+    }
     if (b.mode === 'listen') {
       if (!it.story?.trim()) return `Story ${i + 1}: write the story Buddy will read.`;
       const qs = (it.questions || []).filter((x) => x?.question?.trim());
@@ -425,7 +443,9 @@ adult.delete('/activities/:id', wrap(async (req, res) => {
   res.json({ ok: true });
 }));
 adult.get('/modes', (req, res) => {
-  const extra = { follow: { objects: Object.entries(FOLLOW_OBJECTS).map(([k, o]) => ({ id: `obj-${k}`, name: o.name, img: `/symbols/${o.file}.svg` })) } };
+  const extra = {
+    steps: { skills: Object.fromEntries(Object.entries(STEP_SKILLS).map(([k, v]) => [k, { label: v.label, goal: v.goal, when: v.when, question: v.question({ text: '' }, 1) }])), levels: STEP_LEVELS },
+    follow: { objects: Object.entries(FOLLOW_OBJECTS).map(([k, o]) => ({ id: `obj-${k}`, name: o.name, img: `/symbols/${o.file}.svg` })) } };
   res.json(Object.fromEntries(Object.entries(MODES).map(([k, m]) => [k, { label: m.label, tagline: m.tagline, activityName: m.activityName, defaultGoal: m.defaultGoal, defaultCues: m.defaultCues, ...(extra[k] || {}) }])));
 });
 // "Buddy will say…" in the activity editor: the opening lines for one item, from the real engine,
@@ -477,6 +497,17 @@ adult.post('/test-answer', wrap(async (req, res) => {
   const item = { question: String(q.question).slice(0, 300), answers: Array.isArray(q.answers) ? q.answers.map(String).slice(0, 20) : [], kind: q.kind === 'title' ? 'title' : undefined, story: String(story).slice(0, MAX_LISTEN_CHARS), clarify_phrases: [] };
   const j = await judge({ mode: 'listen', item, elements: ['answer'], text, activity: { content: {} }, history: [], learner: { name: l.name, age: ageFrom(l.birth_year), interests: settingsOf(l).interests } });
   res.json({ correct: !!j.met.answer, evidence: typeof j.met.answer === 'string' && j.met.answer !== '(supplied)' ? j.met.answer : null, help: j.help && j.help !== 'none' ? j.help : null, checker: judgeKind() });
+}));
+// Task Buddy editor: "Draft questions with Buddy" for the chosen skill. Only drafts; the team edits and saves.
+adult.post('/steps/draft', wrap(async (req, res) => {
+  if (!process.env.ANTHROPIC_API_KEY || process.env.JUDGE === 'keyword') return res.status(503).json({ error: 'Drafting needs Claude, which isn\u2019t set up. Buddy\u2019s own questions are used for any step left blank.' });
+  const { task = '', steps = [], skill } = req.body || {};
+  const l = await one('select birth_year from learners where id=$1', [req.learnerId]);
+  const drafts = await draftStepQuestions({
+    apiKey: process.env.ANTHROPIC_API_KEY, model: modelsFromEnv().main, workspaceId: process.env.ANTHROPIC_WORKSPACE_ID,
+    task: String(task).slice(0, 120), steps: (Array.isArray(steps) ? steps : []).map((x) => String(x || '').slice(0, 400)), skill: String(skill || ''), learner: { age: ageFrom(l?.birth_year) },
+  });
+  res.json({ drafts });
 }));
 adult.get('/goals', (req, res) => res.json({ goals: PLAN_GOALS, codes: SUPPORT_CODES }));
 
@@ -669,7 +700,10 @@ async function deliver(sid, state, turn) {
     lines.push({ ...l, id: e.id, audio: voiceEnabled() ? `/api/device/practice/${sid}/speech/${e.id}` : null });
   }
   await q('update practice_sessions set state=$1 where id=$2', [state, sid]);
-  return { ...turn, sessionId: sid, lines, ui: { ...turn.ui, images: turn.ui.images.map(imageUrl) } };
+  const ui = { ...turn.ui, images: turn.ui.images.map(imageUrl) };
+  // Task Buddy's step list (Independence mode help) carries its own pictures.
+  if (ui.stepList) ui.stepList = ui.stepList.map((x) => ({ ...x, image: x.image ? imageUrl(x.image) : null }));
+  return { ...turn, sessionId: sid, lines, ui };
 }
 
 // The UI state for a turn Buddy builds itself (e.g. after a speech-to-text failure).
