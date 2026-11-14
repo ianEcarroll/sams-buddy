@@ -13,14 +13,14 @@ const STEPS = [
   { text: 'Fold both sleeves across the middle.', image_id: 'sym:fold-clothes-to' },
   { text: 'Fold the bottom up towards the neck.', image_id: 'sym:fold-clothes-to' },
 ];
-const act = (content = {}) => ({ id: 's1', mode: 'steps', title: 'Fold a jumper', plan_goal: 'instructions', content: { items: [{ title: 'Fold a jumper', steps: structuredClone(STEPS) }], ...content } });
+const act = (content = {}) => ({ id: 's1', mode: 'steps', title: 'Fold a jumper', plan_goal: 'instructions', content: { items: [{ title: 'Fold a jumper', steps: structuredClone(STEPS) }], run: 'practice', ...content } });
 const start = (content) => createSession({ activity: act(content), learnerName: 'Sam', settings: { explain_buttons: false } });
 
 test('understanding (default): step, then the question, then "Now do it" and the Done button', async () => {
   const { state, turn } = start();
   const t = texts(turn);
   assert.equal(t[0], "Today's task is: Fold a jumper. We'll do it one step at a time. After each step, press Done.");
-  assert.equal(t[1], "Here's the first step.");
+  assert.equal(t[1], 'Step 1.');
   assert.equal(t[2], STEPS[0].text);
   assert.equal(t[3], 'What did I ask you to do?');
   assert.equal(turn.expect, 'response');
@@ -32,7 +32,7 @@ test('understanding (default): step, then the question, then "Now do it" and the
   assert.deepEqual(texts(t2), ["That's right.", "Now do it, and press Done when you've finished."]);
   assert.equal(t2.expect, 'done');
   ({ turn: t2 } = control(state, 'step_done'));
-  assert.equal(texts(t2)[0], 'On to the next step.');
+  assert.equal(texts(t2)[0], 'Step 2.');
   assert.equal(texts(t2)[1], STEPS[1].text);
 });
 
@@ -43,7 +43,7 @@ test('the whole task: last step lead, then "tell me all the steps", then a recor
   for (let i = 0; i < 3; i += 1) {
     ({ turn } = await say(state, answers[i]));
     ({ turn } = control(state, 'step_done'));
-    if (i === 1) assert.equal(texts(turn)[0], "And here's the last step.");
+    if (i === 1) assert.equal(texts(turn)[0], 'Step 3, the last step.');
   }
   assert.deepEqual(texts(turn), ["You've done all the steps.", 'Now tell me all the steps you followed, from beginning to end.']);
   ({ turn } = await say(state, 'First I put the jumper on the table, then the sleeves across the middle, then the bottom up to the neck'));
@@ -53,8 +53,8 @@ test('the whole task: last step lead, then "tell me all the steps", then a recor
   assert.equal(r.item_label, 'Fold a jumper');
   assert.equal(r.support_code, 'I');
   assert.equal(r.score_first, 3); assert.equal(r.score_total, 3);
-  assert.match(r.review_note, /Practice mode, practising understanding\./);
-  assert.match(r.review_note, /Explained 3 of 3 steps from beginning to end, in order\./);
+  assert.match(r.review_note, /Do it for real, practising understanding\./);
+  assert.match(r.review_note, /Told 3 of 3 steps from beginning to end, in order\./);
   assert.equal(r.success, true);
 });
 
@@ -101,7 +101,7 @@ test('expressive: do the step first, press Done, then "Tell me what you just did
   assert.deepEqual(texts(t2), ['Tell me what you just did.']);
   const { turn: t3 } = await say(state, 'I put the jumper on the table and smoothed it');
   assert.equal(texts(t3)[0], "That's right.");
-  assert.equal(texts(t3)[1], 'On to the next step.');
+  assert.equal(texts(t3)[1], 'Step 2.');
 });
 
 test('Help me while doing a step: the step goes up on screen and is recorded as visual support', async () => {
@@ -161,10 +161,13 @@ test('retell missing steps: one cue, then thanks', async () => {
   const { state } = start({ ask_steps: false });
   for (let i = 0; i < 3; i += 1) control(state, 'step_done');
   let { turn } = await say(state, 'the sleeves');
-  assert.equal(texts(turn)[0], 'Think about the very first thing you did.');
+  assert.equal(texts(turn)[0], 'Think about the very first thing.');
   ({ turn } = await say(state, 'I put the jumper on the table'));
-  assert.equal(texts(turn)[0], 'Thanks for telling me the steps you remembered.');
-  assert.match(state.completed[0].review_note, /Explained 2 of 3 steps .*with one cue\./);
+  // Still one missing: a stronger clue (the missing step's opening words), then an honest ending.
+  assert.equal(texts(turn)[0], 'Step 3 starts like this: Fold the bottom\u2026');
+  ({ turn } = await say(state, 'um'));
+  assert.equal(texts(turn)[0], 'Thanks. You told me 2 of the 3 steps.');
+  assert.match(state.completed[0].review_note, /Told 2 of 3 steps .*with a clue\./);
 });
 
 test("the team's own question, clues and model for the chosen skill replace Buddy's", () => {
@@ -187,14 +190,90 @@ test('basic checker for step answers', () => {
   assert.ok(j('independence', 'it looks like the picture'));
 });
 
-test('the five starter tasks start with "Here\'s the first step." and use symbols', () => {
+test('the five starter tasks open with the walk-through and use symbols', () => {
   assert.equal(STARTER_STEPS.length, 5);
   for (const a of STARTER_STEPS) {
     const { turn } = createSession({ activity: { id: 'x', mode: 'steps', title: a.title, content: { items: a.items, skill: 'understanding' } }, settings: { explain_buttons: false } });
-    assert.ok(texts(turn).includes("Here's the first step."), a.title);
+    assert.ok(texts(turn).includes('Make a movie in your mind.'), a.title);
     assert.ok(a.items[0].steps.every((x) => /^sym:[a-z0-9-]+$/.test(x.image_id)), a.title);
   }
   const jumper = STARTER_STEPS[0].items[0].steps;
   assert.equal(jumper.length, 7);
   assert.equal(jumper[5].q.understanding.model, 'The jumper is size M, so it goes in the M basket.');
+});
+
+// ---- Learn the steps (the default): walk-through with pictures, then questions by number, no Done button.
+const learn = (content) => createSession({ activity: act({ run: 'learn', ...content }), learnerName: 'Sam', settings: { explain_buttons: false } });
+
+test('learn: "Make a movie in your mind", every step by number with its picture, then I\'m ready', () => {
+  const { state, turn } = learn();
+  const t = texts(turn);
+  assert.deepEqual(t.slice(0, 6), ["Today's task is: Fold a jumper.", 'Make a movie in your mind.', 'Listen to all 3 steps first.',
+    `Step 1. ${STEPS[0].text}`, `Step 2. ${STEPS[1].text}`, `Step 3. ${STEPS[2].text}`]);
+  assert.equal(turn.expect, 'ready');
+  assert.equal(turn.ui.stepList.length, 3);
+  assert.equal(turn.ui.stepList[1].image, 'sym:fold-clothes-to');
+  assert.equal(turn.lines.find((l) => l.text.startsWith('Step 2.')).step, 1);
+  assert.equal(state.item.steps.phase, 'walk');
+});
+
+test('learn: after I\'m ready the screen clears and Buddy asks by number; no Done button', async () => {
+  const { state } = learn({ skill: 'memory' });
+  let { turn } = control(state, 'start_questions');
+  assert.deepEqual(texts(turn), ["Let's see what you remember.", 'What is step 1?']);
+  assert.equal(turn.expect, 'response');
+  assert.equal(turn.ui.stepList, null);
+  assert.deepEqual(turn.ui.images, []);
+  assert.equal(turn.ui.step.text, null);
+  ({ turn } = await say(state, 'put the jumper on the table'));
+  assert.deepEqual(texts(turn), ["That's right.", 'What is step 2?']);
+  assert.notEqual(turn.expect, 'done');
+});
+
+test('learn: the team\'s own question gets a "Step N." lead; visual support is the picture only', async () => {
+  const a = act({ run: 'learn' });
+  a.content.items[0].steps[0].q = { understanding: { question: 'Where should you put the jumper?' } };
+  const { state } = createSession({ activity: a, learnerName: 'Sam', settings: { explain_buttons: false } });
+  let { turn } = control(state, 'start_questions');
+  assert.deepEqual(texts(turn).slice(1), ['Step 1.', 'Where should you put the jumper?']);
+  ({ turn } = await say(state, 'no idea really'));
+  ({ turn } = await say(state, 'no idea really'));
+  ({ turn } = await say(state, 'no idea really'));
+  assert.equal(texts(turn)[0], 'Look at the picture.');
+  assert.deepEqual(turn.ui.images, ['sym:jumper']);
+  assert.equal(turn.ui.step.text, null);
+});
+
+test('learn: an honest summary at the end, with no "tell me all the steps" unless switched on', async () => {
+  const { state } = learn({ skill: 'memory' });
+  control(state, 'start_questions');
+  await say(state, 'put the jumper on the table');
+  await say(state, 'no idea really');
+  await say(state, 'fold both sleeves across');
+  const { turn } = await say(state, 'fold the bottom up');
+  const t = texts(turn);
+  assert.ok(t.includes("That's all 3 steps. You answered 2 on your own and 1 with some help."), t.join(' | '));
+  assert.ok(!t.some((x) => /tell me all the steps/i.test(x)));
+  assert.match(state.completed[0].review_note, /^Learn the steps, practising memory\./);
+});
+
+test('practice mode: the step\'s words are not captioned when its question follows straight away', () => {
+  const { turn } = start();
+  assert.equal(turn.lines.find((l) => l.text === STEPS[0].text).noCaption, true);
+});
+
+test('telling the steps: help gets stronger each time instead of repeating the same clue', () => {
+  const { state } = start({ ask_steps: false });
+  for (let i = 0; i < 3; i += 1) control(state, 'step_done');
+  assert.equal(texts(control(state, 'dont_understand').turn)[0], 'Think about the very first thing.');
+  assert.equal(texts(control(state, 'hint').turn)[0], 'Step 1 starts like this: Put the jumper…');
+  assert.match(texts(control(state, 'hint').turn)[0], /^First, put the jumper on the table\. Then, fold both sleeves/);
+});
+
+test('telling the steps: "every step" after a clue is not praised as on their own', async () => {
+  const { state } = start({ ask_steps: false });
+  for (let i = 0; i < 3; i += 1) control(state, 'step_done');
+  await say(state, 'fold both sleeves across the middle and fold the bottom up towards the neck');
+  const { turn } = await say(state, 'I put the jumper on the table');
+  assert.equal(texts(turn)[0], 'You told me every step, with a clue.');
 });

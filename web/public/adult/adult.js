@@ -534,13 +534,19 @@ function editActivity(root, a) {
   const SK = modes.steps?.skills || {};
   const stepSkill = h('select', {}, Object.entries(SK).map(([k, v]) => h('option', { value: k, selected: (content.skill || 'understanding') === k }, v.label)));
   const skillHint = h('small', { class: 'muted' });
-  const drawSkillHint = () => { const k = SK[stepSkill.value]; if (k) skillHint.textContent = `${k.goal}. Buddy asks ${k.when === 'before' ? 'before' : 'after'} ${name} does each step, e.g. \u201c${k.question}\u201d`; };
-  drawSkillHint();
   const stepRun = h('select', {},
-    [['practice', 'Practice: Buddy says each step'], ['independence', 'Independence: do all the steps on their own']]
-      .map(([v, l]) => h('option', { value: v, selected: (content.run || 'practice') === v }, l)));
+    [['learn', 'Learn the steps: Buddy shows them all, then asks about each one'], ['practice', 'Do it for real: press Done after each step'], ['independence', 'Independence: do all the steps on their own']]
+      .map(([v, l]) => h('option', { value: v, selected: (content.run || 'learn') === v }, l)));
+  const drawSkillHint = () => {
+    const k = SK[stepSkill.value]; if (!k) return;
+    skillHint.textContent = stepRun.value === 'learn'
+      ? `${k.goal}. Buddy goes through all the steps with their pictures first, then asks about each one, e.g. \u201c${k.learnQuestion}\u201d`
+      : `${k.goal}. Buddy asks ${k.when === 'before' ? 'before' : 'after'} ${name} does each step, e.g. \u201c${k.question}\u201d`;
+  };
+  drawSkillHint();
   const askSteps = h('input', { type: 'checkbox', checked: content.ask_steps !== false });
-  const askEnd = h('input', { type: 'checkbox', checked: content.ask_end !== false });
+  // "Tell me all the steps" at the end: off by default when learning the steps (the questions already go through them).
+  const askEnd = h('input', { type: 'checkbox', checked: (content.run || 'learn') === 'learn' ? content.ask_end === true : content.ask_end !== false });
 
   const itemsBox = h('div', {});
   const ctx = () => ({ organiser: organiser.value, practise_questions: practiseQ.checked,
@@ -549,7 +555,7 @@ function editActivity(root, a) {
   drawItems();
   // The step questions shown in each task follow the chosen skill, so redraw them when it changes.
   stepSkill.addEventListener('change', () => { drawSkillHint(); drawItems(); });
-  stepRun.addEventListener('change', drawItems);
+  stepRun.addEventListener('change', () => { drawSkillHint(); drawItems(); });
 
   // Cue ladders: prefilled with the defaults; saved only if changed.
   const cueInputs = {};
@@ -576,8 +582,8 @@ function editActivity(root, a) {
           h('br'), h('small', { class: 'muted' }, `${name} hears the question\u2019s clue and has one more try, instead of waiting for the end. Counts as support. Check with ${name}\u2019s speech therapist before turning on.`))) : null,
         a.mode === 'listen' ? field('Retries at the missed questions', listenRetries, `After the questions, Buddy offers ${name} another go at the ones they missed: with the story read again, or straight to the questions.`) : null,
         a.mode === 'steps' ? h('div', { class: 'field' }, field('Skill to practise', stepSkill), skillHint) : null,
-        a.mode === 'steps' ? field('How Buddy runs it', stepRun, `Start with Practice. In Independence, ${name} can press Help to see all the steps.`) : null,
-        a.mode === 'steps' ? h('label', { class: 'switch' }, askSteps, h('span', {}, 'Ask a question at each step', h('br'), h('small', { class: 'muted' }, 'Off: Buddy just gives the steps one at a time.'))) : null,
+        a.mode === 'steps' ? field('How Buddy runs it', stepRun, `Learn the steps needs nothing but the screen. Use Do it for real when ${name} has the things to hand. In Independence, ${name} can press Help to see all the steps.`) : null,
+        a.mode === 'steps' ? h('label', { class: 'switch' }, askSteps, h('span', {}, 'Ask a question at each step', h('br'), h('small', { class: 'muted' }, 'Off: Buddy just goes through the steps.'))) : null,
         a.mode === 'steps' ? h('label', { class: 'switch' }, askEnd, h('span', {}, 'At the end, ask for all the steps in order', h('br'), h('small', { class: 'muted' }, `${name} tells Buddy how they did the task.`))) : null,
         a.mode === 'story' ? field('Story organiser on screen', organiser, `Fade it out as ${name} gets more independent: from the start → only if stuck → off.`) : null),
       goalLine, goalPicker),
@@ -824,8 +830,9 @@ function stepsEditor(it, urls, ctx) {
   const list = h('div', { class: 'q-list' });
   const note = h('p', { class: 'muted', 'aria-live': 'polite' });
   const draw = () => {
-    const { skill = 'understanding', ask_steps = true } = ctx();
+    const { skill = 'understanding', ask_steps = true, run: how = 'learn' } = ctx();
     const k = SK[skill] || {};
+    const learnQ = (i) => (k.learnQuestion || '').replace(/step 1\b/, `step ${i + 1}`);
     list.replaceChildren(...it.steps.map((st, i) => {
       const q = (st.q = st.q || {})[skill] = st.q[skill] || {};
       const qf = (key, label, hint) => field(label, bind(q, key, h('input')), hint);
@@ -835,7 +842,7 @@ function stepsEditor(it, urls, ctx) {
         field('Picture (optional)', imagePicker(st, 'image_id', urls, false)),
         ask_steps ? h('details', { class: 'fine-tune', open: own || null }, h('summary', {}, `Buddy\u2019s question: ${k.label || ''} `, h('small', { class: 'muted' }, own ? '(your wording)' : '(blank = Buddy\u2019s own)')),
           h('div', { class: 'layer-body' },
-            h('div', { class: 'grid2' }, qf('question', 'Question', `Blank = "${skill === 'memory' && i > 0 ? 'What do you need to do next?' : k.question || ''}"`), qf('answer', 'A good answer', skill === 'memory' || skill === 'understanding' ? 'Blank = the step itself' : 'Used to check the answer and for the model')),
+            h('div', { class: 'grid2' }, qf('question', 'Question', `Blank = "${how === 'learn' ? learnQ(i) : skill === 'memory' && i > 0 ? 'What do you need to do next?' : k.question || ''}"`), qf('answer', 'A good answer', skill === 'memory' || skill === 'understanding' ? 'Blank = the step itself' : 'Used to check the answer and for the model')),
             h('div', { class: 'grid2' }, qf('clue', 'Clue', 'Specific, without giving the answer'), qf('model', 'Model answer', 'The full answer Buddy says last'))))
           : null),
         h('div', { class: 'step-move' },
@@ -849,12 +856,12 @@ function stepsEditor(it, urls, ctx) {
   const addBtn = h('button', { type: 'button', class: 'btn', onclick: () => { it.steps.push({ text: '' }); draw(); } }, 'Add a step');
   // Buddy drafts a question, answer, clue and model for every step, for the chosen skill. Fills only blank boxes.
   const draftBtn = h('button', { type: 'button', class: 'btn', onclick: run(async () => {
-    const { skill = 'understanding' } = ctx();
+    const { skill = 'understanding', run: how = 'learn' } = ctx();
     const texts = it.steps.map((x) => x.text || '');
     if (texts.filter((x) => x.trim()).length < 2) { toast('Write at least two steps first.'); return; }
     draftBtn.disabled = true; note.textContent = 'Buddy is drafting the questions\u2026';
     try {
-      const r = await api('/adult/steps/draft', { method: 'POST', body: { task: it.title || '', steps: texts, skill } });
+      const r = await api('/adult/steps/draft', { method: 'POST', body: { task: it.title || '', steps: texts, skill, run: how } });
       let n = 0;
       it.steps.forEach((st, i) => {
         const d = r.drafts[i]; if (!d || !texts[i].trim()) return;

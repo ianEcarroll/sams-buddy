@@ -6,7 +6,7 @@ import { STEP_SKILLS } from './modes.js';
 const MOMENT = { before: 'before the learner does the step (Buddy has just said it)', after: 'after the learner has done the step' };
 const MEMORY_MOMENT = 'before Buddy says the step, so the learner has to remember it';
 
-export async function draftStepQuestions({ apiKey, model, workspaceId, task, steps, skill, learner = {}, fetchImpl = fetch }) {
+export async function draftStepQuestions({ apiKey, model, workspaceId, task, steps, skill, run = 'learn', learner = {}, fetchImpl = fetch }) {
   const k = STEP_SKILLS[skill];
   if (!k) throw new Error('Choose a skill first.');
   const list = steps.map((s) => String(s || '').trim()).filter(Boolean).slice(0, 12);
@@ -39,10 +39,10 @@ export async function draftStepQuestions({ apiKey, model, workspaceId, task, ste
     `Task: ${task || 'an everyday task'}`,
     `Steps, in order:\n${list.map((s, i) => `${i + 1}. ${s}`).join('\n')}`,
     `Skill being practised: ${k.label}: ${k.goal}.`,
-    `Buddy asks each question ${skill === 'memory' ? MEMORY_MOMENT : MOMENT[k.when]}.`,
+    run === 'learn' ? 'Buddy has read out all the steps first; the learner is not doing the task, and answers each question from memory. Buddy says "Step N." before each question, so do not start the question with the step number.' : `Buddy asks each question ${skill === 'memory' ? MEMORY_MOMENT : MOMENT[k.when]}.`,
     `Write exactly ${list.length} entries, one per step, in order.`,
   ].join('\n\n');
-  const system = `You write coaching questions for TALVO, a speech and language practice app for ${who} who may be autistic or have a language disorder. They are doing a real task with their hands, one step at a time. Use plain, literal British English: short sentences, no idioms, no sarcasm, nothing babyish. Each question is about that one step only and has one clear, sensible answer. For Memory, ask what the step is (e.g. "What do you need to do next?"), never repeat the step itself in the question. For Understanding, ask about the key action or thing in the step Buddy just said. For Expressive language, ask them to tell you what they did. For Reasoning, ask why the step matters, or what to do if something goes wrong. For Checking my own work, ask how they know the step is finished. Clues must not give the whole answer. Always answer by calling the questions tool once.`;
+  const system = `You write coaching questions for TALVO, a speech and language practice app for ${who} who may be autistic or have a language disorder. They are doing a real task with their hands, one step at a time. Use plain, literal British English: short sentences, no idioms, no sarcasm, nothing babyish. Each question is about that one step only and has one clear, sensible answer. For Memory, ask what the step is (e.g. "What do you need to do next?" or, when learning the steps, "What do you do at this step?"), never repeat the step itself in the question. For Understanding, ask about the key action or thing in the step Buddy just said. For Expressive language, ask them to tell you what they did. For Reasoning, ask why the step matters, or what to do if something goes wrong. For Checking my own work, ask how they know the step is finished. Clues must not give the whole answer. Always answer by calling the questions tool once.`;
   const res = await fetchImpl('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: { 'content-type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', ...(workspaceId ? { 'anthropic-workspace-id': workspaceId } : {}) },
