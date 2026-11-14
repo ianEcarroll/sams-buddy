@@ -604,4 +604,14 @@ async function boot() {
   } catch (e) { if (token) mount(h('p', {}, e.message), h('button', { class: 'btn', onclick: boot }, 'Try again')); }
 }
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
-boot();
+// The fox stays for about two seconds when the app opens (a little less with Reduce Motion), or until tapped,
+// then fades to the first screen. Only on opening the app, not when coming back to home.
+const launch = document.getElementById('launch');
+function hideLaunch() {
+  if (!launch?.isConnected) return;
+  launch.style.opacity = '0';
+  setTimeout(() => launch.remove(), matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 400);
+}
+launch?.addEventListener('click', hideLaunch);
+const launchFor = matchMedia('(prefers-reduced-motion: reduce)').matches ? 1200 : 2200;
+Promise.all([boot().catch(() => {}), new Promise((r) => setTimeout(r, Math.max(0, launchFor - performance.now())))]).then(hideLaunch);
