@@ -426,3 +426,19 @@ details.layer > summary small, details.fine-tune > summary small { font-weight: 
 .step-row input, .step-row textarea { box-sizing: border-box; }
 .step-list li[data-now="true"] { border-color: #3f7a1f; box-shadow: 0 0 0 4px #e5f2dc; }
 @media (prefers-reduced-motion: no-preference) { .step-list li { transition: box-shadow .2s, border-color .2s; } }
+
+/* Task Buddy walk-through: the step being read is large; earlier steps shrink and fade a little */
+.step-list[data-walk="true"] li[data-now="true"] { font-size: 1.35rem; padding: 14px 16px; }
+.step-list[data-walk="true"] li[data-now="true"]:has(img) { grid-template-columns: 2.2em 120px 1fr; }
+.step-list[data-walk="true"] li[data-now="true"] img { width: 120px; height: 120px; }
+.step-list li[data-past="true"] { opacity: .6; font-size: 1rem; padding: 6px 10px; }
+.step-list li[data-past="true"]:has(img) { grid-template-columns: 2.2em 40px 1fr; }
+.step-list li[data-past="true"] img { width: 40px; height: 40px; }
+@media (prefers-reduced-motion: no-preference) {
+  .step-list li[data-now="true"] { animation: step-in .35s ease-out; }
+  @keyframes step-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+}
+@media (max-width: 560px) {
+  .step-list[data-walk="true"] li[data-now="true"]:has(img) { grid-template-columns: 2.2em 88px 1fr; font-size: 1.2rem; }
+  .step-list[data-walk="true"] li[data-now="true"] img { width: 88px; height: 88px; }
+}
