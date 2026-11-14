@@ -60,6 +60,9 @@ addEventListener('online', () => offlineScreen(false));
 
 const icon = (name) => h('span', { 'aria-hidden': 'true', html: ICONS[name] || '' }).firstChild || '';
 function mount(...nodes) { $app.replaceChildren(...nodes.flat().filter((n) => n != null && n !== false)); window.scrollTo(0, 0); }
+// Practice redraws on every line Buddy says: keep the scroll position instead of jumping back to the top.
+function mountKeep(...nodes) { const y = window.scrollY; $app.replaceChildren(...nodes.flat().filter((n) => n != null && n !== false)); window.scrollTo(0, y); }
+const smooth = () => (matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth');
 function toast(msg) {
   const t = h('div', { class: 'toast', role: 'status' }, msg);
   document.body.append(t);
@@ -280,6 +283,7 @@ async function startPractice(activityId) {
     const t = await api('/practice/start', { method: 'POST', body: { activityId } });
     P = { id: t.sessionId, title: t.title, mode: t.mode, turn: t, shown: [], talk: 'idle', speaking: false, thinking: false, help: false };
     drawPractice();
+    P.walkReveal = walkStart(t);
     playLines(t.lines);
   } catch (e) { toast(e.message); }
 }
@@ -364,12 +368,16 @@ function drawPractice() {
     h('span', { class: 'step-count' }, `Step ${ui.step.n} of ${ui.step.total}`),
     h('span', { class: 'step-dots', 'aria-hidden': 'true' }, Array.from({ length: ui.step.total }, (_, i) => h('i', { 'data-state': i < ui.step.n - 1 ? 'done' : i === ui.step.n - 1 ? 'now' : 'todo' })))) : null;
   const stepCard = ui.step?.text ? h('p', { class: 'step-card', 'data-visual': String(!!ui.step.visual) }, ui.step.text) : null;
-  const stepList = ui.stepList ? h('ol', { class: 'step-list', 'aria-label': 'The steps' }, ui.stepList.map((x, i) =>
-    h('li', { 'data-now': String(turn.expect === 'ready' && P.nowStep === i) }, x.image ? h('img', { src: x.image, alt: '' }) : null, h('span', {}, x.text)))) : null;
-  mount(
+  // Task Buddy walk-through: steps appear one by one as Buddy says them. The current one is large; earlier ones stay
+  // above it, smaller. When Buddy has finished, all of them show together until "I'm ready".
+  const shownSteps = ui.stepList ? ui.stepList.filter((_, i) => P.walkReveal == null || i <= P.walkReveal) : [];
+  const stepList = shownSteps.length ? h('ol', { class: 'step-list', 'aria-label': 'The steps', 'data-walk': String(P.nowStep != null) }, shownSteps.map((x, i) =>
+    h('li', { 'data-now': String(P.nowStep === i), 'data-past': String(P.nowStep != null && i < P.nowStep) }, x.image ? h('img', { src: x.image, alt: '' }) : null, h('span', {}, x.text)))) : null;
+  mountKeep(
     h('div', { class: 'p-top' }, h('p', { class: 'p-title' }, P.title), h('button', { class: 'btn', onclick: finishPractice }, icon('stop'), 'Finish')),
     stepBar,
-    h('div', { class: 'stage', 'data-visual': String(!!ui.step?.visual) }, stage),
+    // Task Buddy without a picture to show: no empty picture area, so the steps and Buddy's words sit higher up.
+    stage || P.mode !== 'steps' ? h('div', { class: 'stage', 'data-visual': String(!!ui.step?.visual) }, stage) : null,
     stepCard,
     stepList,
     board,
@@ -382,6 +390,11 @@ function drawPractice() {
     P.help ? helpSheet() : null,
     turn.ui.paused ? h('div', { class: 'pause' }, h('div', {}, h('p', {}, 'Take all the time you need.'), h('button', { class: 'btn btn-primary', onclick: () => sendControl('ready') }, 'I\u2019m ready'))) : null,
   );
+  // Keep the newest thing in view: the step Buddy is reading (Task Buddy walk-through), otherwise what Buddy just
+  // said and the talk button. Only scrolls when it is off screen.
+  const now = $app.querySelector('.step-list li[data-now="true"]');
+  if (now) now.scrollIntoView({ block: 'center', behavior: smooth() });
+  else if (P.speaking || P.thinking || P.talk === 'idle') (talk || bubble)?.scrollIntoView({ block: 'nearest', behavior: smooth() });
 }
 
 function typedInput() {
@@ -406,11 +419,11 @@ function helpSheet() {
 // Play Buddy's lines in order. Any new action interrupts it.
 async function playLines(lines) {
   const gen = ++playGen;
-  const done = () => { if (gen === playGen && P) { P.speaking = false; P.nowStep = null; drawPractice(); } };
+  const done = () => { if (gen === playGen && P) { P.speaking = false; P.nowStep = null; P.walkReveal = null; drawPractice(); } };
   for (const l of lines) {
     if (gen !== playGen) return;
     P.shown.push(l); P.thinking = false; P.speaking = true;
-    if (l.step != null) P.nowStep = l.step;
+    if (l.step != null) { P.nowStep = l.step; P.walkReveal = l.step; } else if (P.walkReveal != null && P.walkReveal >= 0) P.nowStep = null;
     drawPractice();
     if (l.audio) {
       try {
@@ -527,9 +540,12 @@ async function sendAct(a) {
   try { applyTurn(await api(`/practice/${P.id}/act`, { method: 'POST', body: a })); } catch (e) { toast(e.message); }
 }
 
+// A turn that reads steps out one by one starts with none of them on screen (-1); otherwise show the whole list.
+function walkStart(t) { return t.lines.some((l) => l.step != null) ? -1 : null; }
+
 function applyTurn(t) {
   P.turn = t; P.talk = 'idle';
-  if (t.lines.length) { P.shown = []; P.nowStep = null; }
+  if (t.lines.length) { P.shown = []; P.nowStep = null; P.walkReveal = walkStart(t); }
   drawPractice();
   playLines(t.lines).then(() => { if (t.done && P?.id === t.sessionId) renderDone(t); });
 }

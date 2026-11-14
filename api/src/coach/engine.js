@@ -1249,7 +1249,8 @@ function stepsOpen(state, lines) {
     const walk = [
       line(TEAM_PHRASE, 'movie'),
       line(`Listen to all ${list.length} steps first.`, 'intro'),
-      ...list.map((x, i) => line(`Step ${i + 1}. ${x.text}`, 'instruction', { step: i })),
+      // The step's words are on screen in the step list already, so they aren't repeated in the captions.
+      ...list.map((x, i) => line(`Step ${i + 1}. ${x.text}`, 'instruction', { step: i, noCaption: true })),
       line(stepsAsk(state) ? "When you're ready for the questions, press I'm ready." : "When you're ready, press I'm ready.", 'prompt'),
     ];
     state.lastLines = walk;
