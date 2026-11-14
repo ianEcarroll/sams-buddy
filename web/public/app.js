@@ -60,6 +60,9 @@ addEventListener('online', () => offlineScreen(false));
 
 const icon = (name) => h('span', { 'aria-hidden': 'true', html: ICONS[name] || '' }).firstChild || '';
 function mount(...nodes) { $app.replaceChildren(...nodes.flat().filter((n) => n != null && n !== false)); window.scrollTo(0, 0); }
+// Practice redraws on every line Buddy says: keep the scroll position instead of jumping back to the top.
+function mountKeep(...nodes) { const y = window.scrollY; $app.replaceChildren(...nodes.flat().filter((n) => n != null && n !== false)); window.scrollTo(0, y); }
+const smooth = () => (matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth');
 function toast(msg) {
   const t = h('div', { class: 'toast', role: 'status' }, msg);
   document.body.append(t);
@@ -366,7 +369,7 @@ function drawPractice() {
   const stepCard = ui.step?.text ? h('p', { class: 'step-card', 'data-visual': String(!!ui.step.visual) }, ui.step.text) : null;
   const stepList = ui.stepList ? h('ol', { class: 'step-list', 'aria-label': 'The steps' }, ui.stepList.map((x, i) =>
     h('li', { 'data-now': String(turn.expect === 'ready' && P.nowStep === i) }, x.image ? h('img', { src: x.image, alt: '' }) : null, h('span', {}, x.text)))) : null;
-  mount(
+  mountKeep(
     h('div', { class: 'p-top' }, h('p', { class: 'p-title' }, P.title), h('button', { class: 'btn', onclick: finishPractice }, icon('stop'), 'Finish')),
     stepBar,
     h('div', { class: 'stage', 'data-visual': String(!!ui.step?.visual) }, stage),
@@ -382,6 +385,11 @@ function drawPractice() {
     P.help ? helpSheet() : null,
     turn.ui.paused ? h('div', { class: 'pause' }, h('div', {}, h('p', {}, 'Take all the time you need.'), h('button', { class: 'btn btn-primary', onclick: () => sendControl('ready') }, 'I\u2019m ready'))) : null,
   );
+  // Keep the newest thing in view: the step Buddy is reading (Task Buddy walk-through), otherwise what Buddy just
+  // said and the talk button. Only scrolls when it is off screen.
+  const now = $app.querySelector('.step-list li[data-now="true"]');
+  if (now) now.scrollIntoView({ block: 'center', behavior: smooth() });
+  else if (P.speaking || P.thinking || P.talk === 'idle') (talk || bubble)?.scrollIntoView({ block: 'nearest', behavior: smooth() });
 }
 
 function typedInput() {

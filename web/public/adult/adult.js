@@ -1180,7 +1180,7 @@ async function renderReview(root) {
       opp ? h('div', { class: 'gc-sub' }, 'met the target') : null,
       total ? h('div', { class: 'code-bar', 'aria-label': codes.map(([c, v]) => `${c}: ${v}`).join(', ') },
         codes.filter(([, v]) => v).map(([c, v]) => h('span', { class: `c-${c}`, style: `flex:${v}` }, `${c} ${v}`))) : null,
-      recent.length ? h('div', { class: 'gc-days' }, recent.map((d) => h('span', {}, `${dayShort(d.day)}: ${d.successes}/${d.opportunities}`))) : null);
+      recent.length ? h('div', { class: 'gc-days' }, h('span', { class: 'muted' }, 'Recent days:'), recent.map((d) => h('span', {}, `${dayShort(d.day)}: ${d.successes}/${d.opportunities}`))) : null);
   }));
   const syncCards = () => cards.querySelectorAll('.goal-card').forEach((b, i) => b.setAttribute('aria-pressed', String(review.goal === Object.keys(goals.goals)[i])));
 
