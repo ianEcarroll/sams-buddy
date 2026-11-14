@@ -78,15 +78,16 @@ button { cursor: pointer; }
 [data-module="conversation"] { --mod: #0f7a6a; --mod-soft: #dcf3ee; }
 [data-module="task"] { --mod: #2563b0; --mod-soft: #e0ebf9; }
 [data-module="think"] { --mod: #b02a6b; --mod-soft: #f9e1ec; }
+[data-module="steps"] { --mod: #3f7a1f; --mod-soft: #e5f2dc; }
 :root[data-theme="dark"] [data-module] { --mod-soft: #22344f; }
 :root[data-theme="dark"] [data-module="memory"] { --mod: #f0a07c; } :root[data-theme="dark"] [data-module="story"] { --mod: #c1a5f0; }
 :root[data-theme="dark"] [data-module="explain"] { --mod: #f4c25a; } :root[data-theme="dark"] [data-module="conversation"] { --mod: #4cc7b0; }
-:root[data-theme="dark"] [data-module="task"] { --mod: #8bb6f0; } :root[data-theme="dark"] [data-module="think"] { --mod: #f08cbb; }
+:root[data-theme="dark"] [data-module="task"] { --mod: #8bb6f0; } :root[data-theme="dark"] [data-module="think"] { --mod: #f08cbb; } :root[data-theme="dark"] [data-module="steps"] { --mod: #9fd37e; }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) [data-module] { --mod-soft: #22344f; }
   :root:not([data-theme="light"]) [data-module="memory"] { --mod: #f0a07c; } :root:not([data-theme="light"]) [data-module="story"] { --mod: #c1a5f0; }
   :root:not([data-theme="light"]) [data-module="explain"] { --mod: #f4c25a; } :root:not([data-theme="light"]) [data-module="conversation"] { --mod: #4cc7b0; }
-  :root:not([data-theme="light"]) [data-module="task"] { --mod: #8bb6f0; } :root:not([data-theme="light"]) [data-module="think"] { --mod: #f08cbb; }
+  :root:not([data-theme="light"]) [data-module="task"] { --mod: #8bb6f0; } :root:not([data-theme="light"]) [data-module="think"] { --mod: #f08cbb; } :root:not([data-theme="light"]) [data-module="steps"] { --mod: #9fd37e; }
 }
 .card[data-module] { border-top: 6px solid var(--mod); }
 .card-icon { display: inline-grid; place-items: center; width: 56px; height: 56px; border-radius: 16px; background: var(--mod-soft, var(--sky-soft)); color: var(--mod, var(--ink)); flex: none; }
@@ -402,3 +403,24 @@ details.layer > summary small, details.fine-tune > summary small { font-weight: 
 .kind-opt strong { color: var(--mod, inherit); }
 .kind-opt small { color: var(--ink-soft); }
 .kind-choice > .btn-quiet { justify-self: start; }
+
+/* Task Buddy: step progress, the step's words, visual support and the step list */
+.step-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.step-count { font-weight: 700; }
+.step-dots { display: flex; gap: 6px; }
+.step-dots i { width: 14px; height: 14px; border-radius: 50%; border: 2px solid #3f7a1f; display: block; }
+.step-dots i[data-state="done"] { background: #3f7a1f; }
+.step-dots i[data-state="now"] { background: #9fd37e; box-shadow: 0 0 0 3px #e5f2dc; }
+.step-card { margin: 0; font-size: 1.3rem; line-height: 1.45; padding: 14px 16px; border-radius: 14px; background: var(--surface); border: 2px solid var(--line); }
+.step-card[data-visual="true"], .stage[data-visual="true"] img { border: 4px solid #3f7a1f; box-shadow: 0 0 0 6px #e5f2dc; }
+.step-card[data-visual="true"] { font-size: 1.5rem; font-weight: 600; }
+.step-list { margin: 0; padding: 0; list-style: none; display: grid; gap: 10px; counter-reset: st; }
+.step-list li { display: grid; grid-template-columns: 2.2em 64px 1fr; align-items: center; gap: 12px; padding: 10px 12px; background: var(--surface); border: 2px solid var(--line); border-radius: 14px; font-size: 1.15rem; counter-increment: st; }
+.step-list li::before { content: counter(st); font-weight: 700; font-size: 1.3rem; text-align: center; }
+.step-list li img { width: 64px; height: 64px; object-fit: contain; background: #fff; border-radius: 8px; }
+.step-list li:not(:has(img)) { grid-template-columns: 2.2em 1fr; }
+@media (prefers-reduced-motion: reduce) { .step-dots i[data-state="now"] { box-shadow: none; } }
+.step-move { display: flex; flex-direction: column; gap: 4px; }
+@media (max-width: 560px) { .step-move { flex-direction: row; } }
+.step-row .q-fields, .step-row .grid2 > * { min-width: 0; }
+.step-row input, .step-row textarea { box-sizing: border-box; }

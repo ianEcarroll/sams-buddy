@@ -152,6 +152,7 @@ const MODE_INFO = {
   think: { label: 'Think Buddy', tagline: 'Solve the problem', icon: 'think' },
   conversation: { label: 'Chat Buddy', tagline: 'Keep the conversation going', icon: 'chat' },
   task: { label: 'Listen Buddy', tagline: 'Follow instructions', icon: 'ear', modes: ['follow', 'task'] },
+  steps: { label: 'Task Buddy', tagline: 'Do it step by step', icon: 'steps' },
 };
 const MODE_ORDER = Object.keys(MODE_INFO);
 const modesOf = (mod) => MODE_INFO[mod].modes || [mod];
@@ -324,7 +325,14 @@ function drawPractice() {
   const tapHint = turn.expect === 'board'
     ? h('p', { class: 'tap-hint' }, speakingNow ? 'Listen to all of it first\u2026' : 'Touch a shape, then touch a box.')
     : null;
-  const talk = tapHint || readyBtn || choice || (canRecord()
+  // Task Buddy: the learner's hands are busy, so a big Done button replaces Talk while they do a step.
+  const doneBtn = turn.expect === 'done'
+    ? h('button', { class: 'talk', 'data-state': speakingNow ? 'speaking' : 'idle', disabled: speakingNow, onclick: () => sendControl('step_done'), 'aria-label': 'Done' },
+      icon(speakingNow ? 'speaker' : 'done'),
+      h('span', { class: 'talk-text' }, h('span', {}, speakingNow ? 'Buddy is talking\u2026' : 'Done'),
+        h('small', {}, speakingNow ? 'Listen first' : ui.step ? 'Press when you\u2019ve finished this step' : 'Press when you\u2019ve finished everything')))
+    : null;
+  const talk = tapHint || readyBtn || choice || doneBtn || (canRecord()
     ? h('button', { class: 'talk', 'data-state': state, disabled: state === 'speaking' || state === 'busy' || turn.expect === 'confirm', onclick: onTalk, 'aria-label': TALK.label },
       TALK.icon ? icon(TALK.icon) : h('span', { class: 'dot', 'aria-hidden': 'true' }),
       h('span', { class: 'talk-text' }, h('span', {}, TALK.label), h('small', {}, TALK.sub)))
@@ -332,14 +340,26 @@ function drawPractice() {
 
   const controls = h('div', { class: 'controls' },
     h('button', { class: 'btn', onclick: () => sendControl('repeat') }, icon('repeat'), 'Repeat'),
-    h('button', { class: 'btn', onclick: () => { P.help = true; drawPractice(); } }, icon('help'), 'Help me'),
+    // Task Buddy while doing a step: one press shows the step (or the whole list) on screen, no menu.
+    h('button', { class: 'btn', onclick: () => { if (turn.expect === 'done') { sendControl('hint'); return; } P.help = true; drawPractice(); } }, icon('help'), 'Help me'),
     h('button', { class: 'btn', onclick: () => sendControl('think') }, icon('think'), 'Let me think'),
     h('button', { class: 'btn', onclick: () => sendControl('try_again') }, icon('again'), 'Try again'),
   );
 
+  // Task Buddy: which step this is, its words when Buddy has said them (or shows them as visual support),
+  // and in Independence mode the whole list once the learner asks for help.
+  const stepBar = ui.step ? h('div', { class: 'step-bar', 'aria-label': `Step ${ui.step.n} of ${ui.step.total}` },
+    h('span', { class: 'step-count' }, `Step ${ui.step.n} of ${ui.step.total}`),
+    h('span', { class: 'step-dots', 'aria-hidden': 'true' }, Array.from({ length: ui.step.total }, (_, i) => h('i', { 'data-state': i < ui.step.n - 1 ? 'done' : i === ui.step.n - 1 ? 'now' : 'todo' })))) : null;
+  const stepCard = ui.step?.text ? h('p', { class: 'step-card', 'data-visual': String(!!ui.step.visual) }, ui.step.text) : null;
+  const stepList = ui.stepList ? h('ol', { class: 'step-list', 'aria-label': 'The steps' }, ui.stepList.map((x) =>
+    h('li', {}, x.image ? h('img', { src: x.image, alt: '' }) : null, h('span', {}, x.text)))) : null;
   mount(
     h('div', { class: 'p-top' }, h('p', { class: 'p-title' }, P.title), h('button', { class: 'btn', onclick: finishPractice }, icon('stop'), 'Finish')),
-    h('div', { class: 'stage' }, stage),
+    stepBar,
+    h('div', { class: 'stage', 'data-visual': String(!!ui.step?.visual) }, stage),
+    stepCard,
+    stepList,
     board,
     bubble,
     P.thinking ? h('p', { class: 'thinking' }, 'Thinking time. Press to talk whenever you are ready.') : null,
@@ -537,6 +557,8 @@ const ICONS = {
   ear: S('<path d="M7 9a5.5 5.5 0 0 1 11 0c0 3.2-3 4.2-3 7.5a3 3 0 0 1-5.5 1.6"/><path d="M10.5 9.5a2 2 0 0 1 4 0c0 1.6-2 2.2-2 3.8"/>'),
   listen: S('<path d="M4 14v-2a8 8 0 0 1 16 0v2"/><rect x="3" y="14" width="5" height="7" rx="2"/><rect x="16" y="14" width="5" height="7" rx="2"/>'),
   play: S('<path d="M7 4.5v15l12-7.5z"/>'),
+  steps: S('<path d="M10 6h10M10 12h10M10 18h10"/><path d="M3.5 6l1.5 1.5L7.5 5M3.5 12l1.5 1.5 2.5-2.5M3.5 18l1.5 1.5 2.5-2.5"/>'),
+  done: S('<circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.7 2.7L16 10"/>'),
   speaker: S('<path d="M4 9v6h4l5 4V5L8 9H4z"/><path d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12"/>'),
   wait: S('<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>'),
 };

@@ -105,6 +105,21 @@ export function keywordJudge({ mode, item, elements, text, activity }) {
       : findAny(text, item.answers || []);
   }
 
+  if (mode === 'steps') {
+    // Basic checker: the answer shares the step's key words, or (for why / how-do-you-know questions)
+    // gives a reason or a check in a few words. Claude judges meaning; this only keeps the app usable without it.
+    const dunno = /\b(don'?t know|dunno|no idea|not sure|pass)\b/i.test(text);
+    const keys = [...keyWords(item.step), ...keyWords(item.example_answer || '')];
+    const hit = findAny(text, keys);
+    const reason = /\b(because|so (that|it|i|you|they)|to make|it helps|otherwise|cause|'cause)\b/i.test(text);
+    const check = /\b(look|looks|check|see|neat|tidy|flat|straight|finished|done|same|match|like the picture)\b/i.test(text);
+    const enough = words(text).length >= 3;
+    out.met.answer = dunno ? null
+      : item.skill === 'reasoning' ? (reason || hit) && enough ? text : null
+      : item.skill === 'independence' ? (check || hit) && enough ? text : null
+      : hit;
+  }
+
   if (mode === 'explain') {
     (item.points || []).filter((pt) => pt?.text).forEach((pt, i) => {
       if (elements.includes(`point_${i}`)) out.met[`point_${i}`] = findAny(text, pt.keywords?.length ? pt.keywords : eventWords(pt.text));
@@ -166,6 +181,11 @@ function answerKey(mode, item, activity) {
   if (mode === 'listen') return item.kind === 'title'
     ? { story: item.story, question: item.question, question_type: 'new_title' }
     : { story: item.story, question: item.question, accepted_answers: item.answers || [] };
+  if (mode === 'steps') return {
+    task: item.task, skill_practised: item.skill, step_number: item.step_number, this_step: item.step,
+    previous_step: item.previous_step, next_step: item.next_step, buddy_has_said_this_step_aloud: !!item.said_step_already,
+    question: item.question, example_answer: item.example_answer,
+  };
   if (mode === 'explain') return {
     question: item.question, parts_of_a_clear_explanation: (item.points || []).filter((pt) => pt?.text).map((pt, i) => ({ element: `point_${i}`, part: pt.text })),
   };
@@ -189,6 +209,7 @@ const ELEMENT_GUIDE = {
   explain: 'The learner is explaining how they do something. point_N = their explanation includes part N (meaning, not exact words; their own way of saying it counts, and an example counts for a general part such as "a filling like ham or cheese"). A very short answer that only hints at a part (e.g. "Cut paper." for "cut the character out with scissors") counts only if the meaning of that part is actually there. Do not credit a part just because it is implied by another.',
   recall: 'Memory practice: the learner is asked to remember real things they did. memory = they described at least one real thing they did or experienced (evidence = their words). Also fill "events": one entry per DIFFERENT thing they say they did in this response, as a short phrase in their own words (e.g. "went to the gym"). Set known to the index of the matching thing the family listed, or -1 if it is something else (it still counts: the family list is not complete). Leave out anything already_remembered_earlier, repeats, "I don\'t know", and simple yes/no answers. Several details about one activity are one event, not several.',
   think: 'This is a problem-solving role-play: Buddy described a situation and asked what the learner would do. The whole response may cover several parts at once. problem = they show they noticed what is wrong or unexpected (naming it, or giving a response that clearly deals with that specific problem). action = they say a safe, sensible thing they would do; asking a trusted adult, staff member, teacher or parent always counts; compare with the approved responses by meaning, not wording, and accept other safe, sensible ideas too. An unsafe idea (in not_safe, or plainly unsafe such as leaving alone, going with a stranger, or anything risky) is NOT an action: set unsafe_idea = true. reason = they explain why their idea would help ("because…", "so that…", or a clear reason in other words). backup = they say what they would do if their first idea did not work. Saying what they WOULD do in the situation (e.g. "I\'d ask my coach for help", "I need help so I\'d ask the staff") is an answer, not a help_request; help_request is only for asking Buddy itself (e.g. "Can you say that again?", "I don\'t understand the question").',
+  steps: 'The learner is doing a real task step by step and Buddy asked one question about this step. answer = the response is a sensible, correct answer to the question for THIS step (meaning, not exact words; the example answer is one good answer, not the only one). By skill: understanding = they show they understood the instruction (saying the key action or thing is enough, e.g. "the sleeves"); memory = they say what this step is (when Buddy has not said it yet) or the step asked about; expressive = they describe what they did in this step in their own words, ideally a sentence (a single word like "folded" counts only if it clearly names the action); reasoning = any sensible reason why the step matters, or a sensible plan if something goes wrong; independence = any sensible way of checking the step is finished, or what to do next time. "I don\'t know", unrelated words, or describing a different step do not count.',
   conversation: 'turn = the learner made a relevant comment, a personal connection, or a question on the topic. Any of these is a valid turn.',
 };
 

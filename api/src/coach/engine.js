@@ -7,6 +7,7 @@ import { detectHelp } from './judge.js';
 import { FOLLOW_BOXES, followSteps, followStepText, followInstruction, tokenName, tokenImage, tokenWords, followThing } from './modes.js';
 import { MODES, LEVELS, TEAM_PHRASE, DEFAULT_CLARIFY_PHRASES, cueLadder, describe, labelFor, freshMemories, whenNoun } from './modes.js';
 import { PLAN_GOALS, supportCode, successFor } from './goals.js';
+import { STEP_SKILLS, STEP_LEVELS, stepCoach, stepSkillOf } from './modes.js';
 
 const DEFAULTS = {
   think_seconds: 8,        // quiet time after "Make a movie in your mind" before the prompt
@@ -52,7 +53,7 @@ export function createSession({ activity, settings = {}, learnerName = '', learn
   };
   // Welcome lines come first but stay out of lastLines, so Repeat replays the task, not the greeting.
   const lines = [...welcomeLines(state), ...openItem(state)];
-  return { state, turn: state.mode === 'listen' ? listenTurn(state, lines) : state.mode === 'follow' ? followTurn(state, lines) : makeTurn(state, lines) };
+  return { state, turn: state.mode === 'listen' ? listenTurn(state, lines) : state.mode === 'follow' ? followTurn(state, lines) : state.mode === 'steps' ? stepsTurn(state, lines) : makeTurn(state, lines) };
 }
 
 // A warm start to every practice, and (if the team leaves it on) what the four buttons do.
@@ -106,6 +107,7 @@ function newItemState(state) {
   if (state.mode === 'task' && item.unclear_instruction) { st.phase = 'clarify'; st.elements.unshift('clarify'); }
   if (state.mode === 'conversation') st.conv = { validTurns: 0, questionAsked: false, turns: [], noted: {} };
   if (state.mode === 'listen') st.listen = { phase: 'story', round: 1, queue: [], pos: 0, results: {}, helped: false };
+  if (state.mode === 'steps') st.steps = { phase: 'step', pos: 0, said: false, level: -1, tries: 0, results: {}, visual: false, sawStep: {}, list: false, retellTries: 0, retell: null };
   return st;
 }
 
@@ -114,7 +116,7 @@ const curItem = (s) => s.activity.content.items[s.itemIndex];
 // Each item in an activity is led in the same conversational way in every module:
 // "Here's the first situation." → "On to the next situation." → "And here's the last situation."
 // One item on its own gets no lead. Stories (Listen to a Story) lead in from storyLines.
-const ITEM_NOUN = { object: 'picture', story: 'story', task: 'job', follow: 'instruction', explain: 'question', recall: 'question', think: 'situation', conversation: 'topic', listen: 'story' };
+const ITEM_NOUN = { steps: 'task', object: 'picture', story: 'story', task: 'job', follow: 'instruction', explain: 'question', recall: 'question', think: 'situation', conversation: 'topic', listen: 'story' };
 const NEXT_ITEM = ['On to the next {noun}.', "Here's the next {noun}.", 'Now for the next {noun}.'];
 export function itemLead(state) {
   const total = state.activity.content.items?.length || 1;
@@ -186,6 +188,8 @@ function openItem(state) {
     lines.push(line(item.opener || `Let's talk about ${item.topic}.`, 'prompt'));
   } else if (state.mode === 'listen') {
     return storyLines(state);
+  } else if (state.mode === 'steps') {
+    return stepsOpen(state, lines);
   }
   state.lastLines = lines;
   return lines;
@@ -202,11 +206,13 @@ export async function respond(state, input, { judge }) {
   const text = String(input.text || '').trim();
   if (state.mode === 'listen' && state.item.listen.phase === 'story') return { state, turn: listenTurn(state, startQuestions(state)) };
   if (state.mode === 'listen' && state.item.listen.phase === 'offer') return listenOfferSpoken(state, text);
+  if (state.mode === 'steps' && ['doing', 'indep'].includes(state.item.steps.phase)) return { state, turn: stepsTurn(state, stepsSpokenWhileDoing(state, text)) };
   if (!text) {
     return { state, turn: makeTurn(state, [line("I didn't hear anything. Take your time, and press Talk when you're ready.", 'clarify')]) };
   }
   if (input.uncertain && !input.confirmed) return askToConfirm(state, input);
   if (state.mode === 'follow') return { state, turn: followSpeech(state, input.displayText || text) };
+  if (state.mode === 'steps') return stepsAnswer(state, { text, displayText: input.displayText || text, confirmed: !!input.confirmed }, judge);
   return process_(state, { text, displayText: input.displayText || text, confirmed: !!input.confirmed }, judge);
 }
 
@@ -223,6 +229,7 @@ export async function confirmHeard(state, yes, { judge }) {
   state.pending = null;
   if (!p) return { state, turn: makeTurn(state, []) };
   if (!yes) return { state, turn: makeTurn(state, [line('Thanks. Please say it again whenever you are ready.', 'clarify')]) };
+  if (state.mode === 'steps') return stepsAnswer(state, { ...p, confirmed: true }, judge);
   return process_(state, { ...p, confirmed: true }, judge);
 }
 
@@ -423,6 +430,7 @@ function clearInstructionLines(state) {
 
 function handleHelp(state, kind, text, source) {
   if (state.mode === 'listen') return listenHelp(state, kind, text, source);
+  if (state.mode === 'steps') return stepsHelp(state, kind, text, source);
   const it = state.item;
   const item = curItem(state);
   const m = MODES[state.mode];
@@ -451,6 +459,7 @@ function handleHelp(state, kind, text, source) {
 }
 
 function hintLine(state, by) {
+  if (state.mode === 'steps') return stepsHelp(state, 'need_help', 'Give me a hint', by === 'sam' ? 'button' : 'spoken');
   if (state.mode === 'listen') return listenHelp(state, 'need_help', 'Give me a hint', by === 'sam' ? 'button' : 'spoken')[0];
   const el = state.mode === 'conversation' ? convFocus(state) : (state.item.phase === 'clarify' ? 'clarify' : nextMissing(state));
   if (!el) return line('You have already done everything for this one.', 'feedback');
@@ -458,6 +467,7 @@ function hintLine(state, by) {
 }
 
 function exampleLine(state, by) {
+  if (state.mode === 'steps') return stepsHelp(state, 'show_me', 'Show me an example', 'button');
   if (state.mode === 'listen') return listenHelp(state, 'need_help', 'Show me an example', 'button')[0];
   const el = state.mode === 'conversation' ? convFocus(state) : (state.item.phase === 'clarify' ? 'clarify' : nextMissing(state));
   if (!el) return line('You have already done everything for this one.', 'feedback');
@@ -470,6 +480,7 @@ export function control(state, action) {
   const it = state.item;
   const item = curItem(state);
   const m = MODES[state.mode];
+  if (state.mode === 'steps') return stepsControl(state, action);
   switch (action) {
     case 'repeat':
       if (state.mode === 'follow') {
@@ -786,7 +797,7 @@ function advance(state, lines) {
 
 /** Sam pressed Finish (or the app closed the session). Returns any records not yet produced. */
 export function finish(state, reason = 'finished') {
-  if (!state.done && state.item && (state.item.responses.length || state.item.help.length || state.item.supportGiven.length)) {
+  if (!state.done && state.item && (state.item.responses.length || state.item.help.length || state.item.supportGiven.length || state.item.steps?.pos > 0)) {
     state.completed.push(buildRecord(state, state.item, reason === 'finished' ? `${state.learnerName || 'The learner'} finished before this item was complete.` : `Practice stopped (${reason}).`));
   }
   state.done = true;
@@ -838,6 +849,7 @@ function buildListenRecord(state, it, stopNote) {
 
 export function buildRecord(state, it, stopNote = null) {
   if (state.mode === 'listen') return buildListenRecord(state, it, stopNote);
+  if (state.mode === 'steps') return buildStepsRecord(state, it, stopNote);
   const m = MODES[state.mode];
   const item = curItem(state);
   const label = (el) => (el.startsWith('turn_') ? 'Comment' : labelFor(state.mode, el));
@@ -959,7 +971,9 @@ function makeTurn(state, lines, expect = null) {
     }
     cueCard = { labels, lit };
   }
-  const images = state.mode === 'story' ? (item.image_ids || []) : state.mode === 'recall' ? (it?.showImage ? [it.showImage] : []) : (item.image_id ? [item.image_id] : []);
+  const stepUi = state.mode === 'steps' ? stepsUi(state) : null;
+  const images = state.mode === 'steps' ? (stepUi?.image ? [stepUi.image] : [])
+    : state.mode === 'story' ? (item.image_ids || []) : state.mode === 'recall' ? (it?.showImage ? [it.showImage] : []) : (item.image_id ? [item.image_id] : []);
   return {
     lines,
     expect: expect || (state.done ? 'none' : 'response'),
@@ -972,6 +986,8 @@ function makeTurn(state, lines, expect = null) {
       itemNumber: state.itemIndex + 1,
       itemCount: state.activity.content.items.length,
       clarifyPhrases: state.mode === 'task' ? (item.clarify_phrases || DEFAULT_CLARIFY_PHRASES) : null,
+      step: stepUi?.step || null,
+      stepList: stepUi?.list || null,
       board: state.mode === 'follow' && it?.board ? {
         boxes: FOLLOW_BOXES,
         tokens: (item.tokens || []).map((id) => ({ id, name: tokenName(id), img: tokenImage(id) })),
@@ -1185,3 +1201,336 @@ function retellMatches(text, step) {
 }
 
 export { DEFAULTS as ENGINE_DEFAULTS };
+
+
+// ---------------------------------------------------------------- Task Buddy: Step by Step (steps)
+// The learner does a real task, one step at a time. Practice mode: Buddy says each step (with its picture), asks
+// one question for the team's chosen skill (before or after the step), and the learner presses Done after doing it.
+// At the end Buddy asks for all the steps from beginning to end. Independence mode: the learner does the whole
+// task alone and then explains it; Help me shows the steps on screen.
+// Support ladder for this module only: 1 independent → 2 broad clue → 3 specific clue → 4 visual support → 5 model.
+
+const stepsOf = (state) => (curItem(state).steps || []).filter((x) => String(x?.text || '').trim());
+const stepsPractice = (state) => state.activity.content?.run !== 'independence';
+const stepsAsk = (state) => state.activity.content?.ask_steps !== false;
+const stepsRetell = (state) => state.activity.content?.ask_end !== false;
+const STEP_RIGHT = ["That's right.", 'Yes, good.', "That's it."];
+const STEP_NEXT = ['On to the next step.', 'Next step.', 'Now the next step.'];
+
+function stepsTurn(state, lines) {
+  const S = state.item.steps;
+  return makeTurn(state, lines, state.done ? null : ['doing', 'indep'].includes(S.phase) ? 'done' : 'response');
+}
+
+function stepsOpen(state, lines) {
+  const item = curItem(state);
+  const S = state.item.steps;
+  const task = item.title || state.activity.title || 'this task';
+  if (item.intro) lines.push(line(item.intro, 'intro'));
+  if (!stepsPractice(state)) {
+    S.phase = 'indep';
+    const say = [
+      line(`Today's task is: ${task}.`, 'intro'),
+      line("This time, do all the steps on your own. If you get stuck, press Help me. When you've finished everything, press Done.", 'prompt'),
+    ];
+    lines.push(...say);
+    state.lastLines = say;
+    return lines;
+  }
+  lines.push(line(`Today's task is: ${task}. We'll do it one step at a time. After each step, press Done.`, 'intro'));
+  return lines.concat(stepStart(state));
+}
+
+function stepLead(pos, total) {
+  if (total <= 1) return null;
+  if (pos === 0) return "Here's the first step.";
+  if (pos === total - 1) return "And here's the last step.";
+  return STEP_NEXT[(pos - 1) % STEP_NEXT.length];
+}
+
+function stepStart(state) {
+  const S = state.item.steps;
+  const list = stepsOf(state);
+  const step = list[S.pos];
+  const c = stepCoach(state.activity, { steps: list }, S.pos);
+  Object.assign(S, { level: -1, tries: 0, visual: false, said: false });
+  const lines = [];
+  const lead = stepLead(S.pos, list.length);
+  if (lead) lines.push(line(lead, 'intro'));
+  const ask = stepsAsk(state) && c.when === 'before';
+  if (ask && c.skill === 'memory') {
+    // Memory: Buddy asks for the step before saying it.
+    S.phase = 'q';
+    lines.push(line(c.question, 'prompt'));
+  } else {
+    S.said = true;
+    lines.push(line(step.text, 'instruction'));
+    if (ask) { S.phase = 'q'; lines.push(line(c.question, 'prompt')); }
+    else { S.phase = 'doing'; lines.push(line(S.pos === 0 ? "Do it now, and press Done when you've finished." : "Press Done when you've finished.", 'prompt')); }
+  }
+  state.lastLines = lines.filter((l) => l.kind !== 'intro');
+  return lines;
+}
+
+// After the step's question is settled (right, or carried on after the model).
+function stepAfterQuestion(state, lines) {
+  const S = state.item.steps;
+  const c = stepCoach(state.activity, { steps: stepsOf(state) }, S.pos);
+  if (c.when === 'after') return lines.concat(stepNext(state));
+  const step = stepsOf(state)[S.pos];
+  S.phase = 'doing';
+  const doIt = [];
+  if (!S.said) { S.said = true; doIt.push(line(step.text, 'instruction')); }
+  doIt.push(line("Now do it, and press Done when you've finished.", 'prompt'));
+  state.lastLines = doIt;
+  return lines.concat(doIt);
+}
+
+// The learner pressed Done (or said "done") for the current step.
+function stepDone(state) {
+  const S = state.item.steps;
+  const c = stepCoach(state.activity, { steps: stepsOf(state) }, S.pos);
+  state.item.responses.push({ text: `[Done] step ${S.pos + 1}`, afterSupport: false, done: true });
+  if (stepsAsk(state) && c.when === 'after') {
+    S.phase = 'q';
+    const q = [line(c.question, 'prompt')];
+    state.lastLines = q;
+    return q;
+  }
+  return stepNext(state);
+}
+
+function stepNext(state) {
+  const S = state.item.steps;
+  S.pos += 1;
+  if (S.pos < stepsOf(state).length) return stepStart(state);
+  if (stepsRetell(state)) return stepsAskRetell(state, "You've done all the steps.");
+  return stepsComplete(state, [line("You've done all the steps. Well done.", 'feedback')]);
+}
+
+function stepsAskRetell(state, before) {
+  const S = state.item.steps;
+  S.phase = 'retell';
+  const q = line('Now tell me all the steps you followed, from beginning to end.', 'prompt');
+  state.lastLines = [q];
+  return [line(before, 'feedback'), q];
+}
+
+function giveStepCue(state, level, by) {
+  const it = state.item;
+  const S = it.steps;
+  const c = stepCoach(state.activity, { steps: stepsOf(state) }, S.pos);
+  const lv = Math.min(3, Math.max(0, level));
+  S.level = lv;
+  if (lv >= 2) S.visual = true;
+  it.anySupport = true;
+  it.supportGiven.push({ el: `s_${S.pos}`, level: lv, text: c.ladder[lv], by });
+  const q = line(lv === 3 ? `Now you try. ${c.question}` : c.question, 'prompt');
+  state.lastLines = [q];
+  return [line(c.ladder[lv], lv === 3 ? 'model' : 'cue', { level: STEP_LEVELS[lv] }), q];
+}
+
+async function stepsAnswer(state, { text, displayText }, judge) {
+  const it = state.item;
+  const S = it.steps;
+  if (S.phase === 'retell') return stepsRetellAnswer(state, { text, displayText }, judge);
+  if (S.phase !== 'q') return { state, turn: stepsTurn(state, state.lastLines) };
+  const list = stepsOf(state);
+  const c = stepCoach(state.activity, { steps: list }, S.pos);
+  const j = await judge({
+    mode: 'steps', elements: ['answer'], text, activity: state.activity, history: [], learner: learnerOf(state),
+    item: { task: curItem(state).title || '', step: list[S.pos].text, step_number: S.pos + 1, previous_step: list[S.pos - 1]?.text || null, next_step: list[S.pos + 1]?.text || null, question: c.question, example_answer: c.answer, skill: c.skill, said_step_already: S.said, clarify_phrases: [] },
+  });
+  if (j.help && j.help !== 'none') return { state, turn: stepsTurn(state, stepsHelp(state, j.help, displayText, 'spoken')) };
+  const correct = !!j.met.answer;
+  it.attempts += 1;
+  it.responses.push({ text: displayText, afterSupport: S.level >= 0 });
+  // Right, or already shown the model and had one more try: settle this step's question and move on.
+  if (correct || S.level >= 3) {
+    S.results[S.pos] = { answer: displayText, correct, firstTry: correct && S.level < 0, level: S.level };
+    const ack = correct ? STEP_RIGHT[S.pos % STEP_RIGHT.length] : "Thanks. Let's carry on.";
+    return { state, turn: stepsTurn(state, stepAfterQuestion(state, [line(ack, correct ? 'feedback' : 'ack')])) };
+  }
+  S.tries += 1;
+  return { state, turn: stepsTurn(state, giveStepCue(state, S.level + 1, 'buddy')) };
+}
+
+async function stepsRetellAnswer(state, { text, displayText }, judge) {
+  const it = state.item;
+  const S = it.steps;
+  const list = stepsOf(state);
+  const short = list.map((x) => x.text.split(/(?<=[.!?])\s/)[0]);
+  const elements = short.map((_, i) => `step_${i}`).concat(short.length >= 2 ? ['order'] : []);
+  const j = await judge({ mode: 'task', elements, text, activity: state.activity, history: [], learner: learnerOf(state), item: { steps: short, instruction: short.join(' '), clarify_phrases: [] } });
+  if (j.help && j.help !== 'none' && !Object.values(j.met).some(Boolean)) return { state, turn: stepsTurn(state, stepsHelp(state, j.help, displayText, 'spoken')) };
+  it.responses.push({ text: displayText, afterSupport: S.retellTries > 0, retell: true });
+  const R = S.retell || (S.retell = { met: {}, inOrder: null, cued: false });
+  short.forEach((_, i) => { if (j.met[`step_${i}`] && !R.met[i]) R.met[i] = { text: j.met[`step_${i}`], afterCue: R.cued }; });
+  if (j.inOrder != null) R.inOrder = R.inOrder === false ? false : j.inOrder;
+  const got = Object.keys(R.met).length;
+  if (got < short.length && S.retellTries === 0) {
+    S.retellTries = 1;
+    R.cued = true;
+    it.anySupport = true;
+    const missingFirst = !R.met[0];
+    const cue = missingFirst ? 'Think about the very first thing you did.' : 'What else did you do?';
+    it.supportGiven.push({ el: 'retell', level: 0, text: cue, by: 'buddy' });
+    state.lastLines = [line(cue, 'cue', { level: STEP_LEVELS[0] })];
+    return { state, turn: stepsTurn(state, state.lastLines) };
+  }
+  const fb = got === short.length ? `You told me every step${R.inOrder === false ? '' : ', in order'}. Well done.` : 'Thanks for telling me the steps you remembered.';
+  return { state, turn: stepsTurn(state, stepsComplete(state, [line(fb, 'feedback')])) };
+}
+
+function stepsComplete(state, lines) {
+  state.item.steps.phase = 'done';
+  return advance(state, lines);
+}
+
+// While the learner is doing a step (or the whole task), speech is about being finished or needing help.
+function stepsSpokenWhileDoing(state, text) {
+  const S = state.item.steps;
+  if (/\b(done|finished|did it|i'?ve done|ready|next)\b/i.test(text) && !/\bnot (done|finished|ready)\b/i.test(text)) {
+    return S.phase === 'indep' ? stepsIndepDone(state) : stepDone(state);
+  }
+  const kind = detectHelp(text, []);
+  if (kind && kind !== 'none') return stepsHelp(state, kind, text, 'spoken');
+  return [line(S.phase === 'indep' ? "Take your time. Press Done when you've finished everything, or Help me if you're stuck." : "Take your time. Press Done when you've finished this step.", 'clarify')];
+}
+
+function stepsIndepDone(state) {
+  state.item.responses.push({ text: '[Done] whole task', afterSupport: false, done: true });
+  return stepsAskRetell(state, state.item.steps.list ? "You've finished." : "You've finished, all on your own.");
+}
+
+function stepsHelp(state, kind, text, source) {
+  const it = state.item;
+  const S = it.steps;
+  const by = source === 'button' ? 'sam' : 'buddy';
+  it.help.push({ kind, text, source });
+  if (kind === 'repeat') return [line('Sure.', 'ack'), ...state.lastLines];
+  if (S.phase === 'indep') {
+    // Independence mode: help shows the whole list of steps on screen (visual support).
+    S.list = true;
+    it.anySupport = true;
+    it.supportGiven.push({ el: 'task', level: 2, text: 'Looked at the steps on screen', by });
+    const l = [line('Here are the steps. Look at the screen.', 'cue', { level: STEP_LEVELS[2] }), line("Press Done when you've finished everything.", 'prompt')];
+    state.lastLines = l;
+    return l;
+  }
+  if (S.phase === 'doing') {
+    // Stuck while doing a step: show it on screen and say it again (visual support for that step).
+    S.visual = true;
+    S.sawStep[S.pos] = true;
+    it.anySupport = true;
+    const step = stepsOf(state)[S.pos];
+    it.supportGiven.push({ el: `s_${S.pos}`, level: 2, text: 'Saw the step on screen while doing it', by });
+    const l = [line("Here's the step on the screen.", 'cue', { level: STEP_LEVELS[2] }), line(step.text, 'instruction'), line("Press Done when you've finished.", 'prompt')];
+    state.lastLines = l.slice(1);
+    return l;
+  }
+  if (S.phase === 'retell') {
+    it.anySupport = true;
+    if (kind === 'show_me') {
+      const model = stepsOf(state).map((x, i, a) => `${i === 0 ? 'First' : i === a.length - 1 ? 'Last' : 'Then'}, ${x.text.split(/(?<=[.!?])\s/)[0].replace(/[.!?]+$/, '').replace(/^[A-Z](?=[a-z])/, (m) => m.toLowerCase())}.`).join(' ');
+      it.supportGiven.push({ el: 'retell', level: 3, text: model, by });
+      return [line(model, 'model', { level: STEP_LEVELS[3] }), line('Now you try. Tell me the steps from beginning to end.', 'prompt')];
+    }
+    it.supportGiven.push({ el: 'retell', level: 0, text: 'Think about the very first thing you did.', by });
+    return [line('Think about the very first thing you did.', 'cue', { level: STEP_LEVELS[0] })];
+  }
+  // A step question: hint → next clue; "I don't understand" → at least the specific clue; example → the model.
+  const next = kind === 'show_me' ? 3 : kind === 'dont_understand' || kind === 'other_clarification' ? Math.max(1, S.level + 1) : S.level + 1;
+  if (S.level >= 3) return [line('Have a go. Any answer is fine.', 'ack'), ...state.lastLines];
+  return giveStepCue(state, next, by);
+}
+
+function stepsControl(state, action) {
+  const S = state.item.steps;
+  const t = (lines) => ({ state, turn: stepsTurn(state, lines) });
+  switch (action) {
+    case 'step_done':
+      if (S.phase === 'doing') return t(stepDone(state));
+      if (S.phase === 'indep') return t(stepsIndepDone(state));
+      return t([]);
+    case 'repeat': return t(stepsHelp(state, 'repeat', 'Repeat', 'button'));
+    case 'hint': return t(stepsHelp(state, 'need_help', 'Give me a hint', 'button'));
+    case 'dont_understand': return t(stepsHelp(state, 'dont_understand', "I don't understand", 'button'));
+    case 'example': return t(stepsHelp(state, 'show_me', 'Show me an example', 'button'));
+    case 'think': state.paused = true; return { state, turn: makeTurn(state, [], 'none') };
+    case 'ready': state.paused = false; return t([]);
+    case 'try_again': state.paused = false; return t([line('Of course. Have another go whenever you are ready.', 'ack'), ...state.lastLines]);
+    default: throw new Error(`Unknown control: ${action}`);
+  }
+}
+
+// What the screen shows: the current step's picture and words (hidden while Memory asks for it, until the visual
+// clue), progress, and in Independence mode the whole list once help was asked for.
+function stepsUi(state) {
+  const S = state.item?.steps;
+  if (!S) return null;
+  const list = stepsOf(state);
+  if (S.phase === 'indep' || (S.phase === 'retell' && !stepsPractice(state))) {
+    return { image: curItem(state).image_id || null, step: null, list: S.list && S.phase === 'indep' ? list.map((x, i) => ({ n: i + 1, text: x.text, image: x.image_id || null })) : null };
+  }
+  if (S.phase === 'retell' || S.phase === 'done' || !list[S.pos]) return { image: null, step: null, list: null };
+  // While Buddy is asking about a step, its words and picture stay hidden: seeing them is level 3 support
+  // (visual), so it would make the question trivial. They show while the learner is doing the step.
+  const show = S.phase === 'q' ? S.visual : (S.said || S.visual);
+  const cur = list[S.pos];
+  return { image: show ? (cur.image_id || null) : null, step: { n: S.pos + 1, total: list.length, text: show ? cur.text : null, visual: !!S.visual }, list: null };
+}
+
+function buildStepsRecord(state, it, stopNote) {
+  const item = curItem(state);
+  const S = it.steps;
+  const list = stepsOf(state);
+  const skill = stepSkillOf(state.activity);
+  const practice = stepsPractice(state);
+  const asked = practice && stepsAsk(state);
+  const label = (i) => `Step ${i + 1}`;
+  const res = list.map((_, i) => S.results[i]);
+  const answered = res.filter(Boolean);
+  const first = answered.filter((r) => r.firstTry).length;
+  const right = answered.filter((r) => r.correct).length;
+  const notes = [];
+  if (stopNote) notes.push(stopNote);
+  notes.push(practice ? `Practice mode, practising ${STEP_SKILLS[skill].label.toLowerCase()}.` : 'Independence mode.');
+  const doneSteps = practice ? Math.min(S.pos, list.length) : null;
+  if (practice && doneSteps < list.length) notes.push(`Did ${doneSteps} of ${list.length} steps.`);
+  if (asked && answered.length) notes.push(`${first} of ${answered.length} step questions answered on their own${right !== first ? `; ${right} by the end` : ''}.`);
+  const levelOf = (i) => Math.max(-1, ...it.supportGiven.filter((g) => g.el === `s_${i}`).map((g) => g.level));
+  const needed = list.map((_, i) => levelOf(i)).map((lv, i) => (lv >= 0 ? `${label(i)}: ${STEP_LEVELS[lv]}` : null)).filter(Boolean);
+  if (needed.length) notes.push(`Most support needed: ${needed.join('; ')}.`);
+  const saw = Object.keys(S.sawStep).map((i) => label(Number(i)));
+  if (saw.length) notes.push(`Looked at the step on screen while doing it: ${saw.join(', ')}.`);
+  if (!practice && S.phase !== 'indep') notes.push(S.list ? 'Looked at the steps on screen during the task.' : 'Did the whole task without help.');
+  if (S.retell) {
+    const got = Object.keys(S.retell.met).length;
+    notes.push(`Explained ${got} of ${list.length} steps from beginning to end${S.retell.inOrder === false ? ' (not in order)' : got >= 2 ? ', in order' : ''}${S.retell.cued ? ', with one cue' : ''}.`);
+  }
+  const planGoal = PLAN_GOALS[state.activity.plan_goal] ? state.activity.plan_goal : 'other';
+  const code = supportCode(it.supportGiven);
+  const complete = !stopNote && S.phase === 'done';
+  const visualAids = [];
+  if (list.some((x) => x.image_id)) visualAids.push('Pictures');
+  if (state.settings.captions) visualAids.push('Captions');
+  return {
+    plan_goal: planGoal,
+    support_code: code,
+    success: successFor(planGoal, { complete, code, stopped: !!stopNote }),
+    visual_aids: visualAids,
+    sam_turns: null,
+    score_correct: asked && answered.length ? right : null,
+    score_first: asked && answered.length ? first : null,
+    score_total: asked && answered.length ? answered.length : null,
+    item_label: item.title || 'task',
+    goal: state.activity.goal || STEP_SKILLS[skill].goal,
+    sam_response: it.responses.filter((r) => !r.done).map((r) => (r.retell ? `[steps] ${r.text}` : r.afterSupport ? `[after support] ${r.text}` : r.text)).join(' / '),
+    independent: res.flatMap((r, i) => (r?.firstTry ? [`${label(i)}: "${r.answer}"`] : [])),
+    support_provided: it.supportGiven.map((g) => `${g.el === 'retell' ? 'Telling the steps' : g.el === 'task' ? 'During the task' : label(Number(g.el.slice(2)))}, ${STEP_LEVELS[g.level]}: "${g.text}"${g.by === 'sam' ? ' (asked for it)' : ''}`),
+    after_support: res.flatMap((r, i) => (r?.correct && !r.firstTry ? [`${label(i)}: "${r.answer}"`] : [])),
+    help_requests: it.help.filter((h) => h.kind !== 'repeat').map((h) => `${h.source === 'button' ? 'Pressed' : 'Said'} "${h.text}"`),
+    review_note: notes.join(' '),
+  };
+}

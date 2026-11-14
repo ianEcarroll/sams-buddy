@@ -549,7 +549,184 @@ export const STARTER_FOLLOW = {
   ],
 };
 
-export const MODES = { object, story, task, conversation, listen, think, recall, explain, follow };
+// ---------- STEPS (Task Buddy: Step by Step) ----------
+// The learner does a real task with their hands, one step at a time, with Buddy coaching.
+// The team picks ONE skill to practise for the whole activity; Buddy asks one question per step for that skill
+// (before or after the learner does the step), and at the end asks them to explain all the steps.
+// This module has its own five-level support ladder: 1 independent → 2 broad clue → 3 specific clue →
+// 4 visual support (the step shown on screen) → 5 model. Levels 2–5 are stored as 0–3, like the other modules,
+// so support codes work the same way (a model = F).
+export const STEP_SKILLS = {
+  understanding: {
+    label: 'Understanding',
+    goal: 'Understand and follow spoken instructions',
+    when: 'before', // Buddy says the step, asks the question, then the learner does it
+    question: () => 'What did I ask you to do?',
+    clues: (s) => ['Think about what I just said.', `Here it is again. ${s.text}`, 'Look at the screen.', `I asked you to ${lowerFirst(firstSentence(s.text))}`],
+  },
+  memory: {
+    label: 'Memory',
+    goal: 'Remember the steps of a task without being told',
+    when: 'before', // Buddy asks for the step before saying it
+    question: (s, i) => (i === 0 ? 'What is the first thing you need to do?' : 'What do you need to do next?'),
+    clues: (s, i, prev) => [i === 0 ? 'Think about how this task starts.' : `Think about what you just did: ${lowerFirst(firstSentence(prev?.text || 'the last step'))}.`, `It starts like this: ${firstWords(s.text, 3)}…`, 'Look at the screen.', `The next step is: ${s.text}`],
+  },
+  expressive: {
+    label: 'Expressive language',
+    goal: 'Describe what they did in a complete sentence',
+    when: 'after',
+    question: () => 'Tell me what you just did.',
+    clues: (s) => ['Think about what your hands did.', 'Start with: I…', 'Look at the screen. What did you do?', `You could say: I ${lowerFirst(firstSentence(s.text))}`],
+  },
+  reasoning: {
+    label: 'Reasoning',
+    goal: 'Explain why a step matters, and what to do when something goes wrong',
+    when: 'after',
+    question: () => 'Why do we do that step?',
+    clues: (s) => ['Think about what would happen if you skipped it.', 'It helps because…', 'Look at the screen. What does that step help with?', 'One reason is that it makes the next step easier.'],
+  },
+  independence: {
+    label: 'Checking my own work',
+    goal: 'Check their own work and know when a step is finished',
+    when: 'after',
+    question: () => 'How do you know that step is finished?',
+    clues: () => ['Look at what you have done.', 'What should it look like now?', 'Look at the screen. Does yours look like this?', 'I know it is finished because it looks like the picture.'],
+  },
+};
+export const STEP_LEVELS = ['broad clue', 'specific clue', 'visual support', 'model'];
+export const DEFAULT_STEP_SKILL = 'understanding';
+export const stepSkillOf = (activity) => (STEP_SKILLS[activity?.content?.skill] ? activity.content.skill : DEFAULT_STEP_SKILL);
+function firstSentence(t) { return String(t || '').split(/(?<=[.!?])\s/)[0].replace(/[.!?]+$/, '').trim(); }
+function firstWords(t, n) { return String(t || '').split(/\s+/).slice(0, n).join(' ').replace(/[.,;:!?]+$/, ''); }
+function lowerFirst(t) { const x = String(t || ''); return /^[A-Z][a-z]/.test(x) && !/^I\b/.test(x) ? x[0].toLowerCase() + x.slice(1) : x; }
+/** The question, example answer, clues and model for one step under the activity's chosen skill. Team wording wins. */
+export function stepCoach(activity, item, i) {
+  const skill = stepSkillOf(activity);
+  const k = STEP_SKILLS[skill];
+  const steps = item.steps || [];
+  const s = steps[i] || {};
+  const own = s.q?.[skill] || {};
+  const ladder = k.clues(s, i, steps[i - 1]);
+  if (own.broad) ladder[0] = own.broad;
+  if (own.clue) ladder[1] = own.clue;
+  if (own.model) ladder[3] = own.model;
+  else if (skill === 'reasoning' && own.answer) ladder[3] = `One reason: ${own.answer}.`;
+  return { skill, when: k.when, question: own.question?.trim() || k.question(s, i), answer: own.answer || null, ladder };
+}
+
+const steps = {
+  label: 'Task Buddy',
+  tagline: 'Do it step by step',
+  activityName: 'Step by Step',
+  defaultGoal: 'Follow a real task step by step and explain what they did',
+  movie: false,
+  cueCard: () => null,
+  elements: () => ['answer'],
+  elementLabel: { answer: 'Answer', retell: 'Steps' },
+  cueCardIndex: () => null,
+  prompt: () => 'Press Done when you have finished this step.',
+  simplePrompt: () => 'Do this step, then press Done.',
+  defaultCues: {},
+  vars: () => ({}),
+  cueKey: (el) => el,
+  achieved: {},
+  evidenceLabel: { answer: 'Answer' },
+  itemLabel: (item) => item.title || 'task',
+};
+
+// Ready-made tasks (Mulberry Symbols). Added once per family as drafts, so the therapist can check the wording
+// first. Families can swap in photos of their own things, which helps the learner carry the task over to real life.
+// "Fold a jumper" follows the testers' plan and has questions for every skill; the others use Buddy's own questions
+// for most skills.
+const st = (text, image, q = {}) => ({ text, image_id: `sym:${image}`, q });
+export const STARTER_STEPS = [
+  {
+    title: 'Fold a jumper',
+    goal: 'Follow a real task step by step and explain what they did',
+    items: [{
+      title: 'Fold a jumper and put it away',
+      steps: [
+        st('Put the jumper on the table with the front facing up. Smooth out any wrinkles.', 'jumper', {
+          understanding: { question: 'Where should you put the jumper?', answer: 'on the table, front facing up' },
+          reasoning: { question: 'Why should the jumper be flat before folding it?', answer: 'so it folds neatly without creases' },
+          independence: { question: 'How will you know when you are ready for the next step?', answer: 'it is flat with no wrinkles' },
+        }),
+        st('Fold one sleeve across the middle. Then fold the other sleeve across.', 'fold-clothes-to', {
+          understanding: { question: 'Which part of the jumper do you fold?', answer: 'the sleeves' },
+          reasoning: { question: 'Why do we fold the sleeves towards the middle?', answer: 'so they do not hang out and the jumper is neat' },
+          independence: { question: 'Are both sleeves folded? How can you tell?', answer: 'both sleeves are across the middle' },
+        }),
+        st('Take the bottom of the jumper and fold it up towards the neck.', 'fold-clothes-to', {
+          understanding: { question: 'Which part of the jumper do you lift?', answer: 'the bottom' },
+          reasoning: { question: 'Why is it helpful to make the jumper smaller?', answer: 'it takes less space and fits in the basket' },
+          independence: { question: 'Look at your jumper. Does it look neatly folded?', answer: 'the edges line up' },
+        }),
+        st('Straighten the edges and smooth the jumper so it looks neat.', 'tidy-up-to', {
+          understanding: { question: 'What do you need to straighten?', answer: 'the edges' },
+          reasoning: { question: 'Why is it important to fold clothes neatly?', answer: 'so they do not get creased and are easy to find' },
+          independence: { question: 'How can you check whether your jumper is tidy?', answer: 'the edges are straight and it is smooth' },
+        }),
+        st('Find the size label inside the jumper. Tell me what size it says.', 'jumper', {
+          understanding: { question: 'Where can you find the size label?', answer: 'inside the jumper, near the neck' },
+          reasoning: { question: 'Why do you need to check the size?', answer: 'to find the right basket' },
+          independence: { question: 'What could you do if you cannot find the label?', answer: 'look at the other side or ask an adult' },
+        }),
+        st('Look at the labels on the baskets. Find the one that matches the size of your jumper.', 'basket', {
+          understanding: { question: 'Where does the jumper go?', answer: 'in the basket with the same size', broad: "Think about the jumper's size.", clue: 'Look for the basket with the same size label.', model: 'The jumper is size M, so it goes in the M basket.' },
+          reasoning: { question: 'Why should the jumper go in the matching basket?', answer: 'so it is easy to find the right size' },
+          independence: { question: 'How do you know you have found the right basket?', answer: 'the basket label matches the jumper label' },
+        }),
+        st('Put the folded jumper neatly in the basket with the matching size.', 'basket-2', {
+          understanding: { question: 'Where should you put the jumper?', answer: 'in the basket with the matching size' },
+          reasoning: { question: 'Why is it important to put the jumper in the right place?', answer: 'so you can find it next time' },
+          independence: { question: 'How could you do this task next time without help?', answer: 'remember the steps or look at the pictures' },
+        }),
+      ],
+    }],
+  },
+  {
+    title: 'Pack my bag',
+    goal: 'Follow a real task step by step and explain what they did',
+    items: [{ title: 'Pack my bag', steps: [
+      st('Open your bag.', 'school-bag', { understanding: { question: 'What do you open?', answer: 'my bag' } }),
+      st('Put your pencil case in the bag.', 'pencil-case', { understanding: { question: 'What goes in the bag first?', answer: 'the pencil case' }, reasoning: { question: 'Why do you need your pencil case?', answer: 'to write and draw' } }),
+      st('Put your lunch box in the bag.', 'lunch-box', { understanding: { question: 'What do you put in next?', answer: 'the lunch box' }, reasoning: { question: 'Why do you pack your lunch box?', answer: 'so I have food for lunch' } }),
+      st('Close the zip.', 'zip', { understanding: { question: 'What do you close?', answer: 'the zip' }, reasoning: { question: 'Why do you close the zip?', answer: 'so nothing falls out' } }),
+    ] }],
+  },
+  {
+    title: 'Make a glass of squash',
+    goal: 'Follow a real task step by step and explain what they did',
+    items: [{ title: 'Make a glass of squash', steps: [
+      st('Get a clean glass and put it on the table.', 'glass', { understanding: { question: 'What do you need to get?', answer: 'a clean glass' } }),
+      st('Pour a little squash into the glass.', 'squash', { understanding: { question: 'How much squash do you pour?', answer: 'a little' }, reasoning: { question: 'Why only a little squash?', answer: 'so it is not too strong' } }),
+      st('Fill the glass with cold water from the tap. Stop before it gets to the top.', 'tap', { understanding: { question: 'When do you stop filling the glass?', answer: 'before it gets to the top' }, reasoning: { question: 'Why do you stop before the top?', answer: 'so it does not spill' } }),
+      st('Stir it with a spoon.', 'spoon', { understanding: { question: 'What do you stir it with?', answer: 'a spoon' }, reasoning: { question: 'Why do you stir it?', answer: 'to mix the squash and water' } }),
+    ] }],
+  },
+  {
+    title: 'Pair the socks',
+    goal: 'Follow a real task step by step and explain what they did',
+    items: [{ title: 'Pair the socks', steps: [
+      st('Take the socks out of the laundry basket.', 'laundry-basket', { understanding: { question: 'Where are the socks?', answer: 'in the laundry basket' } }),
+      st('Find two socks that match.', 'socks', { understanding: { question: 'What are you looking for?', answer: 'two socks that match' }, reasoning: { question: 'Why do the socks need to match?', answer: 'so you wear a pair' } }),
+      st('Fold one sock over the other to keep them together.', 'socks', { understanding: { question: 'What do you do with the two socks?', answer: 'fold them together' } }),
+      st('Put the pair of socks in the drawer.', 'drawer', { understanding: { question: 'Where do the socks go?', answer: 'in the drawer' }, reasoning: { question: 'Why do they go in the drawer?', answer: 'so you can find them' } }),
+    ] }],
+  },
+  {
+    title: 'Set the table',
+    goal: 'Follow a real task step by step and explain what they did',
+    items: [{ title: 'Set the table for one', steps: [
+      st('Put a plate on the table in front of a chair.', 'plate', { understanding: { question: 'Where does the plate go?', answer: 'in front of a chair' } }),
+      st('Put the fork on the left of the plate.', 'fork', { understanding: { question: 'Which side does the fork go?', answer: 'the left' } }),
+      st('Put the knife on the right of the plate.', 'knife', { understanding: { question: 'Which side does the knife go?', answer: 'the right' } }),
+      st('Put a glass above the knife.', 'glass', { understanding: { question: 'Where does the glass go?', answer: 'above the knife' }, reasoning: { question: 'Why do we set the table before eating?', answer: 'so everything is ready for the meal' } }),
+    ] }],
+  },
+];
+
+export const MODES = { object, story, task, conversation, listen, think, recall, explain, follow, steps };
 
 // Three everyday situations every learner starts with in Think Buddy. The team should check them with the
 // therapist and can edit, archive or add their own in Activities.
