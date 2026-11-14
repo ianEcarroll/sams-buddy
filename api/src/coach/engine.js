@@ -135,7 +135,10 @@ function openItem(state) {
   const think = state.settings.think_seconds;
   const lines = [];
   const lead = state.mode === 'listen' ? null : itemLead(state);
-  if (lead) lines.push(line(lead, 'intro'));
+  // Explain Buddy and Remember My Day open with "Make a movie in your mind" and then ask the question, so their lead
+  // ("Here's the first question.") goes straight before the question, not before the movie line.
+  const leadAtQuestion = ['explain', 'recall'].includes(state.mode);
+  if (lead && !leadAtQuestion) lines.push(line(lead, 'intro'));
   if (state.mode === 'object') {
     lines.push(line(m.prompt(item), 'prompt'));
   } else if (state.mode === 'story') {
@@ -172,11 +175,13 @@ function openItem(state) {
   } else if (state.mode === 'explain') {
     if (item.intro) lines.push(line(item.intro, 'intro'));
     lines.push(line(TEAM_PHRASE, 'movie', { pauseAfter: think }));
+    if (lead) lines.push(line(lead, 'intro'));
     lines.push(line(m.prompt(item), 'prompt'));
   } else if (state.mode === 'recall') {
     state.item.mems = freshMemories(item, state.startedAt);
     if (item.intro) lines.push(line(item.intro, 'intro'));
     lines.push(line(TEAM_PHRASE, 'movie', { pauseAfter: think }));
+    if (lead) lines.push(line(lead, 'intro'));
     lines.push(line(m.prompt(item), 'prompt'));
   } else if (state.mode === 'think') {
     if (item.intro) lines.push(line(item.intro, 'intro'));

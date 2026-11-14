@@ -46,3 +46,17 @@ test('moving to the next story uses the lead (no flat "Here\'s the next one.")',
   assert.ok(leadsSeen[1].includes("And here's the last story."));
   assert.ok(!leadsSeen.flat().includes("Here's the next one."));
 });
+
+test('Explain Buddy and Remember My Day: "Here\'s the first question." comes right before the question, after the movie line', () => {
+  const two = (mode, items) => createSession({ activity: { id: 'x', mode, title: 'T', content: { items } }, learnerName: 'Sam', settings: { explain_buttons: false } });
+  for (const [mode, items, q] of [
+    ['explain', [{ question: 'Tell me how you make a sandwich.', parts: ['bread'] }, { question: 'Tell me how you brush your teeth.', parts: ['brush'] }], 'Tell me how you make a sandwich.'],
+    ['recall', [{ when: 'at the weekend', count: 3 }, { when: 'at school', count: 2 }], 'Tell me three things you did at the weekend.'],
+  ]) {
+    const t = two(mode, items).turn.lines.filter((l) => l.kind !== 'welcome').map((l) => l.text);
+    const i = t.indexOf('Make a movie in your mind.');
+    assert.ok(i >= 0, mode);
+    assert.match(t[i + 1], /^Here's the first/, mode);
+    assert.equal(t[i + 2], q, mode);
+  }
+});
