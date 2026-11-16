@@ -615,9 +615,9 @@ async function boot() {
   } catch (e) { if (token) mount(h('p', {}, e.message), h('button', { class: 'btn', onclick: boot }, 'Try again')); }
 }
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
-// Opening the app: the fox shows while the app loads, then the welcome video plays (with sound) every time, with a
-// Skip button, then it fades to the first screen. Only on opening the app, not when coming back to home.
-// If the browser won't start a video with sound on its own (iPads usually won't), a big button starts it instead.
+// Opening the app: the fox shows while the app loads, then the welcome video starts by itself every time, with a
+// Skip button. It starts with sound if the browser allows it. If not (iPads usually won't), it starts silent, which
+// is always allowed, and a big "Tap for sound" button restarts it from the beginning with sound.
 const launch = document.getElementById('launch');
 function hideLaunch() {
   if (!launch?.isConnected) return;
@@ -628,19 +628,19 @@ function hideLaunch() {
 }
 async function showWelcomeVideo() {
   const v = document.getElementById('launch-video');
-  const playBtn = document.getElementById('launch-play');
   const skip = document.getElementById('launch-skip');
-  if (!launch?.isConnected || !v) return hideLaunch();
-  const start = async () => {
-    await v.play();
-    document.getElementById('launch-fox').hidden = true; playBtn.hidden = true; v.hidden = false;
-  };
+  const sound = document.getElementById('launch-sound');
+  // Reduce Motion: no video on its own.
+  if (!launch?.isConnected || !v || matchMedia('(prefers-reduced-motion: reduce)').matches) return hideLaunch();
   v.addEventListener('ended', hideLaunch);
   v.addEventListener('error', hideLaunch);
-  skip.hidden = false; skip.onclick = hideLaunch;
-  playBtn.onclick = () => start().catch(hideLaunch);
-  // Reduce Motion: wait for a tap rather than starting the video on its own.
-  if (matchMedia('(prefers-reduced-motion: reduce)').matches) { playBtn.hidden = false; return; }
-  try { await start(); } catch { playBtn.hidden = false; }
+  skip.onclick = hideLaunch;
+  const show = () => { document.getElementById('launch-fox').hidden = true; v.hidden = false; skip.hidden = false; };
+  try { await v.play(); show(); return; } catch { /* sound not allowed yet: try silent */ }
+  v.muted = true;
+  try {
+    await v.play(); show(); sound.hidden = false;
+    sound.onclick = () => { v.muted = false; v.currentTime = 0; sound.hidden = true; v.play().catch(hideLaunch); };
+  } catch { hideLaunch(); }
 }
 Promise.all([boot().catch(() => {}), new Promise((r) => setTimeout(r, Math.max(0, 1200 - performance.now())))]).then(showWelcomeVideo);
