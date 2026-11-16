@@ -330,6 +330,13 @@ function drawPractice() {
       h('span', { class: 'talk-text' }, h('span', {}, speakingNow ? (P.mode === 'steps' ? 'Buddy is talking\u2026' : 'Buddy is reading\u2026') : 'I\u2019m ready'),
         h('small', {}, speakingNow ? (P.mode === 'steps' ? 'Listen to the steps' : 'Listen to the story') : 'Start the questions')))
     : null;
+  // Task Buddy walk-through: after each step Buddy asks "Ready for the next step?" and waits for this button.
+  const nextBtn = turn.expect === 'next'
+    ? h('button', { class: 'talk', 'data-state': speakingNow ? 'speaking' : 'idle', disabled: speakingNow, onclick: () => sendControl('next_step'), 'aria-label': 'Next step' },
+      icon(speakingNow ? 'speaker' : 'play'),
+      h('span', { class: 'talk-text' }, h('span', {}, speakingNow ? 'Buddy is talking\u2026' : 'Next step'),
+        h('small', {}, speakingNow ? 'Listen to this step' : 'Press when you\u2019re ready')))
+    : null;
   const choice = turn.expect === 'choice'
     ? h('div', { class: 'choice' },
       h('button', { class: 'btn btn-primary', disabled: speakingNow, onclick: () => sendControl('listen_retry') }, icon('listen'), 'Hear the story'),
@@ -348,7 +355,7 @@ function drawPractice() {
       h('span', { class: 'talk-text' }, h('span', {}, speakingNow ? 'Buddy is talking\u2026' : 'Done'),
         h('small', {}, speakingNow ? 'Listen first' : ui.step ? 'Press when you\u2019ve finished this step' : 'Press when you\u2019ve finished everything')))
     : null;
-  const talk = tapHint || readyBtn || choice || doneBtn || (canRecord()
+  const talk = tapHint || readyBtn || nextBtn || choice || doneBtn || (canRecord()
     ? h('button', { class: 'talk', 'data-state': state, disabled: state === 'speaking' || state === 'busy' || turn.expect === 'confirm', onclick: onTalk, 'aria-label': TALK.label },
       TALK.icon ? icon(TALK.icon) : h('span', { class: 'dot', 'aria-hidden': 'true' }),
       h('span', { class: 'talk-text' }, h('span', {}, TALK.label), h('small', {}, TALK.sub)))
@@ -541,7 +548,8 @@ async function sendAct(a) {
 }
 
 // A turn that reads steps out one by one starts with none of them on screen (-1); otherwise show the whole list.
-function walkStart(t) { return t.lines.some((l) => l.step != null) ? -1 : null; }
+// When Buddy says just the next step, the earlier ones stay up and the new one appears as it is said.
+function walkStart(t) { const n = t.lines.filter((l) => l.step != null).map((l) => l.step); return n.length ? Math.min(...n) - 1 : null; }
 
 function applyTurn(t) {
   P.turn = t; P.talk = 'idle';
