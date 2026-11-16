@@ -1227,7 +1227,7 @@ const firstWordsOf = (t, n) => String(t || '').split(/\s+/).slice(0, n).join(' '
 
 function stepsTurn(state, lines) {
   const S = state.item.steps;
-  return makeTurn(state, lines, state.done ? null : ['doing', 'indep'].includes(S.phase) ? 'done' : S.phase === 'walk' ? 'ready' : 'response');
+  return makeTurn(state, lines, state.done ? null : ['doing', 'indep'].includes(S.phase) ? 'done' : S.phase === 'walk' ? (S.walkPos < stepsOf(state).length - 1 ? 'next' : 'ready') : 'response');
 }
 
 function stepsOpen(state, lines) {
@@ -1250,18 +1250,33 @@ function stepsOpen(state, lines) {
     const list = stepsOf(state);
     S.phase = 'walk';
     lines.push(line(`Today's task is: ${task}.`, 'intro'));
+    S.walkPos = 0;
     const walk = [
       line(TEAM_PHRASE, 'movie'),
-      line(`Listen to all ${list.length} steps first.`, 'intro'),
-      // The step's words are on screen in the step list already, so they aren't repeated in the captions.
-      ...list.map((x, i) => line(`Step ${i + 1}. ${x.text}`, 'instruction', { step: i, noCaption: true })),
-      line(stepsAsk(state) ? "When you're ready for the questions, press I'm ready." : "When you're ready, press I'm ready.", 'prompt'),
+      line(list.length > 1 ? `Listen to the steps one at a time. After each one, I'll ask if you're ready for the next.` : 'Listen to the step.', 'intro'),
+      ...walkStep(state),
     ];
-    state.lastLines = walk;
     return lines.concat(walk);
   }
   lines.push(line(`Today's task is: ${task}. We'll do it one step at a time. After each step, press Done.`, 'intro'));
   return lines.concat(stepStart(state));
+}
+
+// Learn the steps: Buddy says one step, then asks "Ready for the next step?" and waits for the learner to press.
+// The step's words are on screen in the step list already, so they aren't repeated in the captions.
+function walkStep(state) {
+  const S = state.item.steps;
+  const list = stepsOf(state);
+  const i = S.walkPos;
+  const last = i >= list.length - 1;
+  const say = [
+    line(`Step ${i + 1}. ${list[i].text}`, 'instruction', { step: i, noCaption: true }),
+    line(last
+      ? (list.length > 1 ? "That's the last step. " : '') + (stepsAsk(state) ? "When you're ready for the questions, press I'm ready." : "When you're ready, press I'm ready.")
+      : 'Ready for the next step?', 'prompt'),
+  ];
+  state.lastLines = say;
+  return say;
 }
 
 // Steps are always named by number: "Step 1.", "Step 7, the last step."
@@ -1517,7 +1532,7 @@ function stepsHelp(state, kind, text, source) {
     return l;
   }
   if (S.phase === 'retell') return retellCue(state, by, kind === 'show_me');
-  if (S.phase === 'walk') return [line('Sure. Here are the steps again.', 'ack'), ...state.lastLines.slice(1)];
+  if (S.phase === 'walk') return [line('Sure. Here it is again.', 'ack'), ...state.lastLines];
   // A step question: hint → next clue; "I don't understand" → at least the specific clue; example → the model.
   const next = kind === 'show_me' ? 3 : kind === 'dont_understand' || kind === 'other_clarification' ? Math.max(1, S.level + 1) : S.level + 1;
   if (S.level >= 3) return [line('Have a go. Any answer is fine.', 'ack'), ...state.lastLines];
@@ -1528,8 +1543,11 @@ function stepsControl(state, action) {
   const S = state.item.steps;
   const t = (lines) => ({ state, turn: stepsTurn(state, lines) });
   switch (action) {
+    case 'next_step':
+      if (S.phase === 'walk' && S.walkPos < stepsOf(state).length - 1) { S.walkPos++; return t(walkStep(state)); }
+      return t([]);
     case 'start_questions':
-      if (S.phase === 'walk') return t(stepsBeginQuestions(state));
+      if (S.phase === 'walk' && S.walkPos >= stepsOf(state).length - 1) return t(stepsBeginQuestions(state));
       return t([]);
     case 'step_done':
       if (S.phase === 'doing') return t(stepDone(state));
@@ -1552,7 +1570,8 @@ function stepsUi(state) {
   const S = state.item?.steps;
   if (!S) return null;
   const list = stepsOf(state);
-  if (S.phase === 'walk') return { image: null, step: null, list: list.map((x, i) => ({ n: i + 1, text: x.text, image: x.image_id || null })) };
+  // Only the steps Buddy has said so far show, so each one can be taken in before the next appears.
+  if (S.phase === 'walk') return { image: null, step: null, list: list.slice(0, (S.walkPos ?? list.length - 1) + 1).map((x, i) => ({ n: i + 1, text: x.text, image: x.image_id || null })) };
   if (S.phase === 'indep' || (S.phase === 'retell' && !stepsPractice(state))) {
     return { image: curItem(state).image_id || null, step: null, list: S.list && S.phase === 'indep' ? list.map((x, i) => ({ n: i + 1, text: x.text, image: x.image_id || null })) : null };
   }
