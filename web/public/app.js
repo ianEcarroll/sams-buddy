@@ -281,9 +281,9 @@ async function startPractice(activityId) {
   unlockAudio();
   try {
     const t = await api('/practice/start', { method: 'POST', body: { activityId } });
-    P = { id: t.sessionId, title: t.title, mode: t.mode, turn: t, shown: [], talk: 'idle', speaking: false, thinking: false, help: false };
+    // walkReveal must be set before the first draw, or step 1 and its picture show during the introduction.
+    P = { id: t.sessionId, title: t.title, mode: t.mode, turn: t, shown: [], talk: 'idle', speaking: false, thinking: false, help: false, walkReveal: walkStart(t) };
     drawPractice();
-    P.walkReveal = walkStart(t);
     playLines(t.lines);
   } catch (e) { toast(e.message); }
 }
@@ -332,10 +332,10 @@ function drawPractice() {
     : null;
   // Task Buddy walk-through: after each step Buddy asks "Ready for the next step?" and waits for this button.
   const nextBtn = turn.expect === 'next'
-    ? h('button', { class: 'talk', 'data-state': speakingNow ? 'speaking' : 'idle', disabled: speakingNow, onclick: () => sendControl('next_step'), 'aria-label': 'Next step' },
+    ? h('button', { class: 'talk', 'data-state': speakingNow ? 'speaking' : 'idle', disabled: speakingNow, onclick: () => sendControl('next_step'), 'aria-label': 'Ready for the next step' },
       icon(speakingNow ? 'speaker' : 'play'),
-      h('span', { class: 'talk-text' }, h('span', {}, speakingNow ? 'Buddy is talking\u2026' : 'Next step'),
-        h('small', {}, speakingNow ? 'Listen to this step' : 'Press when you\u2019re ready')))
+      h('span', { class: 'talk-text' }, h('span', {}, speakingNow ? 'Buddy is talking\u2026' : 'Ready'),
+        h('small', {}, speakingNow ? 'Listen to this step' : 'Press for the next step')))
     : null;
   const choice = turn.expect === 'choice'
     ? h('div', { class: 'choice' },
