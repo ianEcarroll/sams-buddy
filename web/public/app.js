@@ -615,14 +615,32 @@ async function boot() {
   } catch (e) { if (token) mount(h('p', {}, e.message), h('button', { class: 'btn', onclick: boot }, 'Try again')); }
 }
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
-// The fox stays for about two seconds when the app opens (a little less with Reduce Motion), or until tapped,
-// then fades to the first screen. Only on opening the app, not when coming back to home.
+// Opening the app: the fox shows while the app loads, then the welcome video plays (with sound) every time, with a
+// Skip button, then it fades to the first screen. Only on opening the app, not when coming back to home.
+// If the browser won't start a video with sound on its own (iPads usually won't), a big button starts it instead.
 const launch = document.getElementById('launch');
 function hideLaunch() {
   if (!launch?.isConnected) return;
   launch.style.opacity = '0';
+  const v = document.getElementById('launch-video');
+  try { v?.pause(); } catch { /* nothing to stop */ }
   setTimeout(() => launch.remove(), matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 400);
 }
-launch?.addEventListener('click', hideLaunch);
-const launchFor = matchMedia('(prefers-reduced-motion: reduce)').matches ? 1200 : 2200;
-Promise.all([boot().catch(() => {}), new Promise((r) => setTimeout(r, Math.max(0, launchFor - performance.now())))]).then(hideLaunch);
+async function showWelcomeVideo() {
+  const v = document.getElementById('launch-video');
+  const playBtn = document.getElementById('launch-play');
+  const skip = document.getElementById('launch-skip');
+  if (!launch?.isConnected || !v) return hideLaunch();
+  const start = async () => {
+    await v.play();
+    document.getElementById('launch-fox').hidden = true; playBtn.hidden = true; v.hidden = false;
+  };
+  v.addEventListener('ended', hideLaunch);
+  v.addEventListener('error', hideLaunch);
+  skip.hidden = false; skip.onclick = hideLaunch;
+  playBtn.onclick = () => start().catch(hideLaunch);
+  // Reduce Motion: wait for a tap rather than starting the video on its own.
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) { playBtn.hidden = false; return; }
+  try { await start(); } catch { playBtn.hidden = false; }
+}
+Promise.all([boot().catch(() => {}), new Promise((r) => setTimeout(r, Math.max(0, 1200 - performance.now())))]).then(showWelcomeVideo);
