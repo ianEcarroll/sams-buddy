@@ -1252,8 +1252,9 @@ function stepsOpen(state, lines) {
     lines.push(line(`Today's task is: ${task}.`, 'intro'));
     S.walkPos = 0;
     const walk = [
-      line(TEAM_PHRASE, 'movie'),
       line(list.length > 1 ? `Listen to the steps one at a time. After each one, I'll ask if you're ready for the next.` : 'Listen to the step.', 'intro'),
+      // Last thing said before the first step.
+      line(TEAM_PHRASE, 'movie'),
       ...walkStep(state),
     ];
     return lines.concat(walk);
@@ -1272,8 +1273,8 @@ function walkStep(state) {
   const say = [
     line(`Step ${i + 1}. ${list[i].text}`, 'instruction', { step: i, noCaption: true }),
     line(last
-      ? (list.length > 1 ? "That's the last step. " : '') + (stepsAsk(state) ? "When you're ready for the questions, press I'm ready." : "When you're ready, press I'm ready.")
-      : 'Ready for the next step?', 'prompt'),
+      ? (list.length > 1 ? "That's the last step. " : '') + (stepsAsk(state) ? "To start the questions, press I'm ready." : "When you're ready, press I'm ready.") + ' To hear it again, press Repeat.'
+      : 'For the next step, press Ready. To hear it again, press Repeat.', 'prompt'),
   ];
   state.lastLines = say;
   return say;

@@ -208,14 +208,14 @@ const learn = (content) => createSession({ activity: act({ run: 'learn', ...cont
 
 test('learn: "Make a movie in your mind", then one step at a time, asking "Ready for the next step?"', () => {
   const { state, turn } = learn();
-  assert.deepEqual(texts(turn), ["Today's task is: Fold a jumper.", 'Make a movie in your mind.',
-    "Listen to the steps one at a time. After each one, I'll ask if you're ready for the next.",
-    `Step 1. ${STEPS[0].text}`, 'Ready for the next step?']);
+  assert.deepEqual(texts(turn), ["Today's task is: Fold a jumper.",
+    "Listen to the steps one at a time. After each one, I'll ask if you're ready for the next.", 'Make a movie in your mind.',
+    `Step 1. ${STEPS[0].text}`, 'For the next step, press Ready. To hear it again, press Repeat.']);
   assert.equal(turn.expect, 'next');
   assert.equal(turn.ui.stepList.length, 1);
   assert.equal(state.item.steps.phase, 'walk');
   let r = control(state, 'next_step');
-  assert.deepEqual(texts(r.turn), [`Step 2. ${STEPS[1].text}`, 'Ready for the next step?']);
+  assert.deepEqual(texts(r.turn), [`Step 2. ${STEPS[1].text}`, 'For the next step, press Ready. To hear it again, press Repeat.']);
   assert.equal(r.turn.lines[0].step, 1);
   assert.equal(r.turn.ui.stepList.length, 2);
   assert.equal(r.turn.ui.stepList[1].image, 'sym:fold-clothes-to');
@@ -223,7 +223,7 @@ test('learn: "Make a movie in your mind", then one step at a time, asking "Ready
   assert.equal(control(state, 'start_questions').turn.lines.length, 0);
   assert.equal(state.item.steps.phase, 'walk');
   r = control(state, 'next_step');
-  assert.deepEqual(texts(r.turn), [`Step 3. ${STEPS[2].text}`, "That's the last step. When you're ready for the questions, press I'm ready."]);
+  assert.deepEqual(texts(r.turn), [`Step 3. ${STEPS[2].text}`, "That's the last step. To start the questions, press I'm ready. To hear it again, press Repeat."]);
   assert.equal(r.turn.expect, 'ready');
   assert.equal(r.turn.ui.stepList.length, 3);
   // Repeat says the current step again.
