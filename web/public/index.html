@@ -27,9 +27,13 @@
   <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
-  <!-- TALVO the fox while the app opens. In the page itself so it shows at once; app.js removes it. -->
-  <div id="launch" aria-hidden="true" style="position:fixed;inset:0;z-index:50;background:#abcbf9;display:grid;place-items:center;transition:opacity .4s">
-    <picture><source srcset="/img/talvo-fox.jpg" media="(prefers-reduced-motion: reduce)"><img src="/img/talvo-fox.webp" alt="" style="width:min(70vw,50vh,420px);height:auto;display:block"></picture>
+  <!-- TALVO the fox while the app opens, then the welcome video (with sound) every time, with a Skip button.
+       In the page itself so it shows at once; app.js plays the video and removes all of it. -->
+  <div id="launch" style="position:fixed;inset:0;z-index:50;background:#abcbf9;display:grid;place-items:center;transition:opacity .4s">
+    <picture id="launch-fox"><source srcset="/img/talvo-fox.jpg" media="(prefers-reduced-motion: reduce)"><img src="/img/talvo-fox.webp" alt="" style="width:min(70vw,50vh,420px);height:auto;display:block"></picture>
+    <video id="launch-video" playsinline preload="auto" poster="/img/welcome-poster.jpg" hidden><source src="/img/welcome.mp4" type="video/mp4"></video>
+    <button id="launch-play" class="launch-btn launch-play" type="button" hidden>Watch Buddy’s welcome</button>
+    <button id="launch-skip" class="launch-btn launch-skip" type="button" hidden>Skip</button>
   </div>
   <main id="app" class="sam" aria-live="polite"></main>
   <audio id="voice" preload="auto" playsinline></audio>
