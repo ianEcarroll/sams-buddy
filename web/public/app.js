@@ -424,6 +424,7 @@ function helpSheet() {
 }
 
 // Play Buddy's lines in order. Any new action interrupts it.
+const STEPS_GAP_MS = 2000;
 async function playLines(lines) {
   const gen = ++playGen;
   const done = () => { if (gen === playGen && P) { P.speaking = false; P.nowStep = null; P.walkReveal = null; drawPractice(); } };
@@ -446,6 +447,8 @@ async function playLines(lines) {
     } else {
       await wait(Math.min(3500, 300 * l.text.split(' ').length), gen);
     }
+    // Task Buddy: a short breath between the welcome, the task, the movie line and each step, so none run together.
+    if (P.mode === 'steps' && gen === playGen && l !== lines[lines.length - 1] && ['welcome', 'intro', 'movie', 'instruction'].includes(l.kind)) await wait(STEPS_GAP_MS, gen);
     if (l.pauseAfter && gen === playGen) {
       // Thinking time is Sam's: he can press to talk as soon as he is ready.
       P.speaking = false; P.thinking = true; drawPractice();
