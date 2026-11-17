@@ -277,6 +277,14 @@ let micStream = null;
 // A microphone stream kept open between answers went silent after the first answer (Render logs showed 5-byte
 // recordings), so every answer opens the microphone fresh, as it did before 14 Nov. Set to true to keep one open
 // per practice (fewer permission prompts on an iPad) once that is proven reliable.
+// Which recording format to ask for. Apple devices get AAC (audio/mp4), the format Safari has always produced.
+// Since iOS 18.4 Safari can also record WebM, but those recordings came back from speech-to-text as "nothing
+// recognised" even though they held real audio, while Chrome's WebM works. Everything else keeps WebM first.
+const isApple = () => /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
+  || (/^((?!chrome|android|crios|fxios).)*safari/i.test(navigator.userAgent));
+const recorderTypes = () => (isApple()
+  ? ['audio/mp4;codecs=mp4a.40.2', 'audio/mp4', 'audio/webm;codecs=opus', 'audio/webm']
+  : ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4']);
 const REUSE_MIC = false;
 async function getMic() {
   if (REUSE_MIC && micStream && micStream.getAudioTracks().some((t) => t.readyState === 'live' && !t.muted)) return micStream;
@@ -482,7 +490,7 @@ async function onTalk() {
     stopVoice();
     try {
       const stream = await getMic();
-      const type = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4'].find((t) => MediaRecorder.isTypeSupported?.(t)) || '';
+      const type = recorderTypes().find((t) => MediaRecorder.isTypeSupported?.(t)) || '';
       const recorder = new MediaRecorder(stream, type ? { mimeType: type } : undefined);
       // Keep the chunks in this closure: the last chunk arrives AFTER stop(), when `rec` is already cleared.
       const chunks = [];
