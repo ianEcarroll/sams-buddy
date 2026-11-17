@@ -448,3 +448,9 @@ details.layer > summary small, details.fine-tune > summary small { font-weight: 
 .launch-btn { position: absolute; border: 0; border-radius: 999px; font: inherit; font-weight: 700; cursor: pointer; }
 .launch-skip { top: max(16px, env(safe-area-inset-top)); right: 16px; min-height: 52px; padding: 0 28px; font-size: 1.15rem; background: var(--paper); color: var(--ink); border: 2px solid var(--ink); }
 .launch-sound { bottom: max(24px, env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%); min-height: 84px; padding: 0 44px; font-size: 1.6rem; background: var(--talk); color: var(--talk-ink); white-space: nowrap; }
+
+/* Module pictures: the fox with the module's name on his cap */
+.card-icon:has(.fox) { width: 104px; height: 104px; border-radius: 26px; background: none; overflow: hidden; }
+.card-icon .fox { width: 100%; height: 100%; display: block; object-fit: cover; }
+.mod-head .card-icon:has(.fox), .edit-head .card-icon:has(.fox) { width: 56px; height: 56px; border-radius: 14px; }
+.picker-title .card-icon:has(.fox) { width: 64px; height: 64px; border-radius: 16px; }

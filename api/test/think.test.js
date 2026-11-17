@@ -73,7 +73,7 @@ test('an unsafe idea is not accepted and is flagged for the team', async () => {
 
 test('Think Buddy is linked to plan goal 1 and has three starter situations', () => {
   assert.ok(PLAN_GOALS.unexpected.modes.includes('think'));
-  assert.equal(MODES.think.label, 'Think Buddy');
+  assert.equal(MODES.think.label, 'Think');
   assert.equal(STARTER_SCENARIOS.items.length, 3);
   for (const it of STARTER_SCENARIOS.items) { assert.ok(it.scenario && it.problem && it.good_actions.length); }
 });

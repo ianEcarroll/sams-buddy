@@ -370,13 +370,13 @@ function voicePicker(idInput) {
 // ------------------------------------------------------------ activities
 // The Buddy modules, in the order the learner sees them on their home screen, with the same icons and colours.
 const MODULES = {
-  memory: { label: 'Memory Buddy', tagline: 'Remember and recall', icon: 'memory', modes: ['recall', 'listen'] },
-  story: { label: 'Story Buddy', tagline: 'Organise my thoughts', icon: 'story', modes: ['story'] },
-  explain: { label: 'Explain Buddy', tagline: 'Say it clearly', icon: 'explain', modes: ['explain', 'object'] },
-  think: { label: 'Think Buddy', tagline: 'Solve the problem', icon: 'think', modes: ['think'] },
-  conversation: { label: 'Chat Buddy', tagline: 'Keep the conversation going', icon: 'chat', modes: ['conversation'] },
-  task: { label: 'Listen Buddy', tagline: 'Follow instructions', icon: 'ear', modes: ['follow', 'task'] },
-  steps: { label: 'Task Buddy', tagline: 'Do it step by step', icon: 'steps', modes: ['steps'] },
+  memory: { label: 'Memory', tagline: 'Remember and recall', icon: 'memory', modes: ['recall', 'listen'] },
+  story: { label: 'Story', tagline: 'Organise my thoughts', icon: 'story', modes: ['story'] },
+  explain: { label: 'Explain', tagline: 'Say it clearly', icon: 'explain', modes: ['explain', 'object'] },
+  think: { label: 'Think', tagline: 'Solve the problem', icon: 'think', modes: ['think'] },
+  conversation: { label: 'Talk', tagline: 'Keep the conversation going', icon: 'chat', modes: ['conversation'] },
+  task: { label: 'Listen', tagline: 'Follow instructions', icon: 'ear', modes: ['follow', 'task'] },
+  steps: { label: 'Task', tagline: 'Do it step by step', icon: 'steps', modes: ['steps'] },
 };
 const moduleOf = (mode) => Object.keys(MODULES).find((k) => MODULES[k].modes.includes(mode));
 const SV = (d) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
@@ -391,7 +391,8 @@ const MODULE_ICONS = {
 };
 function moduleIcon(mod) {
   const el = h('span', { class: 'card-icon' });
-  el.innerHTML = MODULE_ICONS[MODULES[mod].icon]; // trusted constant
+  if (['memory', 'story', 'think', 'conversation', 'task', 'steps'].includes(mod)) el.append(h('img', { class: 'fox', src: `/img/modules/${mod}.webp`, alt: '', width: 120, height: 120 }));
+  else el.innerHTML = MODULE_ICONS[MODULES[mod].icon]; // trusted constant
   return el;
 }
 const blankItem = (m) => (m === 'listen' ? blankStory() : m === 'recall' ? blankRecall() : m === 'explain' ? blankExplain() : m === 'follow' ? blankFollow() : m === 'steps' ? blankSteps() : {});

@@ -149,15 +149,18 @@ function renderConsent() {
 // ------------------------------------------------------------ home
 // The Buddy modules, in the order Sam sees them. Each has its own name, icon and colour.
 const MODE_INFO = {
-  memory: { label: 'Memory Buddy', tagline: 'Remember and recall', icon: 'memory', modes: ['recall', 'listen'] },
-  story: { label: 'Story Buddy', tagline: 'Organise my thoughts', icon: 'story' },
-  explain: { label: 'Explain Buddy', tagline: 'Say it clearly', icon: 'explain', modes: ['explain', 'object'] },
-  think: { label: 'Think Buddy', tagline: 'Solve the problem', icon: 'think' },
-  conversation: { label: 'Chat Buddy', tagline: 'Keep the conversation going', icon: 'chat' },
-  task: { label: 'Listen Buddy', tagline: 'Follow instructions', icon: 'ear', modes: ['follow', 'task'] },
-  steps: { label: 'Task Buddy', tagline: 'Do it step by step', icon: 'steps' },
+  memory: { label: 'Memory', tagline: 'Remember and recall', icon: 'memory', modes: ['recall', 'listen'] },
+  story: { label: 'Story', tagline: 'Organise my thoughts', icon: 'story' },
+  explain: { label: 'Explain', tagline: 'Say it clearly', icon: 'explain', modes: ['explain', 'object'] },
+  think: { label: 'Think', tagline: 'Solve the problem', icon: 'think' },
+  conversation: { label: 'Talk', tagline: 'Keep the conversation going', icon: 'chat' },
+  task: { label: 'Listen', tagline: 'Follow instructions', icon: 'ear', modes: ['follow', 'task'] },
+  steps: { label: 'Task', tagline: 'Do it step by step', icon: 'steps' },
 };
 const MODE_ORDER = Object.keys(MODE_INFO);
+// The fox with the module's name on his cap. Explain has no picture yet, so it keeps its drawn icon.
+const FOX_MODULES = ['memory', 'story', 'think', 'conversation', 'task', 'steps'];
+const modIcon = (mode) => FOX_MODULES.includes(mode) ? h('img', { class: 'fox', src: `/img/modules/${mode}.webp`, alt: '', width: 120, height: 120 }) : icon(MODE_INFO[mode].icon);
 const modesOf = (mod) => MODE_INFO[mod].modes || [mod];
 
 // "Welcome back" once this device has been used before; a plain hello the very first time.
@@ -174,7 +177,7 @@ function renderHome() {
     const list = home.activities.filter((a) => modesOf(mode).includes(a.mode) && home.modes.includes(a.mode));
     const on = list.length > 0;
     return h('button', { class: 'card', 'data-module': mode, 'aria-disabled': on ? 'false' : 'true', onclick: () => on ? (list.length === 1 ? startPractice(list[0].id) : renderPicker(mode, list)) : toast('Nothing here yet. Your team will add it.') },
-      h('span', { class: 'card-icon' }, icon(MODE_INFO[mode].icon)),
+      h('span', { class: 'card-icon' }, modIcon(mode)),
       h('span', {}, MODE_INFO[mode].label, h('br'), h('small', {}, MODE_INFO[mode].tagline), h('br'), h('small', { class: 'card-count' }, on ? `${list.length} to practise` : 'Not yet')));
   });
   mount(
@@ -189,7 +192,7 @@ function renderHome() {
 
 function renderPicker(mode, list) {
   mount(
-    h('div', { class: 'p-top' }, h('h1', { class: 'hello picker-title', 'data-module': mode, style: 'font-size:2rem' }, h('span', { class: 'card-icon' }, icon(MODE_INFO[mode].icon)), MODE_INFO[mode].label), h('button', { class: 'btn', onclick: renderHome }, 'Back')),
+    h('div', { class: 'p-top' }, h('h1', { class: 'hello picker-title', 'data-module': mode, style: 'font-size:2rem' }, h('span', { class: 'card-icon' }, modIcon(mode)), MODE_INFO[mode].label), h('button', { class: 'btn', onclick: renderHome }, 'Back')),
     h('div', { class: 'picker' }, list.map((a) => h('button', { class: 'btn', onclick: () => startPractice(a.id) }, a.title))),
   );
 }
