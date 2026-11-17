@@ -272,8 +272,13 @@ let rec = null;        // { recorder, chunks, stream }
 // The microphone stays open for the whole practice: asking for it on every Press to talk makes an iPad home-screen
 // app show its permission box again and again. Closed when the practice ends.
 let micStream = null;
+// A microphone stream kept open between answers went silent after the first answer (Render logs showed 5-byte
+// recordings), so every answer opens the microphone fresh, as it did before 14 Nov. Set to true to keep one open
+// per practice (fewer permission prompts on an iPad) once that is proven reliable.
+const REUSE_MIC = false;
 async function getMic() {
-  if (micStream && micStream.getAudioTracks().some((t) => t.readyState === 'live')) return micStream;
+  if (REUSE_MIC && micStream && micStream.getAudioTracks().some((t) => t.readyState === 'live' && !t.muted)) return micStream;
+  closeMic();
   micStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
   return micStream;
 }
@@ -488,6 +493,7 @@ async function onTalk() {
     const r = rec; rec = null;
     P.talk = 'busy'; drawPractice();
     const blob = await new Promise((res) => { r.recorder.onstop = () => res(new Blob(r.chunks, { type: r.recorder.mimeType || 'audio/webm' })); r.recorder.stop(); });
+    if (!REUSE_MIC) closeMic();
     const form = new FormData();
     form.append('audio', blob, blob.type.includes('mp4') ? 'sam.mp4' : 'sam.webm');
     await sendResponse({ form });
