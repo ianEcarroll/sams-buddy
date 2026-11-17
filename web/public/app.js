@@ -153,11 +153,13 @@ const MODE_INFO = {
   story: { label: 'Story', tagline: 'Organise my thoughts', icon: 'story' },
   explain: { label: 'Explain', tagline: 'Say it clearly', icon: 'explain', modes: ['explain', 'object'] },
   think: { label: 'Think', tagline: 'Solve the problem', icon: 'think' },
-  conversation: { label: 'Talk', tagline: 'Keep the conversation going', icon: 'chat' },
-  task: { label: 'Listen', tagline: 'Follow instructions', icon: 'ear', modes: ['follow', 'task'] },
-  steps: { label: 'Task', tagline: 'Do it step by step', icon: 'steps' },
+  conversation: { label: 'Talk', tagline: 'Start and maintain conversations', icon: 'chat' },
+  task: { label: 'Listen', tagline: 'Listen, understand and repeat', icon: 'ear', modes: ['follow', 'task'] },
+  steps: { label: 'Task', tagline: 'Follow instructions', icon: 'steps' },
 };
-const MODE_ORDER = Object.keys(MODE_INFO);
+// Modules switched off for now (their activities are kept, just not shown). Explain: not in use at the moment.
+const HIDDEN_MODULES = ['explain'];
+const MODE_ORDER = Object.keys(MODE_INFO).filter((m) => !HIDDEN_MODULES.includes(m));
 // The fox with the module's name on his cap. Explain has no picture yet, so it keeps its drawn icon.
 const FOX_MODULES = ['memory', 'story', 'think', 'conversation', 'task', 'steps'];
 const modIcon = (mode) => FOX_MODULES.includes(mode) ? h('img', { class: 'fox', src: `/img/modules/${mode}.webp`, alt: '', width: 120, height: 120 }) : icon(MODE_INFO[mode].icon);

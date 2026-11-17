@@ -187,7 +187,7 @@ const task = {
 // ---------- CONVERSATION ----------
 const conversation = {
   label: 'Talk',
-  tagline: 'Keep the conversation going',
+  tagline: 'Start and maintain conversations',
   activityName: 'Have a Conversation',
   defaultGoal: 'Relevant comments, personal connections and follow-up questions',
   cueCard: (item, activity) => (activity?.content?.practise_questions ? ['Answer', 'Add', 'Ask'] : ['Answer', 'Add']),
@@ -518,7 +518,7 @@ export function followInstruction(item) {
 }
 const follow = {
   label: 'Listen',
-  tagline: 'Follow instructions',
+  tagline: 'Listen, understand and repeat',
   activityName: 'Follow on Screen',
   defaultGoal: 'Listen to the whole instruction, then follow the steps in order',
   cueCard: (item) => followSteps(item).map((_, i, a) => cap(followOrdinal(i, a.length))),
@@ -642,7 +642,7 @@ export function stepCoach(activity, item, i) {
 
 const steps = {
   label: 'Task',
-  tagline: 'Do it step by step',
+  tagline: 'Follow instructions',
   activityName: 'Step by Step',
   defaultGoal: 'Follow a real task step by step and explain what they did',
   movie: false,
