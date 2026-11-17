@@ -465,7 +465,7 @@ async function renderActivities(root) {
     return h('section', { class: 'mod-card', 'data-module': mod },
       h('header', { class: 'mod-head' }, moduleIcon(mod), h('div', {}, h('h2', {}, M.label), h('small', { class: 'muted' }, M.tagline))),
       hidden ? h('p', { class: 'mod-note' }, `Hidden from ${name}. Turn it on in Practice plan → Buddy modules.`) : null,
-      mine.length ? h('ul', { class: 'list' }, mine.map(row)) : h('p', { class: 'muted mod-empty' }, `Nothing here yet, so ${name}’s tile says “Not yet”.`),
+      mine.length ? h('ul', { class: 'list' }, mine.map(row)) : h('p', { class: 'muted mod-empty' }, `Nothing here yet, so ${name} does not see this tile.`),
       addActivity(root, M));
   });
   root.append(
