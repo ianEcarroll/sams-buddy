@@ -734,7 +734,7 @@ const FINE_TUNE = {
   conversation: 'example comment and question for the model cue',
   think: 'example reason and plan B, ideas that aren’t safe, Buddy’s question, simpler wording',
   recall: 'Buddy’s question',
-  category: 'Buddy’s question, simpler wording',
+  category: 'introduction, Buddy’s question, simpler wording',
 };
 function itemEditor(mode, it, i, urls, remove, ctx, addTopic) {
   const name = me.learner.name;
@@ -1049,6 +1049,7 @@ function categoryEditor(it) {
   draw();
   const main = [field('What does Buddy ask?', kind, it.kind === 'add' ? '' : `"I'll give you the name of a group. Tell me all the things you can think of in it."`), body];
   const extra = [
+    field('Introduction', bind(it, 'intro', h('textarea', { rows: 2 })), `Leave blank for Buddy\u2019s short introduction (\u201cThis is a memory test\u2026\u201d). It is said before the first group of each kind.`),
     field("Buddy's question", txt(it, 'prompt'), 'Leave blank to let Buddy ask in the usual way.'),
     field('Simpler wording', txt(it, 'simple_prompt'), `Said if ${name} says “I don’t understand”.`),
   ];

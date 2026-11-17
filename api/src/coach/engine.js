@@ -183,7 +183,10 @@ function openItem(state) {
     if (lead) lines.push(line(lead, 'intro'));
     lines.push(line(m.prompt(item), 'prompt'));
   } else if (state.mode === 'category') {
-    if (item.intro) lines.push(line(item.intro, 'intro'));
+    // The team's own introduction wins. Otherwise a short default, once for each kind of item in a row.
+    const prev = state.activity.content.items[state.itemIndex - 1];
+    if (item.intro?.trim()) lines.push(line(item.intro.trim(), 'intro'));
+    else if (!prev || categoryKind(prev) !== categoryKind(item)) lines.push(line(m.defaultIntro(item), 'intro'));
     lines.push(line(m.prompt(item), 'prompt'));
   } else if (state.mode === 'think') {
     if (item.intro) lines.push(line(item.intro, 'intro'));
