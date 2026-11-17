@@ -638,7 +638,7 @@ async function showWelcomeVideo() {
   v.addEventListener('ended', hideLaunch);
   v.addEventListener('error', hideLaunch);
   skip.onclick = hideLaunch;
-  const show = () => { document.getElementById('launch-fox').hidden = true; v.hidden = false; skip.hidden = false; };
+  const show = () => { skip.hidden = false; };
   try { await v.play(); show(); return; } catch { /* sound not allowed yet: try silent */ }
   v.muted = true;
   try {
@@ -646,4 +646,6 @@ async function showWelcomeVideo() {
     sound.onclick = () => { v.muted = false; v.currentTime = 0; sound.hidden = true; v.play().catch(hideLaunch); };
   } catch { hideLaunch(); }
 }
-Promise.all([boot().catch(() => {}), new Promise((r) => setTimeout(r, Math.max(0, 1200 - performance.now())))]).then(showWelcomeVideo);
+// The video starts straight away (its first frame is already on screen) while the app loads behind it.
+showWelcomeVideo();
+boot().catch(() => {});
