@@ -173,19 +173,20 @@ function greeting() {
 
 function renderHome() {
   const current = home.activities.find((a) => a.id === home.current_activity_id);
+  // A module with nothing to practise isn't shown at all.
   const cards = MODE_ORDER.map((mode) => {
     const list = home.activities.filter((a) => modesOf(mode).includes(a.mode) && home.modes.includes(a.mode));
-    const on = list.length > 0;
-    return h('button', { class: 'card', 'data-module': mode, 'aria-disabled': on ? 'false' : 'true', onclick: () => on ? (list.length === 1 ? startPractice(list[0].id) : renderPicker(mode, list)) : toast('Nothing here yet. Your team will add it.') },
+    if (!list.length) return null;
+    return h('button', { class: 'card', 'data-module': mode, onclick: () => (list.length === 1 ? startPractice(list[0].id) : renderPicker(mode, list)) },
       h('span', { class: 'card-icon' }, modIcon(mode)),
-      h('span', {}, MODE_INFO[mode].label, h('br'), h('small', {}, MODE_INFO[mode].tagline), h('br'), h('small', { class: 'card-count' }, on ? `${list.length} to practise` : 'Not yet')));
-  });
+      h('span', {}, MODE_INFO[mode].label, h('br'), h('small', {}, MODE_INFO[mode].tagline), h('br'), h('small', { class: 'card-count' }, `${list.length} to practise`)));
+  }).filter(Boolean);
   mount(
     brand(home.name),
     h('div', {}, h('h1', { class: 'hello' }, greeting()), h('p', { class: 'hello-sub' }, 'Ready when you are.')),
     h('button', { class: 'start', disabled: !current, onclick: () => startPractice(current.id) },
       h('strong', {}, 'Start My Practice'), h('span', {}, current ? current.title : 'Your team has not picked one yet')),
-    h('div', { class: 'cards' }, cards),
+    cards.length ? h('div', { class: 'cards' }, cards) : h('p', { class: 'hello-sub' }, 'Your team has not added any practice yet.'),
     h('button', { class: 'btn btn-quiet', onclick: renderSettings }, 'My settings'),
   );
 }
