@@ -40,7 +40,7 @@ export function fill(template, vars) {
 
 // ---------- OBJECT ----------
 const object = {
-  label: 'Explain Buddy',
+  label: 'Explain',
   tagline: 'Say it clearly',
   activityName: 'Describe a Picture',
   defaultGoal: 'Name, group and use in one sentence',
@@ -93,7 +93,7 @@ function storyCardIndex(el, item) {
   return null;
 }
 const story = {
-  label: 'Story Buddy',
+  label: 'Story',
   tagline: 'Organise my thoughts',
   activityName: 'Tell a Story',
   defaultGoal: 'Who and where, events in order (First → Next → Then → Finally) and how it ended',
@@ -148,7 +148,7 @@ function taskElements(item) {
   return els;
 }
 const task = {
-  label: 'Listen Buddy',
+  label: 'Listen',
   tagline: 'Understand and follow instructions',
   activityName: 'Practise a Task',
   defaultGoal: 'Retell the job instructions in order; ask for clarification when needed',
@@ -186,7 +186,7 @@ const task = {
 
 // ---------- CONVERSATION ----------
 const conversation = {
-  label: 'Chat Buddy',
+  label: 'Talk',
   tagline: 'Keep the conversation going',
   activityName: 'Have a Conversation',
   defaultGoal: 'Relevant comments, personal connections and follow-up questions',
@@ -230,7 +230,7 @@ const conversation = {
 
 // ---------- LISTEN (story read aloud, then questions) ----------
 const listen = {
-  label: 'Memory Buddy',
+  label: 'Memory',
   tagline: 'Remember and recall',
   activityName: 'Listen to a Story',
   defaultGoal: 'Listen to a story and answer questions about it',
@@ -255,7 +255,7 @@ export const THINK_FOLLOW_UPS = {
   backup: "What could you do if that doesn't work?",
 };
 const think = {
-  label: 'Think Buddy',
+  label: 'Think',
   tagline: 'Solve the problem',
   activityName: 'Solve a Problem',
   defaultGoal: 'Notice the problem, say a safe thing to do and why, and what to do if it does not work',
@@ -318,7 +318,7 @@ export function stampMemories(mode, content, oldContent, now = new Date()) {
 export const recallTarget = (item) => Math.min(5, Math.max(1, Number(item?.target) || 3));
 const WHAT_ELSE = ['What else do you remember doing?', 'Anything else you remember?', 'What else did you do?'];
 const recall = {
-  label: 'Memory Buddy',
+  label: 'Memory',
   tagline: 'Remember and recall',
   activityName: 'Remember My Day',
   defaultGoal: 'Remember real things I did, with as few clues as possible',
@@ -347,7 +347,7 @@ const recall = {
 // with the same meaning counts. A short answer gets the smallest useful cue for ONE missing part, never a rewrite.
 const pointsOf = (item) => (item.points || []).filter((p) => p?.text);
 const explain = {
-  label: 'Explain Buddy',
+  label: 'Explain',
   tagline: 'Say it clearly',
   activityName: 'How Do You…?',
   defaultGoal: 'Explain how I do something clearly and completely',
@@ -517,7 +517,7 @@ export function followInstruction(item) {
   return steps.map((st, i) => `${cap(followOrdinal(i, steps.length))}, ${followStepText(st, i ? steps[i - 1].token : null)}.`).join(' ');
 }
 const follow = {
-  label: 'Listen Buddy',
+  label: 'Listen',
   tagline: 'Follow instructions',
   activityName: 'Follow on Screen',
   defaultGoal: 'Listen to the whole instruction, then follow the steps in order',
@@ -641,7 +641,7 @@ export function stepCoach(activity, item, i) {
 }
 
 const steps = {
-  label: 'Task Buddy',
+  label: 'Task',
   tagline: 'Do it step by step',
   activityName: 'Step by Step',
   defaultGoal: 'Follow a real task step by step and explain what they did',

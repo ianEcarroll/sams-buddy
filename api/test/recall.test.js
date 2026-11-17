@@ -68,8 +68,8 @@ test('things the family did not list still count, and repeats do not', async () 
 });
 
 test('Memory Buddy covers both its practice types', () => {
-  assert.equal(MODES.recall.label, 'Memory Buddy');
-  assert.equal(MODES.listen.label, 'Memory Buddy');
+  assert.equal(MODES.recall.label, 'Memory');
+  assert.equal(MODES.listen.label, 'Memory');
   assert.notEqual(MODES.recall.activityName, MODES.listen.activityName);
 });
 

@@ -51,8 +51,8 @@ test('a complete explanation first time: code I, no cues', async () => {
 });
 
 test('Explain Buddy covers both its practice types and ships three starter questions', () => {
-  assert.equal(MODES.explain.label, 'Explain Buddy');
-  assert.equal(MODES.object.label, 'Explain Buddy');
+  assert.equal(MODES.explain.label, 'Explain');
+  assert.equal(MODES.object.label, 'Explain');
   assert.equal(STARTER_EXPLAIN.items.length, 3);
   for (const it of STARTER_EXPLAIN.items) assert.ok(it.question && it.points.length >= 3);
 });
