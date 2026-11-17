@@ -1,4 +1,5 @@
 // Buddy — the learner's practice app. No build step: plain ES modules.
+import { watchForUpdates } from '/autoupdate.js';
 const $app = document.getElementById('app');
 const $voice = document.getElementById('voice');
 const TOKEN_KEY = 'buddy.device';
@@ -441,8 +442,7 @@ async function playLines(lines) {
   const gen = ++playGen;
   const done = () => { if (gen === playGen && P) { P.speaking = false; P.nowStep = null; P.walkReveal = null; drawPractice(); } };
   for (const l of lines) {
-    // Paused: hold Buddy's next words until the learner is ready.
-    while (P && P.paused && gen === playGen) await new Promise((r) => setTimeout(r, 250));
+    await holdWhilePaused(gen); // paused: hold Buddy's next words until the learner is ready
     if (gen !== playGen) return;
     P.shown.push(l); P.thinking = false; P.speaking = true;
     if (l.step != null) { P.nowStep = l.step; P.walkReveal = l.step; } else if (P.walkReveal != null && P.walkReveal >= 0) P.nowStep = null;
@@ -454,8 +454,17 @@ async function playLines(lines) {
         const url = URL.createObjectURL(await r.blob());
         if (gen !== playGen) return;
         $voice.src = url;
+        await holdWhilePaused(gen);
+        if (gen !== playGen) return;
         await $voice.play();
         await new Promise((res) => { $voice.onended = res; $voice.onpause = res; });
+        // Paused part-way through the line: carry on from the same spot when the learner is ready.
+        while (P && P.paused && gen === playGen && !$voice.ended) {
+          await holdWhilePaused(gen);
+          if (gen !== playGen || $voice.ended) break;
+          await $voice.play();
+          await new Promise((res) => { $voice.onended = res; $voice.onpause = res; });
+        }
         URL.revokeObjectURL(url);
       } catch { await wait(Math.min(4000, 400 * l.text.split(' ').length), gen); }
     } else {
@@ -471,6 +480,9 @@ async function playLines(lines) {
     }
   }
   done();
+}
+async function holdWhilePaused(gen) {
+  while (P && P.paused && gen === playGen) await new Promise((r) => setTimeout(r, 200));
 }
 function wait(ms, gen) {
   return new Promise((res) => { const t = setInterval(() => { if (gen !== playGen) { clearInterval(t); res(); } }, 100); setTimeout(() => { clearInterval(t); res(); }, ms); });
@@ -585,13 +597,19 @@ function applyTurn(t) {
 // and the exercise holds exactly where it is until the learner presses "I'm ready".
 function pausePractice() {
   if (!P) return;
-  stopVoice();
+  // Buddy's voice is paused, not stopped, so it carries on from the same spot afterwards.
+  try { $voice.pause(); } catch { /* nothing playing */ }
   if (rec) { try { rec.recorder.onstop = null; rec.recorder.stop(); } catch { /* already stopped */ } rec = null; }
   closeMic();
   if (P.talk === 'recording') P.talk = 'idle';
   P.paused = true; drawPractice();
 }
-function resumePractice() { if (!P) return; P.paused = false; drawPractice(); }
+function resumePractice() {
+  if (!P) return;
+  P.paused = false; drawPractice();
+  // Inside the tap, so iPads allow it: carry on with the line that was interrupted.
+  if ($voice.src && $voice.paused && !$voice.ended && $voice.currentTime > 0) $voice.play().catch(() => {});
+}
 
 async function finishPractice() {
   stopVoice();
@@ -647,7 +665,9 @@ async function boot() {
     renderHome();
   } catch (e) { if (token) mount(h('p', {}, e.message), h('button', { class: 'btn', onclick: boot }, 'Try again')); }
 }
-if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' }).catch(() => {});
+// An installed iPad app is never reloaded by itself: pick up new versions when it comes back to the front.
+watchForUpdates({ files: ['/app.js', '/styles.css', '/index.html'], busy: () => !!P });
 // Opening the app: the fox shows while the app loads, then the welcome video starts by itself every time, with a
 // Skip button. It starts with sound if the browser allows it. If not (iPads usually won't), it starts silent, which
 // is always allowed, and a big "Tap for sound" button restarts it from the beginning with sound.
