@@ -76,3 +76,24 @@ test('add kind: a stopped practice still gets a note', async () => {
   const { records } = finish(state);
   assert.match(records[0].review_note, /Did not add a word/);
 });
+
+test('a short introduction says what this is and what to do, once per kind', async () => {
+  const both = { id: 'b', title: 'Both', mode: 'category', plan_goal: 'other', content: { items: [
+    { kind: 'name', group: 'animals', target: 1, accepted: ANIMALS }, { kind: 'name', group: 'fruit', target: 1, accepted: ['apple'] },
+    { kind: 'add', group: 'animals', given: ['dog', 'cat'], accepted: ANIMALS }] } };
+  const { state, turn } = createSession({ activity: both });
+  const texts = (t) => t.lines.map((l) => l.text);
+  assert.ok(texts(turn).some((x) => /memory test.*name of a group.*all the things you can think of/.test(x)));
+  const r = await say(state, 'dog');
+  assert.ok(!texts(r.turn).some((x) => /This is a memory test/.test(x)), 'not repeated for the next group of the same kind');
+  const r2 = await say(state, 'apple');
+  assert.ok(texts(r2.turn).some((x) => /memory test.*say some words.*add a word of your own/.test(x)), 'new kind gets its own introduction');
+});
+
+test('the team can write their own introduction', () => {
+  const mine = { ...name, content: { items: [{ ...name.content.items[0], intro: 'Time for a quick game.' }] } };
+  const { turn } = createSession({ activity: mine });
+  const t = turn.lines.map((l) => l.text);
+  assert.ok(t.includes('Time for a quick game.'));
+  assert.ok(!t.some((x) => /This is a memory test/.test(x)));
+});

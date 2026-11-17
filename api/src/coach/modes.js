@@ -367,6 +367,10 @@ const category = {
     const n = Object.keys(it.met).length;
     return n ? MORE_WORDS[(n - 1) % MORE_WORDS.length] : null;
   },
+  // A short introduction before the first group of each kind: what this is and what the learner will do.
+  defaultIntro: (item) => (categoryKind(item) === 'add'
+    ? "This is a memory test. I'll say some words. Listen carefully, then add a word of your own that fits with them."
+    : "This is a memory test. I'll tell you the name of a group, and you tell me all the things you can think of in that group."),
   prompt: (item) => {
     if (item.prompt?.trim()) return item.prompt.trim();
     const group = item.group || 'things';
