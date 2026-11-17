@@ -552,7 +552,7 @@ function editActivity(root, a) {
   const itemsBox = h('div', {});
   const ctx = () => ({ organiser: organiser.value, practise_questions: practiseQ.checked,
     ...(a.mode === 'steps' ? { skill: stepSkill.value, run: stepRun.value, ask_steps: askSteps.checked, ask_end: askEnd.checked } : {}) });
-  const drawItems = () => itemsBox.replaceChildren(...content.items.map((it, i) => itemEditor(a.mode, it, i, urls, () => { content.items.splice(i, 1); drawItems(); }, ctx)));
+  const drawItems = () => itemsBox.replaceChildren(...content.items.map((it, i) => itemEditor(a.mode, it, i, urls, () => { content.items.splice(i, 1); drawItems(); }, ctx, (topic) => { const n = blankItem(a.mode); n.topic = topic; content.items.push(n); drawItems(); })));
   drawItems();
   // The step questions shown in each task follow the chosen skill, so redraw them when it changes.
   stepSkill.addEventListener('change', () => { drawSkillHint(); drawItems(); });
@@ -727,7 +727,7 @@ const FINE_TUNE = {
   think: 'example reason and plan B, ideas that aren’t safe, Buddy’s question, simpler wording',
   recall: 'Buddy’s question',
 };
-function itemEditor(mode, it, i, urls, remove, ctx) {
+function itemEditor(mode, it, i, urls, remove, ctx, addTopic) {
   const name = me.learner.name;
   const box = h('div', { class: 'item-box' });
   const head = h('div', { class: 'row-actions', style: 'justify-content:space-between' }, h('strong', {}, `${ITEM_NAMES[mode] || 'Item'} ${i + 1}`), h('button', { class: 'btn btn-quiet', onclick: remove }, 'Remove'));
@@ -780,12 +780,16 @@ function itemEditor(mode, it, i, urls, remove, ctx) {
   if (mode === 'conversation') {
     const topic = txt(it, 'topic');
     const likes = me.learner.settings?.interests || [];
-    // One tap fills the topic with one of the child's interests (Practice plan → Interests and activities).
+    // One tap uses one of the child's interests (Practice plan → Interests and activities) as a topic. It never
+    // replaces a topic that is already written: an empty topic box is filled, otherwise the interest is added as a new topic.
     const chips = likes.length
-      ? h('div', { class: 'interest-chips' }, likes.map((x) => h('button', { type: 'button', class: 'chip', onclick: () => { topic.value = x; topic.dispatchEvent(new Event('input', { bubbles: true })); } }, x)))
+      ? h('div', { class: 'interest-chips' }, likes.map((x) => h('button', { type: 'button', class: 'chip', onclick: () => {
+        if (topic.value.trim()) { addTopic?.(x); return; }
+        topic.value = x; topic.dispatchEvent(new Event('input', { bubbles: true }));
+      } }, x)))
       : h('small', { class: 'muted' }, `Add ${name}’s interests in Practice plan and they’ll appear here.`);
     main = [
-      h('div', { class: 'grid2' }, h('div', { class: 'field' }, field('Topic', topic, `Pick from ${name}’s interests:`), chips), field('Picture (optional)', imagePicker(it, 'image_id', urls, false))),
+      h('div', { class: 'grid2' }, h('div', { class: 'field' }, field('Topic', topic, `Or add one of ${name}’s interests as a new topic:`), chips), field('Picture (optional)', imagePicker(it, 'image_id', urls, false))),
       field("Buddy's opening line", txt(it, 'opener'), 'A comment works well, e.g. "I watched Toy Story at the weekend."'),
     ];
     extra = [h('div', { class: 'grid2' }, field('Example comment (for the model cue)', txt(it, 'example_comment')), field('Example question (for the model cue)', txt(it, 'example_question')))];
