@@ -392,7 +392,7 @@ function drawPractice() {
   const stepList = shownSteps.length ? h('ol', { class: 'step-list', 'aria-label': 'The steps', 'data-walk': String(P.nowStep != null) }, shownSteps.map((x, i) =>
     h('li', { 'data-now': String(P.nowStep === i), 'data-past': String(P.nowStep != null && i < P.nowStep) }, x.image ? h('img', { src: x.image, alt: '' }) : null, h('span', {}, x.text)))) : null;
   mountKeep(
-    h('div', { class: 'p-top' }, h('p', { class: 'p-title' }, P.title), h('button', { class: 'btn', onclick: finishPractice }, icon('stop'), 'Finish')),
+    h('div', { class: 'p-top' }, h('p', { class: 'p-title' }, P.title), h('span', { class: 'p-btns' }, h('button', { class: 'btn', onclick: pausePractice }, icon('pause'), 'Pause'), h('button', { class: 'btn', onclick: finishPractice }, icon('stop'), 'Finish'))),
     stepBar,
     // Task Buddy without a picture to show: no empty picture area, so the steps and Buddy's words sit higher up.
     stage || P.mode !== 'steps' ? h('div', { class: 'stage', 'data-visual': String(!!ui.step?.visual) }, stage) : null,
@@ -406,6 +406,7 @@ function drawPractice() {
     talk,
     controls,
     P.help ? helpSheet() : null,
+    P.paused ? h('div', { class: 'pause', role: 'dialog', 'aria-label': 'Paused' }, h('div', {}, h('p', {}, 'Take all the time you need.'), h('button', { class: 'btn btn-primary', onclick: resumePractice }, 'I\u2019m ready'))) : null,
     turn.ui.paused ? h('div', { class: 'pause' }, h('div', {}, h('p', {}, 'Take all the time you need.'), h('button', { class: 'btn btn-primary', onclick: () => sendControl('ready') }, 'I\u2019m ready'))) : null,
   );
   // Keep the newest thing in view: the step Buddy is reading (Task Buddy walk-through), otherwise what Buddy just
@@ -440,6 +441,8 @@ async function playLines(lines) {
   const gen = ++playGen;
   const done = () => { if (gen === playGen && P) { P.speaking = false; P.nowStep = null; P.walkReveal = null; drawPractice(); } };
   for (const l of lines) {
+    // Paused: hold Buddy's next words until the learner is ready.
+    while (P && P.paused && gen === playGen) await new Promise((r) => setTimeout(r, 250));
     if (gen !== playGen) return;
     P.shown.push(l); P.thinking = false; P.speaking = true;
     if (l.step != null) { P.nowStep = l.step; P.walkReveal = l.step; } else if (P.walkReveal != null && P.walkReveal >= 0) P.nowStep = null;
@@ -578,6 +581,18 @@ function applyTurn(t) {
   playLines(t.lines).then(() => { if (t.done && P?.id === t.sessionId) renderDone(t); });
 }
 
+// Pause works in every exercise: Buddy stops talking, a recording in progress is thrown away, nothing is sent,
+// and the exercise holds exactly where it is until the learner presses "I'm ready".
+function pausePractice() {
+  if (!P) return;
+  stopVoice();
+  if (rec) { try { rec.recorder.onstop = null; rec.recorder.stop(); } catch { /* already stopped */ } rec = null; }
+  closeMic();
+  if (P.talk === 'recording') P.talk = 'idle';
+  P.paused = true; drawPractice();
+}
+function resumePractice() { if (!P) return; P.paused = false; drawPractice(); }
+
 async function finishPractice() {
   stopVoice();
   if (rec) { rec.recorder.stop(); rec = null; }
@@ -619,6 +634,7 @@ const ICONS = {
   steps: S('<path d="M10 6h10M10 12h10M10 18h10"/><path d="M3.5 6l1.5 1.5L7.5 5M3.5 12l1.5 1.5 2.5-2.5M3.5 18l1.5 1.5 2.5-2.5"/>'),
   done: S('<circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.7 2.7L16 10"/>'),
   speaker: S('<path d="M4 9v6h4l5 4V5L8 9H4z"/><path d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12"/>'),
+  pause: S('<rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/>'),
   wait: S('<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>'),
 };
 
