@@ -226,6 +226,7 @@ function renderSettings() {
       if (!confirm('Delete all your practice notes? This cannot be undone.')) return;
       await api('/records', { method: 'DELETE' }); toast('Your practice notes are deleted.');
     } }, 'Delete my practice notes'),
+    h('p', { class: 'muted', style: 'font-size:.95rem' }, h('a', { href: '/about/' }, 'About Buddy'), ' \u00B7 why we made it, and our film'),
     h('p', { class: 'muted', style: 'font-size:.85rem' }, 'Pictures: Mulberry Symbols \u00A9 Steve Lee, CC BY-SA 4.0 (mulberrysymbols.org)'),
   );
 }
