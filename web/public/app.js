@@ -441,8 +441,7 @@ async function playLines(lines) {
   const gen = ++playGen;
   const done = () => { if (gen === playGen && P) { P.speaking = false; P.nowStep = null; P.walkReveal = null; drawPractice(); } };
   for (const l of lines) {
-    // Paused: hold Buddy's next words until the learner is ready.
-    while (P && P.paused && gen === playGen) await new Promise((r) => setTimeout(r, 250));
+    await holdWhilePaused(gen); // paused: hold Buddy's next words until the learner is ready
     if (gen !== playGen) return;
     P.shown.push(l); P.thinking = false; P.speaking = true;
     if (l.step != null) { P.nowStep = l.step; P.walkReveal = l.step; } else if (P.walkReveal != null && P.walkReveal >= 0) P.nowStep = null;
@@ -454,8 +453,17 @@ async function playLines(lines) {
         const url = URL.createObjectURL(await r.blob());
         if (gen !== playGen) return;
         $voice.src = url;
+        await holdWhilePaused(gen);
+        if (gen !== playGen) return;
         await $voice.play();
         await new Promise((res) => { $voice.onended = res; $voice.onpause = res; });
+        // Paused part-way through the line: carry on from the same spot when the learner is ready.
+        while (P && P.paused && gen === playGen && !$voice.ended) {
+          await holdWhilePaused(gen);
+          if (gen !== playGen || $voice.ended) break;
+          await $voice.play();
+          await new Promise((res) => { $voice.onended = res; $voice.onpause = res; });
+        }
         URL.revokeObjectURL(url);
       } catch { await wait(Math.min(4000, 400 * l.text.split(' ').length), gen); }
     } else {
@@ -471,6 +479,9 @@ async function playLines(lines) {
     }
   }
   done();
+}
+async function holdWhilePaused(gen) {
+  while (P && P.paused && gen === playGen) await new Promise((r) => setTimeout(r, 200));
 }
 function wait(ms, gen) {
   return new Promise((res) => { const t = setInterval(() => { if (gen !== playGen) { clearInterval(t); res(); } }, 100); setTimeout(() => { clearInterval(t); res(); }, ms); });
@@ -585,13 +596,19 @@ function applyTurn(t) {
 // and the exercise holds exactly where it is until the learner presses "I'm ready".
 function pausePractice() {
   if (!P) return;
-  stopVoice();
+  // Buddy's voice is paused, not stopped, so it carries on from the same spot afterwards.
+  try { $voice.pause(); } catch { /* nothing playing */ }
   if (rec) { try { rec.recorder.onstop = null; rec.recorder.stop(); } catch { /* already stopped */ } rec = null; }
   closeMic();
   if (P.talk === 'recording') P.talk = 'idle';
   P.paused = true; drawPractice();
 }
-function resumePractice() { if (!P) return; P.paused = false; drawPractice(); }
+function resumePractice() {
+  if (!P) return;
+  P.paused = false; drawPractice();
+  // Inside the tap, so iPads allow it: carry on with the line that was interrupted.
+  if ($voice.src && $voice.paused && !$voice.ended && $voice.currentTime > 0) $voice.play().catch(() => {});
+}
 
 async function finishPractice() {
   stopVoice();
