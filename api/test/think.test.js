@@ -10,11 +10,11 @@ const judge = async (a) => keywordJudge(a);
 const say = (state, text) => respond(state, { text }, { judge });
 const gym = { id: 't', title: 'Everyday surprises', mode: 'think', plan_goal: 'unexpected', content: { items: [STARTER_SCENARIOS.items[0]] } };
 
-test('opens with the situation, the team phrase and "What would you do?"', () => {
+test('opens with the situation and "What would you do?" (no movie phrase: Think is about solving the problem)', () => {
   const { turn } = createSession({ activity: gym });
   const t = turn.lines.map((l) => l.text);
   assert.ok(t.includes("You arrive at the gym for your session, but your trainer isn't there."));
-  assert.ok(t.includes('Make a movie in your mind.'));
+  assert.ok(!t.includes('Make a movie in your mind.'));
   assert.equal(t.at(-1), 'What would you do?');
   assert.deepEqual(turn.ui.cueCard.labels, ['Problem', 'What I’d do', 'Why', 'If not']);
 });

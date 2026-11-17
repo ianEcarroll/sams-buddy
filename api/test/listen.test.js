@@ -242,7 +242,7 @@ test('one missed question on retry: "the one you missed", then just the question
 
 test('first reading: title, then the story (never "Here is the story again"); a re-read says it', async () => {
   const { state, turn } = createSession({ activity: act(), settings: { explain_buttons: false } });
-  const t = texts(turn).filter((x) => !/great to see you/.test(x));
+  const t = turn.lines.filter((l) => l.kind !== 'welcome').map((l) => l.text);
   assert.equal(t[0], 'This story is called: Tinker Bell and the lost thimble.');
   assert.ok(!t.some((x) => /story again/.test(x)));
   control(state, 'start_questions');

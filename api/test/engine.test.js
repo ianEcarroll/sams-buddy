@@ -136,7 +136,9 @@ test('every practice starts with a warm welcome using the learner\'s name, then 
 
 test('the team can turn off the button explanation', () => {
   const { turn } = createSession({ activity: storyActivity, learnerName: 'Maya', settings: { explain_buttons: false } });
-  assert.equal(turn.lines.filter((l) => l.kind === 'welcome').length, 1);
+  const w = turn.lines.filter((l) => l.kind === 'welcome').map((l) => l.text);
+  assert.equal(w.length, 2, 'the greeting and the short introduction');
+  assert.ok(!w.some((x) => /Repeat/.test(x)));
 });
 
 test('the editor preview leaves out the welcome', () => {
@@ -149,4 +151,19 @@ test('no hard-coded name when none is given', () => {
   assert.ok(!turn.lines.some((l) => /\bSam\b/.test(l.text)));
   const { records } = finish(state, 'finished');
   assert.ok(!JSON.stringify(records).includes('Sam '));
+});
+
+test('every module opens with one short introduction after the greeting, and Repeat does not replay it', async () => {
+  const { state, turn } = createSession({ activity: storyActivity, learnerName: 'Maya' });
+  const w = turn.lines.filter((l) => l.kind === 'welcome').map((l) => l.text);
+  assert.match(w[2], /^This is a story practice\./, 'greeting, button explanation, then the introduction');
+  const again = control(state, 'repeat').turn.lines.map((l) => l.text);
+  assert.ok(!again.some((x) => /This is a story practice/.test(x)));
+});
+
+test('the introduction names what the learner will do, in every mode', () => {
+  for (const [mode, re] of [['think', /thinking practice.*what you would do/], ['recall', /memory practice.*what you remember/], ['conversation', /talking practice/], ['follow', /listening practice/], ['task', /tell me the instructions back/]]) {
+    const { turn } = createSession({ activity: { id: 'x', title: 'x', mode, plan_goal: 'other', content: { items: [{ opener: 'Hi', topic: 'x', scenario: 's', question: 'q', instruction: 'i', steps: ['a', 'b'], tokens: ['circle'], goal: [], start: {}, memories: [], prompt: 'p' }] } } });
+    assert.ok(turn.lines.some((l) => l.kind === 'welcome' && re.test(l.text)), mode);
+  }
 });
