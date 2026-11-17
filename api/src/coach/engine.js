@@ -52,7 +52,7 @@ export function createSession({ activity, settings = {}, learnerName = '', learn
     learnerInterests,
   };
   // Welcome lines come first but stay out of lastLines, so Repeat replays the task, not the greeting.
-  const lines = [...welcomeLines(state), ...openItem(state)];
+  const lines = [...welcomeLines(state), ...modeIntroLines(state), ...openItem(state)];
   return { state, turn: state.mode === 'listen' ? listenTurn(state, lines) : state.mode === 'follow' ? followTurn(state, lines) : state.mode === 'steps' ? stepsTurn(state, lines) : makeTurn(state, lines) };
 }
 
@@ -64,6 +64,33 @@ function welcomeLines(state) {
     lines.push(line('You can use the buttons at the bottom whenever you like. Repeat, to hear it again. Help me, for a clue. Let me think, for extra time. And Try again, to have another go.', 'welcome'));
   }
   return lines;
+}
+
+// One short introduction at the start of every practice: what we are doing and what the learner will do.
+// Said once, after the welcome (the Memory test has its own, once per kind of group). Like the welcome, it stays out of
+// lastLines, so Repeat replays the question, not the introduction.
+const MODE_INTRO = {
+  object: 'This is a describing practice. I will show you something, and you tell me all about it.',
+  story: 'This is a story practice. I will ask you to tell me a story in order, from the start to the end.',
+  listen: 'This is a memory practice. I will tell you a story. Listen carefully, and then I will ask you some questions about it.',
+  recall: 'This is a memory practice. I will ask you about something you did, and you tell me what you remember.',
+  think: 'This is a thinking practice. I will tell you about a problem, and then you tell me what you would do.',
+  conversation: 'This is a talking practice. We will chat about something together. Answer my questions, and ask me some too.',
+  explain: 'This is an explaining practice. I will ask you how to do something, and you explain it clearly, step by step.',
+  follow: 'This is a listening practice. I will tell you where to put some pictures. Listen carefully, and then do what I say.',
+  task: 'This is a listening practice. I will give you a job to do. Listen carefully, and then tell me the instructions back, in order.',
+};
+function modeIntroLines(state) {
+  if (state.mode === 'category') return [];
+  if (state.mode === 'steps') {
+    const text = stepsLearn(state)
+      ? 'This is a practice for following instructions. I will go through the steps of a task, one at a time, and then I will ask you about them.'
+      : !stepsPractice(state)
+        ? 'This is a practice for following instructions. You will do all the steps of a task on your own.'
+        : 'This is a practice for following instructions. We will do a task one step at a time, and you press Done after each step.';
+    return [line(text, 'welcome')];
+  }
+  return MODE_INTRO[state.mode] ? [line(MODE_INTRO[state.mode], 'welcome')] : [];
 }
 
 // What Buddy says when an item starts, plus the simpler wording used for "I don't understand".
@@ -192,7 +219,7 @@ function openItem(state) {
     if (item.intro) lines.push(line(item.intro, 'intro'));
     if (!lead) lines.push(line("Here's a situation.", 'intro'));
     lines.push(line(item.scenario || '', 'instruction'));
-    lines.push(line(TEAM_PHRASE, 'movie', { pauseAfter: think }));
+    // No "Make a movie in your mind" here (Ian, 17 Nov): Think is about solving the problem, so the question comes straight away.
     lines.push(line(m.prompt(item), 'prompt'));
   } else if (state.mode === 'conversation') {
     lines.push(line(item.opener || `Let's talk about ${item.topic}.`, 'prompt'));

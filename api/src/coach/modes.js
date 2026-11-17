@@ -259,7 +259,7 @@ const think = {
   tagline: 'Solve the problem',
   activityName: 'Solve a Problem',
   defaultGoal: 'Notice the problem, say a safe thing to do and why, and what to do if it does not work',
-  movie: true,
+  movie: false,
   cueCard: () => ['Problem', 'What I’d do', 'Why', 'If not'],
   elements: () => ['problem', 'action', 'reason', 'backup'],
   elementLabel: { problem: 'Problem', action: 'What to do', reason: 'Why', backup: 'If that does not work' },
