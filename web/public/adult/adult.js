@@ -1,4 +1,5 @@
 // Buddy — support-team area (parents, speech therapist, teachers, job coach).
+import { watchForUpdates } from '/autoupdate.js';
 const $app = document.getElementById('app');
 const TOKEN_KEY = 'buddy.adult';
 // "Keep me signed in on this device" keeps the sign-in in localStorage (30 days); otherwise it lasts until the tab closes.
@@ -242,7 +243,10 @@ function offlineNotice(on) {
 }
 addEventListener('offline', () => offlineNotice(true));
 addEventListener('online', () => offlineNotice(false));
-if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' }).catch(() => {});
+// An installed app is never reloaded by itself: pick up new versions when it comes back to the front.
+// Not while an activity is open for editing, so nothing typed is lost.
+watchForUpdates({ files: ['/adult/adult.js', '/adult/', '/styles.css'], busy: () => !!document.querySelector('.edit-head, .item-box') });
 // A reset link opened while the team app is already showing in this tab.
 addEventListener('hashchange', () => { if (/^#reset=/.test(location.hash)) boot(); });
 

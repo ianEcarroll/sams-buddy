@@ -1,4 +1,5 @@
 // Buddy — the learner's practice app. No build step: plain ES modules.
+import { watchForUpdates } from '/autoupdate.js';
 const $app = document.getElementById('app');
 const $voice = document.getElementById('voice');
 const TOKEN_KEY = 'buddy.device';
@@ -664,7 +665,9 @@ async function boot() {
     renderHome();
   } catch (e) { if (token) mount(h('p', {}, e.message), h('button', { class: 'btn', onclick: boot }, 'Try again')); }
 }
-if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' }).catch(() => {});
+// An installed iPad app is never reloaded by itself: pick up new versions when it comes back to the front.
+watchForUpdates({ files: ['/app.js', '/styles.css', '/index.html'], busy: () => !!P });
 // Opening the app: the fox shows while the app loads, then the welcome video starts by itself every time, with a
 // Skip button. It starts with sound if the browser allows it. If not (iPads usually won't), it starts silent, which
 // is always allowed, and a big "Tap for sound" button restarts it from the beginning with sound.
