@@ -139,6 +139,22 @@ export function keywordJudge({ mode, item, elements, text, activity }) {
     out.met.memory = out.events.length ? text : null;
   }
 
+  if (mode === 'category') {
+    // Offline fallback: only words on the team's list can be recognised. The Claude judge accepts any real member.
+    const given = new Set((item.given || []).map((g) => String(g).toLowerCase()));
+    const skip = new Set([...(item.already_recalled || []), item.group || ''].map((g) => String(g).toLowerCase().replace(/[^a-z0-9 ]/g, '').trim()));
+    const seen = new Set();
+    out.events = [];
+    (item.accepted || []).forEach((c, i) => {
+      const key = String(c).toLowerCase();
+      if (given.has(key) || seen.has(key) || skip.has(key.replace(/[^a-z0-9 ]/g, '').trim())) return;
+      const hit = findAny(text, [c]);
+      if (hit) { seen.add(key); out.events.push({ text: hit, known: i }); }
+    });
+    out.met.member = out.events.length ? text : null;
+    out.met.word = out.events.length ? out.events[0].text : null;
+  }
+
   if (mode === 'think') {
     const actions = [...(item.good_actions || []).flatMap(keyWords), 'ask', 'tell', 'call', 'message', 'staff', 'teacher', 'adult', 'parent', 'mum', 'dad', 'mom'];
     out.met.action = findAny(text, actions);
@@ -194,6 +210,11 @@ function answerKey(mode, item, activity) {
     things_the_family_says_they_did: (item.memories || []).filter((m) => m?.event).map((m, i) => ({ index: i, event: m.event })),
     already_remembered_earlier: item.already_recalled || [],
   };
+  if (mode === 'category') return {
+    kind: item.kind === 'add' ? 'add' : 'name', group: item.group,
+    given_words_buddy_said: item.kind === 'add' ? item.given || [] : undefined,
+    example_members: item.accepted || [], already_said_earlier: item.already_recalled || [],
+  };
   if (mode === 'think') return {
     situation: item.scenario, what_is_unexpected: item.problem, approved_safe_responses: item.good_actions || [],
     example_reason: item.reason_example || null, example_backup_plan: item.backup_example || null, not_safe: item.unsafe || [],
@@ -208,6 +229,7 @@ const ELEMENT_GUIDE = {
   listen: 'answer = the learner\'s response correctly answers the question, judged against the story and the accepted answers. Accept any wording, synonym or partial answer with the same meaning (e.g. "a bird" for "crow" only if bird is accepted; "Peter" for "Peter Pan"). A wrong or unrelated answer, or "I don\'t know", is not supplied. Evidence = their answer words. If question_type is "new_title" there is no single right answer: answer = any short, sensible name for the story that fits what happened (the original title, a character or event from the story, or a playful but related name all count). "I don\'t know", unrelated words or a whole retelling instead of a name do not count.',
   explain: 'The learner is explaining how they do something. point_N = their explanation includes part N (meaning, not exact words; their own way of saying it counts, and an example counts for a general part such as "a filling like ham or cheese"). A very short answer that only hints at a part (e.g. "Cut paper." for "cut the character out with scissors") counts only if the meaning of that part is actually there. Do not credit a part just because it is implied by another.',
   recall: 'Memory practice: the learner is asked to remember real things they did. memory = they described at least one real thing they did or experienced (evidence = their words). Also fill "events": one entry per DIFFERENT thing they say they did in this response, as a short phrase in their own words (e.g. "went to the gym"). Set known to the index of the matching thing the family listed, or -1 if it is something else (it still counts: the family list is not complete). Leave out anything already_remembered_earlier, repeats, "I don\'t know", and simple yes/no answers. Several details about one activity are one event, not several.',
+  category: 'Category practice: the learner is asked to say words that belong to a group (answer key "group"). If kind is "add", Buddy said given_words_buddy_said and the learner must add a word of their own: word = they said at least one word that is NOT one of the given words and really belongs to the same group. If kind is "name", member = they named at least one real member of the group. example_members are only examples: ANY real member of the group counts, including less common ones, plural or singular, with "a"/"the" or a short description. Do not count the group name itself, words already in already_said_earlier, or words that are not in the group (for example a different group). Evidence = the learner\'s own word. Also fill "events": one entry per DIFFERENT real member they named in this response (text = the word as they said it, known = -1), leaving out given words and already_said_earlier.',
   think: 'This is a problem-solving role-play: Buddy described a situation and asked what the learner would do. The whole response may cover several parts at once. problem = they show they noticed what is wrong or unexpected (naming it, or giving a response that clearly deals with that specific problem). action = they say a safe, sensible thing they would do; asking a trusted adult, staff member, teacher or parent always counts; compare with the approved responses by meaning, not wording, and accept other safe, sensible ideas too. An unsafe idea (in not_safe, or plainly unsafe such as leaving alone, going with a stranger, or anything risky) is NOT an action: set unsafe_idea = true. reason = they explain why their idea would help ("because…", "so that…", or a clear reason in other words). backup = they say what they would do if their first idea did not work. Saying what they WOULD do in the situation (e.g. "I\'d ask my coach for help", "I need help so I\'d ask the staff") is an answer, not a help_request; help_request is only for asking Buddy itself (e.g. "Can you say that again?", "I don\'t understand the question").',
   steps: 'The learner is learning or doing a task step by step and Buddy asked one question about this step (when heard_all_steps_first is true, Buddy read out every step earlier and the learner is answering from memory; for expressive, reasoning and independence they say how they would do it, why, or how they would check). answer = the response is a sensible, correct answer to the question for THIS step (meaning, not exact words; the example answer is one good answer, not the only one). By skill: understanding = they show they understood the instruction (saying the key action or thing is enough, e.g. "the sleeves"); memory = they say what this step is (when Buddy has not said it yet) or the step asked about; expressive = they describe what they did in this step in their own words, ideally a sentence (a single word like "folded" counts only if it clearly names the action); reasoning = any sensible reason why the step matters, or a sensible plan if something goes wrong; independence = any sensible way of checking the step is finished, or what to do next time. "I don\'t know", unrelated words, or describing a different step do not count.',
   conversation: 'turn = the learner made a relevant comment, a personal connection, or a question on the topic. Any of these is a valid turn.',
@@ -284,7 +306,7 @@ export function makeClaudeJudge({ apiKey, model, workspaceId, fetchImpl = fetch 
           transcript_seems_garbled: { type: 'boolean' },
           events: {
             type: 'array',
-            description: 'Recall mode only: each different thing the learner says they did.',
+            description: 'Recall and category modes only: each different thing the learner says they did (recall) or each different real member of the group they named (category).',
             items: { type: 'object', properties: { text: { type: 'string' }, known: { type: 'integer' } }, required: ['text', 'known'] },
           },
           unsafe_idea: { type: 'boolean', description: 'Think mode only: the learner suggested something unsafe.' },
@@ -322,7 +344,7 @@ export function makeClaudeJudge({ apiKey, model, workspaceId, fetchImpl = fetch 
     out.inOrder = input.events_in_order === 'yes' ? true : input.events_in_order === 'no' ? false : null;
     out.help = helpFor(mode, quickHelp !== 'none' ? quickHelp : (HELP_ENUM.includes(input.help_request) ? input.help_request : 'none'));
     out.unsafe = mode === 'think' && !!input.unsafe_idea;
-    if (mode === 'recall') {
+    if (mode === 'recall' || mode === 'category') {
       out.events = (Array.isArray(input.events) ? input.events : [])
         .map((e) => ({ text: String(e?.text || '').trim().slice(0, 200), known: Number.isInteger(e?.known) ? e.known : -1 }))
         .filter((e) => e.text);

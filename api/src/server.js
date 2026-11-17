@@ -9,7 +9,7 @@ import { pgSpeechStore, pruneSpeech } from './speechStore.js';
 import { createSession, respond, confirmHeard, control, act, finish, previewLines, ENGINE_DEFAULTS } from './coach/engine.js';
 import { judgeFromEnv, modelsFromEnv } from './coach/judge.js';
 import { draftStepQuestions } from './coach/draft.js';
-import { MODES, STARTER_STORIES, STARTER_SCENARIOS, STARTER_EXPLAIN, STARTER_FOLLOW, STARTER_OBJECTS, STARTER_STEPS, STEP_SKILLS, STEP_LEVELS, FOLLOW_OBJECTS, isFollowToken, FOLLOW_STEP_TYPES, FOLLOW_BOXES, stampMemories } from './coach/modes.js';
+import { MODES, STARTER_STORIES, STARTER_SCENARIOS, STARTER_EXPLAIN, STARTER_FOLLOW, STARTER_OBJECTS, STARTER_STEPS, STARTER_CATEGORY, STEP_SKILLS, STEP_LEVELS, FOLLOW_OBJECTS, isFollowToken, FOLLOW_STEP_TYPES, FOLLOW_BOXES, stampMemories } from './coach/modes.js';
 import { PLAN_GOALS, GOAL_KEYS, SUPPORT_CODES } from './coach/goals.js';
 import { emailEnabled, sendEmail, recipientsFor, practiceEmail, resetEmail } from './email.js';
 import { isPlatformAdmin, newInviteToken, INVITE_DAYS, estimateCost, ratesFor, validateFamily, ageFrom, cleanInterests } from './families.js';
@@ -43,7 +43,7 @@ export const SETTING_DEFAULTS = {
   reminder_time: '',          // 'HH:MM' in the learner's time zone; '' = no reminder
   timezone: 'Europe/Paris',
   voice_id: null,
-  enabled_modes: ['story', 'object', 'task', 'listen', 'think', 'recall', 'explain', 'follow', 'steps'],
+  enabled_modes: ['story', 'object', 'task', 'listen', 'think', 'recall', 'category', 'explain', 'follow', 'steps'],
   interests: [],              // the child's interests and activities, used by Buddy in conversation
 };
 const SETTING_KEYS = Object.keys(SETTING_DEFAULTS);
@@ -329,6 +329,16 @@ async function ensureRecallEnabled(learnerId) {
   const modes = settingsOf(l).enabled_modes;
   await q('update learners set settings = settings || $1::jsonb where id=$2', [{ recall_enabled: true, enabled_modes: modes.includes('recall') ? modes : [...modes, 'recall'] }, learnerId]);
 }
+// Memory test (naming the members of a group): two starter activities with animals, fruit and Disney movies. Added once.
+async function ensureStarterCategory(learnerId) {
+  const l = await one('select settings from learners where id=$1', [learnerId]);
+  if (!l || l.settings?.category_seeded) return;
+  for (const a of STARTER_CATEGORY) {
+    await q("insert into activities(learner_id, mode, title, goal, plan_goal, status, content) values ($1,'category',$2,$3,'other','active',$4)", [learnerId, a.title, a.goal, { items: a.items }]);
+  }
+  const modes = settingsOf(l).enabled_modes;
+  await q('update learners set settings = settings || $1::jsonb where id=$2', [{ category_seeded: true, enabled_modes: modes.includes('category') ? modes : [...modes, 'category'] }, learnerId]);
+}
 // Explain Buddy's "How do you…?" starts with three everyday explanations. Added once; the team can edit or archive them.
 async function ensureStarterExplain(learnerId) {
   const l = await one('select settings from learners where id=$1', [learnerId]);
@@ -367,7 +377,7 @@ async function ensureStarterSteps(learnerId) {
   const modes = settingsOf(l).enabled_modes;
   await q('update learners set settings = settings || $1::jsonb where id=$2', [{ steps_seeded: true, enabled_modes: modes.includes('steps') ? modes : [...modes, 'steps'] }, learnerId]);
 }
-const ensureStarters = async (learnerId) => { await ensureStarterStories(learnerId); await ensureStarterScenarios(learnerId); await ensureRecallEnabled(learnerId); await ensureStarterExplain(learnerId); await ensureStarterFollow(learnerId); await ensureStarterObjects(learnerId); await ensureStarterSteps(learnerId); };
+const ensureStarters = async (learnerId) => { await ensureStarterStories(learnerId); await ensureStarterScenarios(learnerId); await ensureRecallEnabled(learnerId); await ensureStarterCategory(learnerId); await ensureStarterExplain(learnerId); await ensureStarterFollow(learnerId); await ensureStarterObjects(learnerId); await ensureStarterSteps(learnerId); };
 
 function validateActivity(b) {
   if (!MODES[b.mode]) return 'Choose a practice type.';
@@ -389,6 +399,15 @@ function validateActivity(b) {
       const n = Number(it.target ?? 3);
       if (!Number.isInteger(n) || n < 1 || n > 5) return `Memory ${i + 1}: choose how many things to remember (1 to 5).`;
       if (!it.when?.trim() && !it.prompt?.trim()) return `Memory ${i + 1}: say when it happened (e.g. "at the weekend") or write Buddy's question.`;
+    }
+    if (b.mode === 'category') {
+      const add = it.kind === 'add';
+      if (!String(it.group || '').trim()) return `Group ${i + 1}: say what the group is, e.g. "animals".`;
+      if (add && (it.given || []).filter((w) => String(w || '').trim()).length < 2) return `Group ${i + 1}: add at least two words for Buddy to say.`;
+      if (!add) {
+        const n = Number(it.target ?? 3);
+        if (!Number.isInteger(n) || n < 1 || n > 8) return `Group ${i + 1}: choose how many things to ask for (1 to 8).`;
+      }
     }
     if (b.mode === 'think' && (!it.scenario?.trim() || !it.problem?.trim())) return `Situation ${i + 1}: describe the situation and what is unexpected about it.`;
     if (b.mode === 'conversation' && (!it.topic || !it.opener)) return `Topic ${i + 1}: add the topic and Buddy's opening line.`;

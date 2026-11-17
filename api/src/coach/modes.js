@@ -342,6 +342,55 @@ const recall = {
   itemLabel: (item) => item.title || 'my day',
 };
 
+// ---------- CATEGORY (Memory test: naming the members of a group) ----------
+// Two kinds of item, both set by the speech therapist:
+//   add:  Buddy says a few words from one group ("dog, cat, horse") and the learner adds a word that fits.
+//   name: Buddy says the name of a group ("fruit") and the learner names as many things in it as they can.
+// "accepted" lists example members. They help the keyword fallback and Buddy's clues; the Claude judge also
+// accepts any real member of the group. "target" is how many members the learner is asked for (name kind).
+export const categoryKind = (item) => (item?.kind === 'add' ? 'add' : 'name');
+export const categoryTarget = (item) => Math.min(8, Math.max(1, Number(item?.target) || 3));
+export const categoryWords = (list) => (Array.isArray(list) ? list : []).map((w) => String(w || '').trim()).filter(Boolean);
+const MORE_WORDS = ['Can you think of any more?', 'What else can you think of?', 'Any others?'];
+const category = {
+  label: 'Memory',
+  tagline: 'Remember and recall',
+  activityName: 'Memory Test',
+  defaultGoal: 'Name things that belong in a group',
+  cueCard: (item) => (categoryKind(item) === 'add' ? ['Add a word'] : Array.from({ length: categoryTarget(item) }, (_, i) => String(i + 1))),
+  elements: (item) => (categoryKind(item) === 'add' ? ['word'] : Array.from({ length: categoryTarget(item) }, (_, i) => `member_${i}`)),
+  elementLabel: new Proxy({}, { get: (t, k) => (k === 'word' ? 'Added a word' : String(k).startsWith('member_') ? `Word ${Number(String(k).slice(7)) + 1}` : k) }),
+  cueCardIndex: (el) => (String(el).startsWith('member_') ? Number(el.slice(7)) : el === 'word' ? 0 : null),
+  cueKey: (el) => (el === 'word' ? 'word' : 'member'),
+  followUp: (el, it) => {
+    if (!String(el).startsWith('member_')) return null;
+    const n = Object.keys(it.met).length;
+    return n ? MORE_WORDS[(n - 1) % MORE_WORDS.length] : null;
+  },
+  prompt: (item) => {
+    if (item.prompt?.trim()) return item.prompt.trim();
+    const group = item.group || 'things';
+    return categoryKind(item) === 'add'
+      ? `Listen carefully. ${categoryWords(item.given).join(', ')}. Now add a word of your own that fits with those.`
+      : `Here is a group: ${group}. Tell me all the things you can think of in that group.`;
+  },
+  simplePrompt: (item) => item.simple_prompt || (categoryKind(item) === 'add' ? 'What else goes with those words?' : `What things can you think of that are ${item.group || 'in the group'}?`),
+  // The two helper phrases are filled in by the engine from the examples that have not been said yet.
+  defaultCues: {
+    word: ['Listen again: {given}. What else goes with those?', 'Those are all {group}. What else is one?', '{letterCue}', '{modelCue}'],
+    member: ['Tell me things that are {group}.', 'Think about {group}. What else belongs?', '{letterCue}', '{modelCue}'],
+  },
+  vars: (item) => ({
+    group: item.group || 'in this group',
+    given: categoryWords(item.given).join(', '),
+    letterCue: item._letter ? `Think of one that starts with "${item._letter}".` : `Picture ${item.group || 'the group'}. What can you see?`,
+    modelCue: item._example ? `One is "${item._example}". Can you say it, or think of another?` : "That's okay. Let's try the next one.",
+  }),
+  achieved: {},
+  evidenceLabel: new Proxy({}, { get: (t, k) => (k === 'word' ? 'Added' : String(k).startsWith('member_') ? `Word ${Number(String(k).slice(7)) + 1}` : undefined) }),
+  itemLabel: (item) => item.title || item.group || 'group',
+};
+
 // ---------- EXPLAIN (Explain Buddy: "Tell me how you make…") ----------
 // The learner explains how they do something. The team lists the parts a clear explanation includes; any wording
 // with the same meaning counts. A short answer gets the smallest useful cue for ONE missing part, never a rewrite.
@@ -752,7 +801,33 @@ export const STARTER_STEPS = [
   },
 ];
 
-export const MODES = { object, story, task, conversation, listen, think, recall, explain, follow, steps };
+export const MODES = { object, story, task, conversation, listen, think, recall, category, explain, follow, steps };
+
+// Memory test starters: two activities with the same three everyday groups. The therapist adds her own groups and
+// words in Activities. The lists are examples; Buddy's judge also accepts any real member of the group.
+const ANIMALS = ['dog', 'cat', 'horse', 'cow', 'pig', 'sheep', 'chicken', 'duck', 'rabbit', 'mouse', 'lion', 'tiger', 'elephant', 'monkey', 'giraffe', 'zebra', 'bear', 'frog', 'snake', 'fish', 'bird'];
+const FRUIT = ['apple', 'banana', 'orange', 'pear', 'grapes', 'strawberry', 'cherry', 'peach', 'plum', 'lemon', 'melon', 'watermelon', 'pineapple', 'mango', 'kiwi', 'blueberry', 'raspberry'];
+const DISNEY = ['Frozen', 'Moana', 'Encanto', 'Tangled', 'Cinderella', 'Aladdin', 'The Lion King', 'Toy Story', 'Finding Nemo', 'Coco', 'Bambi', 'Dumbo', 'Mulan', 'Beauty and the Beast', 'The Little Mermaid', 'Snow White', 'Peter Pan', 'The Jungle Book', 'Zootopia', 'Inside Out', 'Up', 'Cars'];
+export const STARTER_CATEGORY = [
+  {
+    title: 'Memory test: name the group',
+    goal: 'Name things that belong in a group',
+    items: [
+      { kind: 'name', group: 'animals', target: 3, accepted: ANIMALS },
+      { kind: 'name', group: 'fruit', target: 3, accepted: FRUIT },
+      { kind: 'name', group: 'Disney movies', target: 3, accepted: DISNEY },
+    ],
+  },
+  {
+    title: 'Memory test: add a word',
+    goal: 'Listen to a list of words and add one that fits',
+    items: [
+      { kind: 'add', group: 'animals', given: ['dog', 'cat', 'horse'], accepted: ANIMALS },
+      { kind: 'add', group: 'fruit', given: ['apple', 'banana', 'orange'], accepted: FRUIT },
+      { kind: 'add', group: 'Disney movies', given: ['Frozen', 'Moana', 'Tangled'], accepted: DISNEY },
+    ],
+  },
+];
 
 // Three everyday situations every learner starts with in Think Buddy. The team should check them with the
 // therapist and can edit, archive or add their own in Activities.
@@ -872,6 +947,11 @@ export function describe(mode, els, item) {
     const total = pointsOf(item).length;
     if (n && n === total) return 'explained every part clearly';
     return n === 1 ? 'made a good start' : `explained ${NUM[n] || n} parts`;
+  }
+  if (mode === 'category') {
+    if (els.includes('word')) return 'added a word that fits';
+    const n = els.filter((e) => e.startsWith('member_')).length;
+    return n === 1 ? 'named one thing in the group' : `named ${NUM[n] || n} things in the group`;
   }
   if (mode === 'recall') {
     const n = els.filter((e) => e.startsWith('memory_')).length;

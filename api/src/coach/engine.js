@@ -5,7 +5,7 @@
 import { RECALL_FRESH_DAYS as RECALL_DAYS } from './modes.js';
 import { detectHelp } from './judge.js';
 import { FOLLOW_BOXES, followSteps, followStepText, followInstruction, tokenName, tokenImage, tokenWords, followThing } from './modes.js';
-import { MODES, LEVELS, TEAM_PHRASE, DEFAULT_CLARIFY_PHRASES, cueLadder, describe, labelFor, freshMemories, whenNoun } from './modes.js';
+import { MODES, LEVELS, TEAM_PHRASE, DEFAULT_CLARIFY_PHRASES, cueLadder, describe, labelFor, freshMemories, whenNoun, categoryKind, categoryWords } from './modes.js';
 import { PLAN_GOALS, supportCode, successFor } from './goals.js';
 import { STEP_SKILLS, STEP_LEVELS, stepCoach, stepSkillOf, stepRunOf } from './modes.js';
 
@@ -116,7 +116,7 @@ const curItem = (s) => s.activity.content.items[s.itemIndex];
 // Each item in an activity is led in the same conversational way in every module:
 // "Here's the first situation." → "On to the next situation." → "And here's the last situation."
 // One item on its own gets no lead. Stories (Listen to a Story) lead in from storyLines.
-const ITEM_NOUN = { steps: 'task', object: 'picture', story: 'story', task: 'job', follow: 'instruction', explain: 'question', recall: 'question', think: 'situation', conversation: 'topic', listen: 'story' };
+const ITEM_NOUN = { steps: 'task', object: 'picture', story: 'story', task: 'job', follow: 'instruction', explain: 'question', recall: 'question', category: 'group', think: 'situation', conversation: 'topic', listen: 'story' };
 const NEXT_ITEM = ['On to the next {noun}.', "Here's the next {noun}.", 'Now for the next {noun}.'];
 export function itemLead(state) {
   const total = state.activity.content.items?.length || 1;
@@ -181,6 +181,9 @@ function openItem(state) {
     if (item.intro) lines.push(line(item.intro, 'intro'));
     lines.push(line(TEAM_PHRASE, 'movie', { pauseAfter: think }));
     if (lead) lines.push(line(lead, 'intro'));
+    lines.push(line(m.prompt(item), 'prompt'));
+  } else if (state.mode === 'category') {
+    if (item.intro) lines.push(line(item.intro, 'intro'));
     lines.push(line(m.prompt(item), 'prompt'));
   } else if (state.mode === 'think') {
     if (item.intro) lines.push(line(item.intro, 'intro'));
@@ -254,8 +257,9 @@ async function process_(state, { text, displayText, confirmed }, judge) {
     ? [{ who: 'Buddy', text: item.opener }, ...conv.turns.flatMap((t) => [{ who: state.learnerName || 'Learner', text: t.text }, ...(t.reply ? [{ who: 'Buddy', text: t.reply }] : [])])]
     : [];
 
-  const judgeElements = state.mode === 'conversation' ? ['turn'] : state.mode === 'recall' ? ['memory'] : it.elements.filter((e) => e !== 'order' && e !== 'clarify');
-  const judgeItem = state.mode === 'recall' ? { ...item, memories: it.mems || [], already_recalled: it.recalled.map((r) => r.text) } : item;
+  const judgeElements = state.mode === 'conversation' ? ['turn'] : state.mode === 'recall' ? ['memory'] : state.mode === 'category' ? [categoryKind(item) === 'add' ? 'word' : 'member'] : it.elements.filter((e) => e !== 'order' && e !== 'clarify');
+  const judgeItem = state.mode === 'recall' ? { ...item, memories: it.mems || [], already_recalled: it.recalled.map((r) => r.text) }
+    : state.mode === 'category' ? { ...item, already_recalled: it.recalled.map((r) => r.text) } : item;
   const j = await judge({ mode: state.mode, item: judgeItem, elements: judgeElements, text, activity: state.activity, history, inviteQuestion, learner: learnerOf(state) });
 
   if (j.garbled && !confirmed) return askToConfirm(state, { text, displayText });
@@ -280,7 +284,8 @@ async function process_(state, { text, displayText, confirmed }, judge) {
 
   it.attempts += 1;
   if (j.unsafe) it.unsafe.push(displayText);
-  const newly = state.mode === 'recall' ? absorbRecall(state, j) : absorb(state, j);
+  if (state.mode === 'category') dropGivenWords(item, j);
+  const newly = state.mode === 'recall' || (state.mode === 'category' && categoryKind(item) === 'name') ? absorbRecall(state, j) : absorb(state, j);
   const lines = [];
   if (allMet(state)) return { state, turn: makeTurn(state, completeItem(state, newly)) };
 
@@ -332,6 +337,25 @@ function absorb(state, j) {
     }
   }
   return newly;
+}
+
+// Memory test: a word Buddy said, or the name of the group itself, never counts as the learner's own answer.
+function dropGivenWords(item, j) {
+  const norm = (t) => String(t || '').toLowerCase().replace(/[^a-z0-9 ]/g, '').trim();
+  const banned = new Set([...(categoryKind(item) === 'add' ? categoryWords(item.given) : []), item.group].map(norm).filter(Boolean));
+  if (j.met.word && banned.has(norm(j.met.word))) j.met.word = null;
+  if (Array.isArray(j.events)) j.events = j.events.filter((e) => !banned.has(norm(e.text)));
+  if (categoryKind(item) === 'name') j.met.member = j.events?.length ? j.met.member : null;
+}
+
+// Clues for the Memory test come from the team's example words that have not been said yet: first sound, then the word itself.
+function categoryCueItem(state, item) {
+  const norm = (t) => String(t || '').toLowerCase().replace(/[^a-z0-9 ]/g, '').trim();
+  const used = new Set([...state.item.recalled.map((r) => norm(r.text)), ...categoryWords(item.given).map(norm)]);
+  const left = categoryWords(item.accepted).filter((w) => !used.has(norm(w)));
+  const example = left[0] || '';
+  const letter = example ? example.replace(/^(the|a|an)\s+/i, '').charAt(0).toLowerCase() : '';
+  return { ...item, _example: example, _letter: letter };
 }
 
 // Memory Buddy (recall): each new, different thing remembered fills the next memory slot.
@@ -408,7 +432,7 @@ function giveCue(state, el, by, forceLevel = null) {
   const level = forceLevel ?? (it.focus === el ? Math.min(3, it.focusLevel + 1) : fadeStart(state, el));
   it.focus = el;
   it.focusLevel = level;
-  const text = state.mode === 'recall' ? recallCue(state, level) : cueLadder(state.mode, state.activity, item, el)[level];
+  const text = state.mode === 'recall' ? recallCue(state, level) : cueLadder(state.mode, state.activity, state.mode === 'category' ? categoryCueItem(state, item) : item, el)[level];
   it.supportGiven.push({ el, level, text, by });
   it.anySupport = true;
   if (level === 3) it.modelGiven[el] = true;
@@ -888,6 +912,17 @@ export function buildRecord(state, it, stopNote = null) {
         else notes.push(`Step ${i + 1} (${what}): ${FOLLOW_DIAG[d]}.`);
       });
       if (it.repeats) notes.push(`Asked to hear the instruction again ${it.repeats === 1 ? 'once' : `${it.repeats} times`}.`);
+    }
+    if (state.mode === 'category') {
+      const total = it.elements.length;
+      const got = it.elements.filter((e) => it.met[e]);
+      const own = got.filter((e) => it.met[e].independent).length;
+      const words = got.map((e) => `"${it.met[e].evidence}"`).join(', ');
+      if (categoryKind(item) === 'add') {
+        notes.unshift(got.length ? `Added ${words} to the words Buddy said (${categoryWords(item.given).join(', ')}) ${own ? 'on their own' : 'after a clue'}.` : `Did not add a word to ${categoryWords(item.given).join(', ')} (${item.group}).`);
+      } else {
+        notes.unshift(`Named ${got.length} of ${total} ${item.group}: ${own} on their own${got.length > own ? `, ${got.length - own} after a clue` : ''}${words ? `. Words: ${words}` : ''}.`);
+      }
     }
     if (state.mode === 'recall') {
       const total = it.elements.length;

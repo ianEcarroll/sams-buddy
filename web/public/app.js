@@ -149,7 +149,7 @@ function renderConsent() {
 // ------------------------------------------------------------ home
 // The Buddy modules, in the order Sam sees them. Each has its own name, icon and colour.
 const MODE_INFO = {
-  memory: { label: 'Memory', tagline: 'Remember and recall', icon: 'memory', modes: ['recall', 'listen'] },
+  memory: { label: 'Memory', tagline: 'Remember and recall', icon: 'memory', modes: ['recall', 'listen', 'category'] },
   story: { label: 'Story', tagline: 'Organise my thoughts', icon: 'story' },
   explain: { label: 'Explain', tagline: 'Say it clearly', icon: 'explain', modes: ['explain', 'object'] },
   think: { label: 'Think', tagline: 'Solve the problem', icon: 'think' },
