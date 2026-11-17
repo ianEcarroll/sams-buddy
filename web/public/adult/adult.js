@@ -370,7 +370,7 @@ function voicePicker(idInput) {
 // ------------------------------------------------------------ activities
 // The Buddy modules, in the order the learner sees them on their home screen, with the same icons and colours.
 const MODULES = {
-  memory: { label: 'Memory', tagline: 'Remember and recall', icon: 'memory', modes: ['recall', 'listen'] },
+  memory: { label: 'Memory', tagline: 'Remember and recall', icon: 'memory', modes: ['recall', 'listen', 'category'] },
   story: { label: 'Story', tagline: 'Organise my thoughts', icon: 'story', modes: ['story'] },
   explain: { label: 'Explain', tagline: 'Say it clearly', icon: 'explain', modes: ['explain', 'object'] },
   think: { label: 'Think', tagline: 'Solve the problem', icon: 'think', modes: ['think'] },
@@ -395,9 +395,9 @@ function moduleIcon(mod) {
   else el.innerHTML = MODULE_ICONS[MODULES[mod].icon]; // trusted constant
   return el;
 }
-const blankItem = (m) => (m === 'listen' ? blankStory() : m === 'recall' ? blankRecall() : m === 'explain' ? blankExplain() : m === 'follow' ? blankFollow() : m === 'steps' ? blankSteps() : {});
+const blankItem = (m) => (m === 'listen' ? blankStory() : m === 'recall' ? blankRecall() : m === 'category' ? blankCategory() : m === 'explain' ? blankExplain() : m === 'follow' ? blankFollow() : m === 'steps' ? blankSteps() : {});
 const newActivity = (m) => ({ mode: m, title: '', goal: modes[m].defaultGoal, plan_goal: DEFAULT_GOAL[m], status: 'active', content: { items: [blankItem(m)] }, image_urls: {} });
-const ITEM_WORDS = { conversation: ['topic', 'topics'], listen: ['story', 'stories'], story: ['story', 'stories'], think: ['situation', 'situations'], recall: ['practice', 'practices'], explain: ['explanation', 'explanations'], follow: ['instruction', 'instructions'], task: ['task', 'tasks'], object: ['picture', 'pictures'], steps: ['task', 'tasks'] };
+const ITEM_WORDS = { conversation: ['topic', 'topics'], listen: ['story', 'stories'], story: ['story', 'stories'], think: ['situation', 'situations'], recall: ['practice', 'practices'], category: ['group', 'groups'], explain: ['explanation', 'explanations'], follow: ['instruction', 'instructions'], task: ['task', 'tasks'], object: ['picture', 'pictures'], steps: ['task', 'tasks'] };
 const itemWord = (mode, n) => (ITEM_WORDS[mode] || ['item', 'items'])[n === 1 ? 0 : 1];
 
 // "today", "yesterday", "3 days ago", or a date for anything older than a week.
@@ -413,6 +413,7 @@ function whenUsed(iso) {
 // Every tile has the same "+ New activity" button. Tiles with two kinds of practice then ask which kind.
 const KIND_BLURB = {
   recall: 'Recall real things they did, with clues and the family\u2019s photos.',
+  category: 'Memory test: add a word to a list, or name things in a group, such as animals or fruit.',
   listen: 'Buddy reads a short story, then asks questions about it.',
   explain: 'Explain how to do something everyday, step by step.',
   object: 'Name a picture, say its group and what it\u2019s used for.',
@@ -482,6 +483,7 @@ const CUE_NAMES = {
   listen: {},
   think: { problem: 'Noticing the problem', action: 'What to do', reason: 'Why', backup: 'If that does not work' },
   recall: {}, // clues come from each memory the family enters
+  category: {}, // Buddy's clues: say it again → the group → first sound → the word
   follow: {}, // Buddy's supports are fixed: say it back → hear it again → see it → Buddy shows it
   explain: { point: 'Each part (the question, starter and model can also be set per part)' },
 };
@@ -570,7 +572,7 @@ function editActivity(root, a) {
       return h('div', { class: 'panel' }, h('h4', { class: 'q-head' }, label), h('div', { class: 'ladder' }, cueInputs[key].flatMap((inp, i) => [h('label', {}, LEVEL_NAMES[i]), inp])));
     })) : null;
 
-  const addLabel = { conversation: 'Add another topic', listen: 'Add another story', think: 'Add another situation', recall: 'Add another practice', explain: 'Add another explanation', follow: 'Add another instruction', task: 'Add another task', steps: 'Add another task', story: 'Add another story', object: 'Add another picture' }[a.mode] || 'Add another';
+  const addLabel = { conversation: 'Add another topic', listen: 'Add another story', think: 'Add another situation', recall: 'Add another practice', category: 'Add another group', explain: 'Add another explanation', follow: 'Add another instruction', task: 'Add another task', steps: 'Add another task', story: 'Add another story', object: 'Add another picture' }[a.mode] || 'Add another';
   root.replaceChildren(
     h('header', { class: 'edit-head', 'data-module': mod }, moduleIcon(mod),
       h('div', {}, h('h2', {}, `${a.id ? 'Edit' : 'New'}: ${modes[a.mode].label}`), h('small', { class: 'muted' }, modes[a.mode].activityName))),
@@ -588,7 +590,7 @@ function editActivity(root, a) {
         a.mode === 'steps' ? h('label', { class: 'switch' }, askEnd, h('span', {}, 'At the end, ask for all the steps in order', h('br'), h('small', { class: 'muted' }, `${name} tells Buddy how they did the task.`))) : null,
         a.mode === 'story' ? field('Story organiser on screen', organiser, `Fade it out as ${name} gets more independent: from the start → only if stuck → off.`) : null),
       goalLine, goalPicker),
-    h('h3', {}, { conversation: 'Topics, in the order Buddy moves between them', listen: 'Stories', think: 'Situations', recall: 'What to remember', explain: 'Explanations', follow: 'Instructions', task: 'Tasks', steps: 'Tasks', story: 'Stories', object: 'Pictures' }[a.mode] || 'Items'),
+    h('h3', {}, { conversation: 'Topics, in the order Buddy moves between them', listen: 'Stories', think: 'Situations', recall: 'What to remember', category: 'Groups', explain: 'Explanations', follow: 'Instructions', task: 'Tasks', steps: 'Tasks', story: 'Stories', object: 'Pictures' }[a.mode] || 'Items'),
     itemsBox,
     h('button', { class: 'btn', onclick: () => { content.items.push(blankItem(a.mode)); drawItems(); } }, addLabel),
     h('details', { class: 'layer' }, h('summary', {}, 'For therapists ', h('small', { class: 'muted' }, '(optional: record wording, cues, what to review)')),
@@ -615,7 +617,7 @@ function editActivity(root, a) {
       h('button', { class: 'btn btn-quiet', onclick: renderShell }, 'Cancel')),
   );
 }
-const titleExample = (mode) => ({ think: 'e.g. Everyday surprises', conversation: 'e.g. Weekend chat', story: 'e.g. My trip to Ireland', listen: 'e.g. Short stories', recall: 'e.g. My weekend', explain: 'e.g. How do you…?', follow: 'e.g. Shapes and boxes', task: 'e.g. Jobs at work', steps: 'e.g. Jobs at home', object: 'e.g. Kitchen things' }[mode] || '');
+const titleExample = (mode) => ({ think: 'e.g. Everyday surprises', conversation: 'e.g. Weekend chat', story: 'e.g. My trip to Ireland', listen: 'e.g. Short stories', recall: 'e.g. My weekend', category: 'e.g. Memory test: animals', explain: 'e.g. How do you…?', follow: 'e.g. Shapes and boxes', task: 'e.g. Jobs at work', steps: 'e.g. Jobs at home', object: 'e.g. Kitchen things' }[mode] || '');
 
 // "Buddy will say…": the item's opening lines from the real engine, refreshed as the team types.
 function previewBox(mode, it, ctx) {
@@ -718,7 +720,7 @@ const multi = (it, k, rows = 3) => bind(it, k, h('textarea', { rows }), lines, (
 
 // One item (a topic, a situation, a story…). The basics come first; optional extras sit under "Fine-tune";
 // "Buddy will say…" at the bottom updates as the team types.
-const ITEM_NAMES = { conversation: 'Topic', listen: 'Story', story: 'Story', think: 'Situation', recall: 'Memory practice', explain: 'Explanation', follow: 'Instruction', task: 'Task', object: 'Picture', steps: 'Task' };
+const ITEM_NAMES = { conversation: 'Topic', listen: 'Story', story: 'Story', think: 'Situation', recall: 'Memory practice', category: 'Group', explain: 'Explanation', follow: 'Instruction', task: 'Task', object: 'Picture', steps: 'Task' };
 const FINE_TUNE = {
   object: 'other accepted names and groups, Buddy’s question, simpler wording',
   story: 'accepted words, target words, Buddy’s question, simpler wording',
@@ -726,6 +728,7 @@ const FINE_TUNE = {
   conversation: 'example comment and question for the model cue',
   think: 'example reason and plan B, ideas that aren’t safe, Buddy’s question, simpler wording',
   recall: 'Buddy’s question',
+  category: 'Buddy’s question, simpler wording',
 };
 function itemEditor(mode, it, i, urls, remove, ctx, addTopic) {
   const name = me.learner.name;
@@ -812,6 +815,7 @@ function itemEditor(mode, it, i, urls, remove, ctx, addTopic) {
   if (mode === 'listen') main = storyEditor(it, urls);
   if (mode === 'follow') main = followEditor(it);
   if (mode === 'recall') ({ main, extra } = recallEditor(it, urls));
+  if (mode === 'category') ({ main, extra } = categoryEditor(it));
   if (mode === 'explain') main = explainEditor(it, urls);
   if (mode === 'steps') main = stepsEditor(it, urls, ctx);
 
@@ -1019,6 +1023,32 @@ function listStatus(it) {
     ? { fresh: true, text: `List updated ${when}. Buddy uses it for clues until it is ${RECALL_FRESH_DAYS} days old.` }
     : { fresh: false, text: `List updated ${when}, so it is out of date. Buddy is using general clues and ${name}\u2019s interests. Update the list and save to use it again.` };
 }
+// ------------------------------------------------------------ Memory test: naming the members of a group
+const blankCategory = () => ({ kind: 'name', group: '', target: 3, accepted: [] });
+function categoryEditor(it) {
+  if (!it.kind) it.kind = 'name';
+  if (it.target == null) it.target = 3;
+  const name = me.learner.name;
+  const body = h('div', { class: 'cat-body' });
+  const draw = () => {
+    const add = it.kind === 'add';
+    body.replaceChildren(...[
+      field('Group', txt(it, 'group'), 'e.g. "animals", "fruit", "Disney movies". Buddy says it, and uses it for clues.'),
+      add ? field('Words Buddy says, separated by commas', csv(it, 'given'), `e.g. "dog, cat, horse". ${name} adds a different word that fits with these. Two to four words works well.`) : null,
+      add ? null : field('How many things to ask for', bind(it, 'target', h('input', { type: 'number', min: 1, max: 8, step: 1 }), (v) => Number(v) || 3), `1 to 8. Three works well. ${name} can say more.`),
+      field('Examples that count, separated by commas', csv(it, 'accepted'), `Buddy also accepts any real member of the group. These examples are used for clues (the first sound, then the word itself) and when the AI checker is off. Leave out the words Buddy says.`)].filter(Boolean));
+  };
+  const kind = h('select', {}, [['name', 'Name things in a group'], ['add', 'Add a word to a list']].map(([v, l]) => h('option', { value: v, selected: it.kind === v }, l)));
+  kind.addEventListener('change', () => { it.kind = kind.value; draw(); });
+  draw();
+  const main = [field('What does Buddy ask?', kind, it.kind === 'add' ? '' : `"I'll give you the name of a group. Tell me all the things you can think of in it."`), body];
+  const extra = [
+    field("Buddy's question", txt(it, 'prompt'), 'Leave blank to let Buddy ask in the usual way.'),
+    field('Simpler wording', txt(it, 'simple_prompt'), `Said if ${name} says “I don’t understand”.`),
+  ];
+  return { main, extra };
+}
+
 const blankRecall = () => ({ when: 'at the weekend', target: 3, memories: [{}, {}, {}] });
 function recallEditor(it, urls) {
   it.memories = it.memories?.length ? it.memories : [{}];
@@ -1136,7 +1166,7 @@ function storyEditor(it, urls) {
 }
 
 // ------------------------------------------------------------ review
-const DEFAULT_GOAL = { story: 'narrative', conversation: 'conversation', task: 'instructions', object: 'other', listen: 'other', think: 'unexpected', recall: 'other', explain: 'other', follow: 'instructions', steps: 'instructions' };
+const DEFAULT_GOAL = { story: 'narrative', conversation: 'conversation', task: 'instructions', object: 'other', listen: 'other', think: 'unexpected', recall: 'other', category: 'other', explain: 'other', follow: 'instructions', steps: 'instructions' };
 // "Memory Buddy: Remember My Day" — two modes share Memory Buddy, so lists show both names.
 const modeName = (m) => `${modes[m].label}: ${modes[m].activityName}`;
 const TZ = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
