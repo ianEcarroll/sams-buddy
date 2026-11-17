@@ -481,9 +481,13 @@ async function onTalk() {
       const recorder = new MediaRecorder(stream, type ? { mimeType: type } : undefined);
       // Keep the chunks in this closure: the last chunk arrives AFTER stop(), when `rec` is already cleared.
       const chunks = [];
-      rec = { recorder, chunks, stream };
-      recorder.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
-      recorder.start();
+      const track = stream.getAudioTracks()[0];
+      // What the microphone looked like, sent with the recording so the server log can say why one came out empty.
+      const diag = { t0: Date.now(), muted: !!track?.muted, state: track?.readyState, enabled: track?.enabled, mutes: 0, pieces: 0, vis: document.visibilityState, voicePaused: $voice.paused, voiceEnded: $voice.ended };
+      track?.addEventListener('mute', () => { diag.mutes++; });
+      rec = { recorder, chunks, stream, diag };
+      recorder.ondataavailable = (e) => { diag.pieces++; if (e.data && e.data.size) chunks.push(e.data); };
+      recorder.start(250);
       P.talk = 'recording'; drawPractice();
     } catch {
       toast('Buddy cannot use the microphone. Check that this app is allowed to use it, or type instead.');
@@ -496,6 +500,7 @@ async function onTalk() {
     if (!REUSE_MIC) closeMic();
     const form = new FormData();
     form.append('audio', blob, blob.type.includes('mp4') ? 'sam.mp4' : 'sam.webm');
+    form.append('diag', JSON.stringify({ ...r.diag, ms: Date.now() - r.diag.t0, t0: undefined, endMuted: !!r.stream.getAudioTracks()[0]?.muted, endState: r.stream.getAudioTracks()[0]?.readyState, chunks: r.chunks.length, ua: navigator.userAgent.slice(0, 90) }));
     await sendResponse({ form });
   }
 }

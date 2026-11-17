@@ -759,12 +759,12 @@ device.post('/practice/:sid/respond', upload.single('audio'), wrap(async (req, r
     if (!voiceEnabled()) return res.status(503).json({ error: 'Voice is not set up yet. Type your answer instead.' });
     // A tap on Talk then I'm done with almost no audio: treat as silence, not an error.
     if (req.file.size < 1500) {
-      console.log(`[stt] too short to send: ${req.file.size} bytes, ${req.file.mimetype}`);
+      console.log(`[stt] too short to send: ${req.file.size} bytes, ${req.file.mimetype}, mic: ${String(req.body?.diag || 'n/a').slice(0, 400)}`);
       input = { text: '', displayText: '', uncertain: false };
     } else {
       try {
         input = await transcribe(req.file.buffer, req.file.mimetype);
-        if (!input.text) console.log(`[stt] nothing recognised in ${req.file.size} bytes, ${req.file.mimetype}`);
+        if (!input.text) console.log(`[stt] nothing recognised in ${req.file.size} bytes, ${req.file.mimetype}, mic: ${String(req.body?.diag || 'n/a').slice(0, 400)}`);
       } catch (err) {
         console.error('[stt]', err.message, req.file.mimetype, req.file.size);
         return res.json({ heard: '', ...(await deliver(s.id, s.state, {
