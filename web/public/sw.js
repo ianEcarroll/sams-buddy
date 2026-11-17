@@ -7,7 +7,7 @@ self.addEventListener('activate', (e) => e.waitUntil(caches.keys().then((ks) => 
 self.addEventListener('fetch', (e) => {
   const url = new URL(e.request.url);
   // Video is streamed in ranges (Safari asks that way): leave it to the network.
-  if (e.request.method !== 'GET' || url.pathname.startsWith('/api/') || url.origin !== location.origin || e.request.headers.has('range')) return;
+  if (e.request.method !== 'GET' || url.pathname.startsWith('/api/') || url.origin !== location.origin || e.request.headers.has('range') || url.pathname.endsWith('.mp4')) return;
   e.respondWith(fetch(e.request).then((r) => { const copy = r.clone(); caches.open(CACHE).then((c) => c.put(e.request, copy)); return r; })
     .catch(async () => (await caches.match(e.request)) || (e.request.mode === 'navigate' ? caches.match(url.pathname.startsWith('/adult') ? '/adult/' : '/offline.html') : Response.error())));
 });
