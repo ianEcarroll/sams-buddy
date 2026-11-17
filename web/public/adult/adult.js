@@ -374,10 +374,12 @@ const MODULES = {
   story: { label: 'Story', tagline: 'Organise my thoughts', icon: 'story', modes: ['story'] },
   explain: { label: 'Explain', tagline: 'Say it clearly', icon: 'explain', modes: ['explain', 'object'] },
   think: { label: 'Think', tagline: 'Solve the problem', icon: 'think', modes: ['think'] },
-  conversation: { label: 'Talk', tagline: 'Keep the conversation going', icon: 'chat', modes: ['conversation'] },
-  task: { label: 'Listen', tagline: 'Follow instructions', icon: 'ear', modes: ['follow', 'task'] },
-  steps: { label: 'Task', tagline: 'Do it step by step', icon: 'steps', modes: ['steps'] },
+  conversation: { label: 'Talk', tagline: 'Start and maintain conversations', icon: 'chat', modes: ['conversation'] },
+  task: { label: 'Listen', tagline: 'Listen, understand and repeat', icon: 'ear', modes: ['follow', 'task'] },
+  steps: { label: 'Task', tagline: 'Follow instructions', icon: 'steps', modes: ['steps'] },
 };
+// Modules switched off for now (their activities are kept, just not shown). Explain: not in use at the moment.
+const HIDDEN_MODULES = ['explain'];
 const moduleOf = (mode) => Object.keys(MODULES).find((k) => MODULES[k].modes.includes(mode));
 const SV = (d) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
 const MODULE_ICONS = {
@@ -435,7 +437,7 @@ async function renderActivities(root) {
   const acts = await api('/adult/activities');
   const name = me.learner.name;
   const enabled = me.learner.settings?.enabled_modes || Object.keys(modes);
-  const cards = Object.entries(MODULES).map(([mod, M]) => {
+  const cards = Object.entries(MODULES).filter(([mod]) => !HIDDEN_MODULES.includes(mod)).map(([mod, M]) => {
     const two = M.modes.length > 1;
     // Recently used first (by when the learner last practised it), then the rest by last edit.
     const mine = acts.filter((a) => M.modes.includes(a.mode)).sort((x, y) =>
