@@ -202,8 +202,8 @@ function renderHome() {
       h('span', {}, MODE_INFO[mode].label, h('br'), h('small', {}, MODE_INFO[mode].tagline), h('br'), h('small', { class: 'card-count' }, `${list.length} to practise`)));
   }).filter(Boolean);
   mount(
-    brand(home.name),
-    h('div', {}, h('h1', { class: 'hello' }, greeting()), h('p', { class: 'hello-sub' }, 'Ready when you are.')),
+    h('header', { class: 'home-header' }, brand(),
+      h('div', { class: 'home-greeting' }, h('h1', { class: 'hello' }, greeting()), h('p', { class: 'hello-sub' }, 'Ready when you are.'))),
     h('button', { class: 'start', disabled: !current, onclick: () => startPractice(current.id) },
       h('strong', {}, 'Start My Practice'), h('span', {}, current ? current.title : 'Your team has not picked one yet')),
     cards.length ? h('section', { class: 'module-section', 'aria-label': 'Choose something else' }, h('h2', {}, 'Choose something else'), h('div', { class: 'cards' }, cards)) : h('p', { class: 'hello-sub' }, 'Your team has not added any practice yet.'),
