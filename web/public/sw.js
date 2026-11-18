@@ -16,8 +16,8 @@ self.addEventListener('fetch', (e) => {
 self.addEventListener('push', (e) => {
   let d = {};
   try { d = e.data ? e.data.json() : {}; } catch { d = { body: e.data?.text() }; }
-  e.waitUntil(self.registration.showNotification(d.title || 'Buddy', {
-    body: d.body || 'Time to practise with Buddy.', icon: '/icons/icon-192.png', badge: '/icons/maskable-192.png', tag: 'buddy-reminder', data: { url: d.url || '/' },
+  e.waitUntil(self.registration.showNotification(d.title || 'TALVO', {
+    body: d.body || 'Time to practise with TALVO.', icon: '/icons/icon-192.png', badge: '/icons/maskable-192.png', tag: 'buddy-reminder', data: { url: d.url || '/' },
   }));
 });
 self.addEventListener('notificationclick', (e) => {

@@ -42,7 +42,7 @@ test('practice-only items are not counted, early stops are mentioned, html is es
 });
 
 test('sends through Resend with the configured sender', async () => {
-  process.env.RESEND_API_KEY = 're_test'; process.env.EMAIL_FROM = 'Buddy <buddy@example.com>';
+  process.env.RESEND_API_KEY = 're_test'; process.env.EMAIL_FROM = 'TALVO <buddy@example.com>';
   let call;
   const fetchImpl = async (url, opts) => { call = { url, opts }; return { ok: true, json: async () => ({ id: 'x' }) }; };
   await sendEmail({ to: 'ray@example.com', subject: 's', text: 't', html: 'h' }, { fetchImpl });

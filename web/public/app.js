@@ -23,7 +23,7 @@ const MARK = '<svg viewBox="0 0 128 112" aria-hidden="true"><rect class="b1" x="
 function brand(name) {
   const el = h('span', { class: 'brand' });
   el.innerHTML = MARK; // trusted constant
-  el.append(h('span', { class: 'brand-text' }, name ? h('small', {}, `${name}'s`) : null, 'Buddy'));
+  el.append(h('span', { class: 'brand-text' }, name ? h('small', {}, `${name}'s`) : null, 'TALVO'));
   return el;
 }
 // ---------- installing on the home screen, and staying calm when the internet drops
@@ -34,17 +34,17 @@ addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); installProm
 const SHARE_ICON = '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-4px"><path d="M12 3v12M8 7l4-4 4 4"/><path d="M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7"/></svg>';
 function installHelp() {
   if (isStandalone()) return null;
-  const box = h('div', { class: 'install-help' }, h('strong', {}, 'Add Buddy to your home screen'));
+  const box = h('div', { class: 'install-help' }, h('strong', {}, 'Add TALVO to your home screen'));
   if (isIOS()) {
     const p = h('p', {}, 'In Safari, tap the Share button ');
     p.insertAdjacentHTML('beforeend', SHARE_ICON);
-    p.append(', then choose \u201cAdd to Home Screen\u201d. Open Buddy from its new icon.');
+    p.append(', then choose \u201cAdd to Home Screen\u201d. Open TALVO from its new icon.');
     box.append(p);
   } else if (installPrompt) {
-    box.append(h('p', {}, 'Buddy works best as an app on this device.'), h('button', { class: 'btn', onclick: async () => {
+    box.append(h('p', {}, 'TALVO works best as an app on this device.'), h('button', { class: 'btn', onclick: async () => {
       installPrompt.prompt(); const r = await installPrompt.userChoice; installPrompt = null;
       if (r.outcome === 'accepted') box.remove();
-    } }, 'Install Buddy'));
+    } }, 'Install TALVO'));
   } else {
     box.append(h('p', {}, 'Open your browser menu and choose \u201cInstall app\u201d or \u201cAdd to Home screen\u201d.'));
   }
@@ -54,7 +54,7 @@ function offlineScreen(on) {
   document.getElementById('offline')?.remove();
   if (!on) return;
   document.body.append(h('div', { id: 'offline', class: 'pause', role: 'alert' }, h('div', {},
-    h('p', {}, 'Buddy needs the internet'), h('span', { class: 'hello-sub' }, 'Check the Wi-Fi is on. Buddy will carry on when it is back.'))));
+    h('p', {}, 'TALVO needs the internet'), h('span', { class: 'hello-sub' }, 'Check the Wi-Fi is on. TALVO will carry on when it is back.'))));
 }
 addEventListener('offline', () => offlineScreen(true));
 addEventListener('online', () => offlineScreen(false));
@@ -137,8 +137,8 @@ function renderConsent() {
   const pc = privacyControls(home.consent);
   mount(
     h('h1', { class: 'hello' }, `Hi ${home.name}`),
-    h('p', {}, 'Buddy helps you practise what your speech therapist and teachers are working on with you.'),
-    h('p', {}, 'After each practice, Buddy saves a short note: what you said, and when Buddy gave a hint. It is not a test and there are no scores.'),
+    h('p', {}, 'TALVO helps you practise what your speech therapist and teachers are working on with you.'),
+    h('p', {}, 'After each practice, TALVO saves a short note: what you said, and when TALVO gave a hint. It is not a test and there are no scores.'),
     h('p', {}, 'You choose who can read your notes. You can change this any time in My settings.'),
     ...pc.nodes,
     h('button', { class: 'btn btn-primary', onclick: async () => {
@@ -207,8 +207,8 @@ function renderSettings() {
   const speed = h('select', {}, [['0.8', 'Slower'], ['0.9', 'A bit slower'], ['1', 'Normal'], ['1.1', 'Faster']].map(([v, l]) => h('option', { value: v, selected: Number(v) === Number(home.settings.speech_speed) }, l)));
   mount(
     h('div', { class: 'p-top' }, h('h1', { class: 'hello', style: 'font-size:2rem' }, 'My settings'), h('button', { class: 'btn', onclick: renderHome }, 'Back')),
-    h('label', { class: 'switch' }, captions, 'Show Buddy\u2019s words on screen'),
-    h('div', { class: 'field' }, h('label', {}, 'How fast Buddy talks'), speed),
+    h('label', { class: 'switch' }, captions, 'Show TALVO\u2019s words on screen'),
+    h('div', { class: 'field' }, h('label', {}, 'How fast TALVO talks'), speed),
     ...pc.nodes,
     reminderBox(),
     h('button', { class: 'btn btn-primary', onclick: async () => {
@@ -244,17 +244,17 @@ function reminderBox() {
     const info = await api('/push');
     if (!info.configured) return say(h('p', { style: 'margin:0' }, 'Reminders are not set up yet.'));
     if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
-      return say(h('p', { style: 'margin:0' }, isIOS() && !isStandalone() ? 'To get reminders, add Buddy to your home screen first, then open it from there.' : 'This device cannot show reminders.'));
+      return say(h('p', { style: 'margin:0' }, isIOS() && !isStandalone() ? 'To get reminders, add TALVO to your home screen first, then open it from there.' : 'This device cannot show reminders.'));
     }
     const when = info.reminder_time ? `at ${info.reminder_time}` : 'when your team sets a time';
     if (info.subscribed) {
-      return say(h('p', { style: 'margin:0' }, `Buddy will remind you ${when} on days you have not practised.`),
+      return say(h('p', { style: 'margin:0' }, `TALVO will remind you ${when} on days you have not practised.`),
         h('button', { class: 'btn', onclick: async () => {
           const reg = await navigator.serviceWorker.ready; const sub = await reg.pushManager.getSubscription(); if (sub) await sub.unsubscribe();
           await api('/push', { method: 'DELETE' }); toast('Reminders turned off.'); reminderRefresh(box);
         } }, 'Turn off reminders'));
     }
-    say(h('p', { style: 'margin:0' }, `Buddy can remind you ${when} on days you have not practised.`),
+    say(h('p', { style: 'margin:0' }, `TALVO can remind you ${when} on days you have not practised.`),
       h('button', { class: 'btn', onclick: async () => {
         try {
           if ((await Notification.requestPermission()) !== 'granted') return toast('Reminders need permission. You can allow them in Settings.');
@@ -328,7 +328,7 @@ function drawPractice() {
     ui.cueCard.labels.flatMap((l, i) => [i ? h('li', { class: 'arrow', 'aria-hidden': 'true' }, '→') : null, h('li', { 'data-lit': String(!!ui.cueCard.lit[i]) }, l)])) : null;
 
   const confirmBox = turn.expect === 'confirm' && ui.heard ? h('div', { class: 'confirm' },
-    h('p', {}, 'Buddy heard: “', h('strong', {}, ui.heard), '”'),
+    h('p', {}, 'TALVO heard: “', h('strong', {}, ui.heard), '”'),
     h('div', { class: 'row' },
       h('button', { class: 'btn btn-primary', onclick: () => sendConfirm(true) }, 'Yes, that\u2019s right'),
       h('button', { class: 'btn', onclick: () => sendConfirm(false) }, 'Say it again'))) : null;
@@ -337,10 +337,10 @@ function drawPractice() {
   //   Buddy talking → wait (button off) · your turn → "Press to talk" · recording → "I'm done" · sent → "Buddy is thinking…"
   const state = P.talk === 'idle' && P.speaking ? 'speaking' : P.talk;
   const TALK = {
-    speaking: { icon: 'speaker', label: 'Buddy is talking\u2026', sub: 'Wait for Buddy to finish' },
+    speaking: { icon: 'speaker', label: 'TALVO is talking\u2026', sub: 'Wait for TALVO to finish' },
     idle: { icon: 'mic', label: 'Press to talk', sub: 'Your turn' },
     recording: { icon: null, label: 'I\u2019m done', sub: 'Listening \u2014 press when you have finished' },
-    busy: { icon: 'wait', label: 'Buddy is thinking\u2026', sub: 'Got it' },
+    busy: { icon: 'wait', label: 'TALVO is thinking\u2026', sub: 'Got it' },
   }[state];
   // Listen to a Story: after the story the learner presses "I'm ready"; after a round with misses they choose:
   // hear the story and retry, retry the missed questions straight away, or finish.
@@ -348,14 +348,14 @@ function drawPractice() {
   const readyBtn = turn.expect === 'ready'
     ? h('button', { class: 'talk', 'data-state': speakingNow ? 'speaking' : 'idle', disabled: speakingNow, onclick: () => sendControl('start_questions'), 'aria-label': "I'm ready" },
       icon(speakingNow ? 'speaker' : 'play'),
-      h('span', { class: 'talk-text' }, h('span', {}, speakingNow ? (P.mode === 'steps' ? 'Buddy is talking\u2026' : 'Buddy is reading\u2026') : 'I\u2019m ready'),
+      h('span', { class: 'talk-text' }, h('span', {}, speakingNow ? (P.mode === 'steps' ? 'TALVO is talking\u2026' : 'TALVO is reading\u2026') : 'I\u2019m ready'),
         h('small', {}, speakingNow ? (P.mode === 'steps' ? 'Listen to the steps' : 'Listen to the story') : 'Start the questions')))
     : null;
   // Task Buddy walk-through: after each step Buddy asks "Ready for the next step?" and waits for this button.
   const nextBtn = turn.expect === 'next'
     ? h('button', { class: 'talk', 'data-state': speakingNow ? 'speaking' : 'idle', disabled: speakingNow, onclick: () => sendControl('next_step'), 'aria-label': 'Ready for the next step' },
       icon(speakingNow ? 'speaker' : 'play'),
-      h('span', { class: 'talk-text' }, h('span', {}, speakingNow ? 'Buddy is talking\u2026' : 'Ready'),
+      h('span', { class: 'talk-text' }, h('span', {}, speakingNow ? 'TALVO is talking\u2026' : 'Ready'),
         h('small', {}, speakingNow ? 'Listen to this step' : 'Press for the next step')))
     : null;
   const choice = turn.expect === 'choice'
@@ -373,7 +373,7 @@ function drawPractice() {
   const doneBtn = turn.expect === 'done'
     ? h('button', { class: 'talk', 'data-state': speakingNow ? 'speaking' : 'idle', disabled: speakingNow, onclick: () => sendControl('step_done'), 'aria-label': 'Done' },
       icon(speakingNow ? 'speaker' : 'done'),
-      h('span', { class: 'talk-text' }, h('span', {}, speakingNow ? 'Buddy is talking\u2026' : 'Done'),
+      h('span', { class: 'talk-text' }, h('span', {}, speakingNow ? 'TALVO is talking\u2026' : 'Done'),
         h('small', {}, speakingNow ? 'Listen first' : ui.step ? 'Press when you\u2019ve finished this step' : 'Press when you\u2019ve finished everything')))
     : null;
   const talk = tapHint || readyBtn || nextBtn || choice || doneBtn || (canRecord()
@@ -451,7 +451,7 @@ async function playLines(lines) {
   const gen = ++playGen;
   const done = () => { if (gen === playGen && P) { P.speaking = false; P.nowStep = null; P.walkReveal = null; drawPractice(); } };
   for (const l of lines) {
-    await holdWhilePaused(gen); // paused: hold Buddy's next words until the learner is ready
+    await holdWhilePaused(gen); // paused: hold TALVO's next words until the learner is ready
     if (gen !== playGen) return;
     P.shown.push(l); P.thinking = false; P.speaking = true;
     if (l.step != null) { P.nowStep = l.step; P.walkReveal = l.step; } else if (P.walkReveal != null && P.walkReveal >= 0) P.nowStep = null;
@@ -516,7 +516,7 @@ async function onTalk() {
       recorder.start(250);
       P.talk = 'recording'; drawPractice();
     } catch {
-      toast('Buddy cannot use the microphone. Check that this app is allowed to use it, or type instead.');
+      toast('TALVO cannot use the microphone. Check that this app is allowed to use it, or type instead.');
       home.voice = false; drawPractice();
     }
   } else if (P.talk === 'recording') {

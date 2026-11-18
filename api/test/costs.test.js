@@ -20,7 +20,7 @@ test('one model everywhere unless ANTHROPIC_CHAT_MODEL is set', () => {
   assert.equal(modelsFromEnv({ ANTHROPIC_MODEL: 'claude-haiku-5-5', ANTHROPIC_CHAT_MODEL: '  ' }).chat, 'claude-haiku-5-5', 'blank = same as main');
 });
 
-test('Chat Buddy is checked by the chat model, every other module by the main model', async () => {
+test('Talk is checked by the chat model, every other module by the main model', async () => {
   const seen = [];
   const judge = judgeFromEnv({ ANTHROPIC_API_KEY: 'k', ANTHROPIC_MODEL: 'claude-haiku-5-5', ANTHROPIC_CHAT_MODEL: 'claude-sonnet-5-5' }, { fetchImpl: fakeClaude(seen) });
   await judge(args('conversation'));
@@ -53,7 +53,7 @@ test('speech is generated once, then served from the saved store (even after a r
   setSpeechStore(null);
 });
 
-test('a broken store never stops Buddy speaking', async () => {
+test('a broken store never stops TALVO speaking', async () => {
   process.env.ELEVENLABS_API_KEY = 'k';
   setSpeechStore({ get: async () => { throw new Error('db down'); }, put: async () => { throw new Error('db down'); } });
   const fetchImpl = async () => ({ ok: true, arrayBuffer: async () => new Uint8Array([4]).buffer });

@@ -21,7 +21,7 @@ test('the same lead pattern in every module, in its own word', () => {
   assert.equal(itemLead({ mode: 'think', itemIndex: 1, activity: { content: { items: [{}, {}] } } }), "And here's the last situation.");
 });
 
-test('Think Buddy: "Here\'s the first situation." with several; plain "Here\'s a situation." with one', () => {
+test('Think: "Here\'s the first situation." with several; plain "Here\'s a situation." with one', () => {
   const many = { id: 't', mode: 'think', title: 'x', content: structuredClone(STARTER_SCENARIOS) };
   const t1 = texts(start(many).turn);
   assert.equal(t1[0], "Here's the first situation.");
@@ -60,7 +60,7 @@ test('Remember My Day: "Here\'s the first question." comes right before the ques
   }
 });
 
-test('Explain Buddy: "Here\'s the first question." then the question, no movie line', () => {
+test('Explain: "Here\'s the first question." then the question, no movie line', () => {
   const { turn } = createSession({ activity: { id: 'x', mode: 'explain', title: 'T', content: { items: [{ question: 'Tell me how you make a sandwich.', parts: ['bread'] }, { question: 'Tell me how you brush your teeth.', parts: ['brush'] }] } }, learnerName: 'Sam', settings: { explain_buttons: false } });
   assert.deepEqual(turn.lines.filter((l) => l.kind !== 'welcome').map((l) => l.text), ["Here's the first question.", 'Tell me how you make a sandwich.']);
 });

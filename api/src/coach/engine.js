@@ -12,11 +12,11 @@ import { STEP_SKILLS, STEP_LEVELS, stepCoach, stepSkillOf, stepRunOf } from './m
 const DEFAULTS = {
   think_seconds: 8,        // quiet time after "Make a movie in your mind" before the prompt
   fade_support: true,      // start later items at a lighter cue level
-  max_attempts: 6,         // per item, then Buddy closes the item kindly
+  max_attempts: 6,         // per item, then TALVO closes the item kindly
   session_minutes: 15,     // checked only between items — never shown as a timer
   turns_per_topic: 3,      // conversation
   cue_cards: true,
-  explain_buttons: true,   // at the start of each practice, Buddy explains Repeat / Help me / Let me think / Try again
+  explain_buttons: true,   // at the start of each practice, TALVO explains Repeat / Help me / Let me think / Try again
 };
 
 // Story questions: how many extra rounds at the missed questions the team allows (0 = none). Set per activity.
@@ -284,7 +284,7 @@ async function process_(state, { text, displayText, confirmed }, judge) {
     : false;
 
   const history = state.mode === 'conversation'
-    ? [{ who: 'Buddy', text: item.opener }, ...conv.turns.flatMap((t) => [{ who: state.learnerName || 'Learner', text: t.text }, ...(t.reply ? [{ who: 'Buddy', text: t.reply }] : [])])]
+    ? [{ who: 'TALVO', text: item.opener }, ...conv.turns.flatMap((t) => [{ who: state.learnerName || 'Learner', text: t.text }, ...(t.reply ? [{ who: 'TALVO', text: t.reply }] : [])])]
     : [];
 
   const judgeElements = state.mode === 'conversation' ? ['turn'] : state.mode === 'recall' ? ['memory'] : state.mode === 'category' ? [categoryKind(item) === 'add' ? 'word' : 'member'] : it.elements.filter((e) => e !== 'order' && e !== 'clarify');
@@ -936,7 +936,7 @@ export function buildRecord(state, it, stopNote = null) {
         const el = `step_${i}`;
         const what = followStepText(st);
         const d = it.diag?.[el];
-        if (it.skipped[el]) notes.push(`Step ${i + 1} (${what}): Buddy showed it.`);
+        if (it.skipped[el]) notes.push(`Step ${i + 1} (${what}): TALVO showed it.`);
         else if (!it.met[el]) notes.push(`Step ${i + 1} (${what}): not done.`);
         else if (!d) notes.push(`Step ${i + 1} (${what}): done on their own.`);
         else notes.push(`Step ${i + 1} (${what}): ${FOLLOW_DIAG[d]}.`);
@@ -949,7 +949,7 @@ export function buildRecord(state, it, stopNote = null) {
       const own = got.filter((e) => it.met[e].independent).length;
       const words = got.map((e) => `"${it.met[e].evidence}"`).join(', ');
       if (categoryKind(item) === 'add') {
-        notes.unshift(got.length ? `Added ${words} to the words Buddy said (${categoryWords(item.given).join(', ')}) ${own ? 'on their own' : 'after a clue'}.` : `Did not add a word to ${categoryWords(item.given).join(', ')} (${item.group}).`);
+        notes.unshift(got.length ? `Added ${words} to the words TALVO said (${categoryWords(item.given).join(', ')}) ${own ? 'on their own' : 'after a clue'}.` : `Did not add a word to ${categoryWords(item.given).join(', ')} (${item.group}).`);
       } else {
         notes.unshift(`Named ${got.length} of ${total} ${item.group}: ${own} on their own${got.length > own ? `, ${got.length - own} after a clue` : ''}${words ? `. Words: ${words}` : ''}.`);
       }
@@ -961,7 +961,7 @@ export function buildRecord(state, it, stopNote = null) {
       notes.unshift(`Remembered ${got.length} of ${total}: ${own} on their own${got.length > own ? `, ${got.length - own} after a clue` : ''}.`);
       const photo = it.supportGiven.some((s) => s.level === 3 && /photo/i.test(s.text));
       if (photo) notes.push('Needed a photo for at least one.');
-      if (!(it.mems || []).length && it.supportGiven.length) notes.push(`Buddy used general clues: no list of what ${state.learnerName || 'the learner'} did from the last ${RECALL_DAYS} days.`);
+      if (!(it.mems || []).length && it.supportGiven.length) notes.push(`TALVO used general clues: no list of what ${state.learnerName || 'the learner'} did from the last ${RECALL_DAYS} days.`);
       if (it.usedInterests) notes.push('One clue named their interests.');
     }
     if (it.unsafe?.length) notes.push(`Suggested something that may not be safe: ${it.unsafe.map((u) => `"${u}"`).join('; ')}.`);
@@ -1193,7 +1193,7 @@ function followNextSupport(state, by) {
     return [line(`Here it is on the screen: ${text}.`, 'cue', { element: cur.el, level: LEVELS[2] })];
   }
   // Model: Buddy does it.
-  it.supportGiven.push({ el: cur.el, level: 3, text: `Buddy showed it: ${text}.`, by });
+  it.supportGiven.push({ el: cur.el, level: 3, text: `TALVO showed it: ${text}.`, by });
   it.modelGiven[cur.el] = true;
   it.skipped[cur.el] = true;
   it.showStep = null;

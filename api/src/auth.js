@@ -53,7 +53,7 @@ export async function requireAdult(req, res, next) {
   if (!adult) return res.status(401).json({ error: 'This account no longer exists.' });
   if (signedInBeforePasswordChange(p, adult.password_changed_at)) return res.status(401).json({ error: 'Your password was changed. Please sign in again.' });
   delete adult.password_changed_at;
-  if (adult.disabled_at && !isPlatformAdmin(adult.email)) return res.status(403).json({ error: 'This Buddy account is paused. Contact Buddy support to turn it back on.', paused: true });
+  if (adult.disabled_at && !isPlatformAdmin(adult.email)) return res.status(403).json({ error: 'This TALVO account is paused. Contact TALVO support to turn it back on.', paused: true });
   delete adult.disabled_at;
   req.adult = adult;
   req.learnerId = adult.learner_id;
@@ -71,7 +71,7 @@ export async function requireDevice(req, res, next) {
   const d = await one('update devices set last_seen_at=now() where id=$1 and revoked_at is null returning id, learner_id', [p.sub]);
   if (!d) return res.status(401).json({ error: 'This device was disconnected. Ask your support team for a new code.' });
   const l = await one('select disabled_at from learners where id=$1', [d.learner_id]);
-  if (l?.disabled_at) return res.status(403).json({ error: 'Buddy is paused for now. Ask your support team.', paused: true });
+  if (l?.disabled_at) return res.status(403).json({ error: 'TALVO is paused for now. Ask your support team.', paused: true });
   req.device = d;
   req.learnerId = d.learner_id;
   next();

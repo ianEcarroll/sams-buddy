@@ -20,7 +20,7 @@ test('the assessment prompt mentions interests only when the family gave some', 
   assert.doesNotMatch(systemFor({ name: 'Sam' }), /enjoys/);
 });
 
-test("Buddy's conversation reply rules include the child's interests", async () => {
+test("TALVO's conversation reply rules include the child's interests", async () => {
   let sent;
   const fetchImpl = async (url, opts) => {
     sent = JSON.parse(opts.body);
@@ -40,7 +40,7 @@ test('a practice session carries the interests through to the judge', () => {
   assert.deepEqual(state.learnerInterests, ['drumming']);
 });
 
-test('every module has a Buddy name, a tagline and its plain activity name', () => {
+test('every module has a TALVO name, a tagline and its plain activity name', () => {
   const names = [...new Set(Object.values(MODES).map((m) => m.label))];
   assert.deepEqual(names.sort(), ['Explain', 'Listen', 'Memory', 'Story', 'Talk', 'Task', 'Think']);
   for (const m of Object.values(MODES)) { assert.ok(m.tagline); assert.ok(m.activityName); }

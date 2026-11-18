@@ -58,7 +58,7 @@ test('the whole task: last step lead, then "tell me all the steps", then a recor
   assert.equal(r.success, true);
 });
 
-test('memory: Buddy asks for the step before saying it; the picture and words stay hidden', async () => {
+test('memory: TALVO asks for the step before saying it; the picture and words stay hidden', async () => {
   const { state, turn } = start({ skill: 'memory' });
   const t = texts(turn);
   assert.equal(t.at(-1), 'What is the first thing you need to do?');
@@ -170,7 +170,7 @@ test('retell missing steps: one cue, then thanks', async () => {
   assert.match(state.completed[0].review_note, /Told 2 of 3 steps .*with a clue\./);
 });
 
-test("the team's own question, clues and model for the chosen skill replace Buddy's", () => {
+test("the team's own question, clues and model for the chosen skill replace TALVO's", () => {
   const a = act({ skill: 'reasoning' });
   a.content.items[0].steps[0].q = { reasoning: { question: 'Why flat?', answer: 'so it folds neatly', clue: 'Think about creases.' } };
   const c = stepCoach(a, a.content.items[0], 0);
@@ -231,7 +231,7 @@ test('learn: "Make a movie in your mind", then one step at a time, asking "Ready
   assert.equal(texts(again.turn)[1], `Step 3. ${STEPS[2].text}`);
 });
 
-test('learn: after I\'m ready the screen clears and Buddy asks by number; no Done button', async () => {
+test('learn: after I\'m ready the screen clears and TALVO asks by number; no Done button', async () => {
   const { state } = learn({ skill: 'memory' });
   walkAll(state);
   let { turn } = control(state, 'start_questions');

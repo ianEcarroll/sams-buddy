@@ -44,7 +44,7 @@ export const SETTING_DEFAULTS = {
   timezone: 'Europe/Paris',
   voice_id: null,
   enabled_modes: ['story', 'object', 'task', 'listen', 'think', 'recall', 'category', 'explain', 'follow', 'steps'],
-  interests: [],              // the child's interests and activities, used by Buddy in conversation
+  interests: [],              // the child's interests and activities, used by TALVO in conversation
 };
 const SETTING_KEYS = Object.keys(SETTING_DEFAULTS);
 const settingsOf = (learner) => ({ ...SETTING_DEFAULTS, ...(learner?.settings || {}) });
@@ -152,7 +152,7 @@ app.post('/api/invite/:token', rateLimit(10), wrap(async (req, res) => {
     // Claim the invite first, so the same link can't create two families.
     const inv = (await client.query('update invites set used_at=now() where token_hash=$1 and used_at is null and expires_at > now() returning id', [hmac(String(req.params.token || ''))])).rows[0];
     if (!inv) { await client.query('rollback'); return res.status(410).json({ error: 'This invite link has expired or was already used. Ask for a new one.' }); }
-    if ((await client.query('select 1 from adults where email=$1', [f.email])).rowCount) { await client.query('rollback'); return res.status(409).json({ error: 'That email already has a Buddy account. Sign in instead, or use another email.' }); }
+    if ((await client.query('select 1 from adults where email=$1', [f.email])).rowCount) { await client.query('rollback'); return res.status(409).json({ error: 'That email already has a TALVO account. Sign in instead, or use another email.' }); }
     const l = (await client.query('insert into learners(name, birth_year, settings) values ($1,$2,$3) returning id', [f.learnerName, f.birthYear, {}])).rows[0];
     await client.query('insert into consent(learner_id) values ($1)', [l.id]);
     const a = (await client.query("insert into adults(learner_id, name, email, role, is_owner, pass_hash) values ($1,$2,$3,'parent',true,$4) returning id", [l.id, f.ownerName, f.email, hashPassword(f.password)])).rows[0];
@@ -201,7 +201,7 @@ adult.delete('/team/:id', requireOwner, wrap(async (req, res) => {
 // ------------------------------------------------------------------ platform admin (Ian): families and invites
 
 function requirePlatformAdmin(req, res, next) {
-  if (!isPlatformAdmin(req.adult?.email)) return res.status(403).json({ error: 'Only the Buddy admin can do this.' });
+  if (!isPlatformAdmin(req.adult?.email)) return res.status(403).json({ error: 'Only the TALVO admin can do this.' });
   next();
 }
 adult.get('/admin/families', requirePlatformAdmin, wrap(async (req, res) => {
@@ -388,29 +388,29 @@ function validateActivity(b) {
   for (const [i, it] of items.entries()) {
     if (b.mode === 'object' && (!it.name || !it.category || !it.function)) return `Item ${i + 1}: add the name, group and use.`;
     if (b.mode === 'story' && (!it.setting || !(it.events || []).filter(Boolean).length)) return `Story ${i + 1}: add the setting and at least one event.`;
-    if (b.mode === 'story' && !(it.image_ids || []).length && !it.intro?.trim()) return `Story ${i + 1}: add pictures, or a line for Buddy to say first, so the learner knows which story to tell.`;
+    if (b.mode === 'story' && !(it.image_ids || []).length && !it.intro?.trim()) return `Story ${i + 1}: add pictures, or a line for TALVO to say first, so the learner knows which story to tell.`;
     if (b.mode === 'task' && ((it.steps || []).filter(Boolean).length < 1)) return `Task ${i + 1}: add the steps.`;
     if (b.mode === 'follow') {
       const err = followItemError(it);
       if (err) return `Instruction ${i + 1}: ${err}`;
     }
-    if (b.mode === 'explain' && (!it.question?.trim() || !(it.points || []).filter((pt) => pt?.text?.trim()).length)) return `Explanation ${i + 1}: add Buddy's question and at least one part of a clear answer.`;
+    if (b.mode === 'explain' && (!it.question?.trim() || !(it.points || []).filter((pt) => pt?.text?.trim()).length)) return `Explanation ${i + 1}: add TALVO's question and at least one part of a clear answer.`;
     if (b.mode === 'recall') {
       const n = Number(it.target ?? 3);
       if (!Number.isInteger(n) || n < 1 || n > 5) return `Memory ${i + 1}: choose how many things to remember (1 to 5).`;
-      if (!it.when?.trim() && !it.prompt?.trim()) return `Memory ${i + 1}: say when it happened (e.g. "at the weekend") or write Buddy's question.`;
+      if (!it.when?.trim() && !it.prompt?.trim()) return `Memory ${i + 1}: say when it happened (e.g. "at the weekend") or write TALVO's question.`;
     }
     if (b.mode === 'category') {
       const add = it.kind === 'add';
       if (!String(it.group || '').trim()) return `Group ${i + 1}: say what the group is, e.g. "animals".`;
-      if (add && (it.given || []).filter((w) => String(w || '').trim()).length < 2) return `Group ${i + 1}: add at least two words for Buddy to say.`;
+      if (add && (it.given || []).filter((w) => String(w || '').trim()).length < 2) return `Group ${i + 1}: add at least two words for TALVO to say.`;
       if (!add) {
         const n = Number(it.target ?? 3);
         if (!Number.isInteger(n) || n < 1 || n > 8) return `Group ${i + 1}: choose how many things to ask for (1 to 8).`;
       }
     }
     if (b.mode === 'think' && (!it.scenario?.trim() || !it.problem?.trim())) return `Situation ${i + 1}: describe the situation and what is unexpected about it.`;
-    if (b.mode === 'conversation' && (!it.topic || !it.opener)) return `Topic ${i + 1}: add the topic and Buddy's opening line.`;
+    if (b.mode === 'conversation' && (!it.topic || !it.opener)) return `Topic ${i + 1}: add the topic and TALVO's opening line.`;
     if (b.mode === 'steps') {
       const n = (it.steps || []).filter((x) => String(x?.text || '').trim()).length;
       if (!String(it.title || '').trim()) return `Task ${i + 1}: give the task a name, e.g. "Fold a jumper".`;
@@ -418,7 +418,7 @@ function validateActivity(b) {
       if (n > 12) return `Task ${i + 1}: keep it to 12 steps or fewer. Split a long task into two.`;
     }
     if (b.mode === 'listen') {
-      if (!it.story?.trim()) return `Story ${i + 1}: write the story Buddy will read.`;
+      if (!it.story?.trim()) return `Story ${i + 1}: write the story TALVO will read.`;
       const qs = (it.questions || []).filter((x) => x?.question?.trim());
       if (!qs.length) return `Story ${i + 1}: add at least one question.`;
       const noAns = qs.findIndex((x) => !(x.answers || []).filter(Boolean).length);
@@ -477,7 +477,7 @@ adult.post('/preview', wrap(async (req, res) => {
   res.json(previewLines({ mode, content, item, learnerName: l.name, learnerAge: ageFrom(l.birth_year), learnerInterests: s.interests, settings: s }));
 }));
 // Voice picker: the account's ElevenLabs voices, and a short sample in Buddy's own words.
-const voiceSample = (name) => `Hi ${name}, I'm Buddy. Make a movie in your mind. When you're ready, press to talk.`;
+const voiceSample = (name) => `Hi ${name}, I'm TALVO. Make a movie in your mind. When you're ready, press to talk.`;
 adult.get('/voices', wrap(async (req, res) => {
   if (!voiceEnabled()) return res.status(503).json({ error: 'Voice is not set up yet (ELEVENLABS_API_KEY).' });
   const l = await one('select settings from learners where id=$1', [req.learnerId]);
@@ -519,7 +519,7 @@ adult.post('/test-answer', wrap(async (req, res) => {
 }));
 // Task Buddy editor: "Draft questions with Buddy" for the chosen skill. Only drafts; the team edits and saves.
 adult.post('/steps/draft', wrap(async (req, res) => {
-  if (!process.env.ANTHROPIC_API_KEY || process.env.JUDGE === 'keyword') return res.status(503).json({ error: 'Drafting needs Claude, which isn\u2019t set up. Buddy\u2019s own questions are used for any step left blank.' });
+  if (!process.env.ANTHROPIC_API_KEY || process.env.JUDGE === 'keyword') return res.status(503).json({ error: 'Drafting needs Claude, which isn\u2019t set up. TALVO\u2019s own questions are used for any step left blank.' });
   const { task = '', steps = [], skill, run } = req.body || {};
   const l = await one('select birth_year from learners where id=$1', [req.learnerId]);
   const drafts = await draftStepQuestions({
@@ -622,7 +622,7 @@ adult.get('/export/weekly.csv', wrap(requireRecordAccess), wrap(async (req, res)
     const aids = [...new Set(g.flatMap((r) => r.visual_aids || []))];
     const ex = g.find((r) => r.success) || g.find((r) => r.sam_response) || g[0];
     return [
-      goalLabel(g[0].plan_goal), g[0].day, "Buddy app (practice with Buddy)",
+      goalLabel(g[0].plan_goal), g[0].day, "TALVO app (practice with TALVO)",
       counted.length ? `${counted.filter((r) => r.success).length}/${counted.length}` : `practice only (${g.length})`,
       codes, aids.length ? aids : 'None', clip(`${ex.item_label}: ${ex.sam_response}`),
     ];
@@ -652,7 +652,7 @@ adult.delete('/records', requireOwner, wrap(async (req, res) => {
 async function exportFor(learnerId) {
   return {
     exported_at: new Date().toISOString(),
-    note: 'Practice records describe what happened during practice with Buddy, using the support codes from the learner\'s communication plan. They are not assessments or diagnoses; the team sets baselines and decides what counts.',
+    note: 'Practice records describe what happened during practice with TALVO, using the support codes from the learner\'s communication plan. They are not assessments or diagnoses; the team sets baselines and decides what counts.',
     records: await many('select activity_title, mode, plan_goal, item_label, goal, success, support_code, visual_aids, sam_turns, score_first, score_correct, score_total, sam_response, independent, support_provided, after_support, help_requests, review_note, created_at from practice_records where learner_id=$1 order by created_at', [learnerId]),
     support_codes: SUPPORT_CODES,
     observations: await many('select setting, skill, note, created_at from observations where learner_id=$1 order by created_at', [learnerId]),

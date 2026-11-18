@@ -613,7 +613,7 @@ export const STEP_SKILLS = {
   understanding: {
     label: 'Understanding',
     goal: 'Understand and follow spoken instructions',
-    when: 'before', // Buddy says the step, asks the question, then the learner does it
+    when: 'before', // TALVO says the step, asks the question, then the learner does it
     question: () => 'What did I ask you to do?',
     clues: (s) => ['Think about what I just said.', `Here it is again. ${s.text}`, 'Look at the screen.', `I asked you to ${lowerFirst(firstSentence(s.text))}`],
     // Learn the steps: Buddy has shown every step first, then asks about each one by number.
@@ -625,7 +625,7 @@ export const STEP_SKILLS = {
   memory: {
     label: 'Memory',
     goal: 'Remember the steps of a task without being told',
-    when: 'before', // Buddy asks for the step before saying it
+    when: 'before', // TALVO asks for the step before saying it
     question: (s, i) => (i === 0 ? 'What is the first thing you need to do?' : 'What do you need to do next?'),
     clues: (s, i, prev) => [i === 0 ? 'Think about how this task starts.' : `Think about what you just did: ${lowerFirst(firstSentence(prev?.text || 'the last step'))}.`, `It starts like this: ${firstWords(s.text, 3)}…`, 'Look at the screen.', `The next step is: ${s.text}`],
     learn: {

@@ -1,8 +1,8 @@
 {
   "id": "/adult/",
-  "name": "Buddy Team",
-  "short_name": "Buddy Team",
-  "description": "For parents, speech therapists, teachers and job coaches: set up Buddy's activities and review practice.",
+  "name": "TALVO Team",
+  "short_name": "TALVO Team",
+  "description": "For parents, speech therapists, teachers and job coaches: set up TALVO's activities and review practice.",
   "lang": "en",
   "start_url": "/adult/",
   "scope": "/adult/",

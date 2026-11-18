@@ -65,7 +65,7 @@ test('remembering: cannot say it back, gets it right after hearing it again', as
   assert.match(state.completed[0].review_note, /needed to hear it again \(remembering\)/);
 });
 
-test('understanding: still wrong after hearing it again, so it is shown on screen; then Buddy shows it', async () => {
+test('understanding: still wrong after hearing it again, so it is shown on screen; then TALVO shows it', async () => {
   let { state } = createSession({ activity: one(touchMove) });
   act(state, { type: 'token', token: 'yellow-star' });
   await say(state, 'um');
@@ -108,7 +108,7 @@ test('tapping a box with no shape chosen, or talking during a tap step, is not c
   assert.equal(state.item.attempts, 0);
 });
 
-test('Listen Buddy on screen counts toward plan goal 2', () => {
+test('Listen on screen counts toward plan goal 2', () => {
   assert.ok(PLAN_GOALS.instructions.modes.includes('follow'));
 });
 

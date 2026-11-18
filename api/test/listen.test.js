@@ -113,7 +113,7 @@ test('saying "just the questions" out loud also skips the story', async () => {
   assert.match(texts(turn).at(-1), /^What was Tinker Bell's favourite thing\?$/);
 });
 
-test('after the story is read again, Buddy asks to press I\'m ready to answer again', async () => {
+test('after the story is read again, TALVO asks to press I\'m ready to answer again', async () => {
   const { state } = createSession({ activity: act() });
   control(state, 'start_questions');
   for (const a of ['Neverland', 'a hat', 'Peter', 'a crow', 'glows']) await say(state, a);
@@ -194,7 +194,7 @@ test('clue after a wrong answer is off by default (scores as before)', async () 
   assert.match(texts(turn).at(-1), /^For the next question: /);
 });
 
-test('"Give the story a new name": announced up front, Buddy\'s wording, any sensible name counts', async () => {
+test('"Give the story a new name": announced up front, TALVO\'s wording, any sensible name counts', async () => {
   const a = act();
   a.content.items[0].questions = [a.content.items[0].questions[0], { kind: 'title', question: '', answers: [] }];
   const { state, turn: first } = createSession({ activity: a });
