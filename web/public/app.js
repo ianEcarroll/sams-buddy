@@ -60,9 +60,21 @@ addEventListener('offline', () => offlineScreen(true));
 addEventListener('online', () => offlineScreen(false));
 
 const icon = (name) => h('span', { 'aria-hidden': 'true', html: ICONS[name] || '' }).firstChild || '';
-function mount(...nodes) { $app.replaceChildren(...nodes.flat().filter((n) => n != null && n !== false)); window.scrollTo(0, 0); }
+function mount(...nodes) { $app.classList.remove('practice', 'home'); $app.replaceChildren(...nodes.flat().filter((n) => n != null && n !== false)); window.scrollTo(0, 0); }
 // Practice redraws on every line Buddy says: keep the scroll position instead of jumping back to the top.
-function mountKeep(...nodes) { const y = window.scrollY; $app.replaceChildren(...nodes.flat().filter((n) => n != null && n !== false)); window.scrollTo(0, y); }
+function mountKeep(...nodes) {
+  const y = window.scrollY;
+  const active = document.activeElement;
+  const buttons = [...$app.querySelectorAll('button')];
+  const index = buttons.indexOf(active);
+  $app.classList.remove('home'); $app.classList.add('practice');
+  $app.replaceChildren(...nodes.flat().filter((n) => n != null && n !== false));
+  if (index >= 0) {
+    const next = [...$app.querySelectorAll('button')].find((b) => b.textContent === active.textContent);
+    if (next && !next.disabled) next.focus({ preventScroll: true });
+  }
+  window.scrollTo(0, y);
+}
 const smooth = () => (matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth');
 function toast(msg) {
   const t = h('div', { class: 'toast', role: 'status' }, msg);
@@ -154,8 +166,8 @@ const MODE_INFO = {
   story: { label: 'Story', tagline: 'Organise my thoughts', icon: 'story' },
   explain: { label: 'Explain', tagline: 'Say it clearly', icon: 'explain', modes: ['explain', 'object'] },
   think: { label: 'Think', tagline: 'Solve the problem', icon: 'think' },
-  conversation: { label: 'Talk', tagline: 'Start and maintain conversations', icon: 'chat' },
-  task: { label: 'Listen', tagline: 'Listen, understand and repeat', icon: 'ear', modes: ['follow', 'task'] },
+  conversation: { label: 'Talk', tagline: 'Have a conversation', icon: 'chat' },
+  task: { label: 'Listen', tagline: 'Understand what you hear', icon: 'ear', modes: ['follow', 'task'] },
   steps: { label: 'Task', tagline: 'Follow instructions', icon: 'steps' },
 };
 // Modules switched off for now (their activities are kept, just not shown). Explain: not in use at the moment.
@@ -168,6 +180,7 @@ const modesOf = (mod) => MODE_INFO[mod].modes || [mod];
 
 // "Welcome back" once this device has been used before; a plain hello the very first time.
 const SEEN_KEY = 'buddy.seen';
+const WELCOME_KEY = 'talvo.welcome-seen';
 function greeting() {
   let seen = false;
   try { seen = localStorage.getItem(SEEN_KEY) === '1'; localStorage.setItem(SEEN_KEY, '1'); } catch { /* storage unavailable: just say hi */ }
@@ -189,9 +202,10 @@ function renderHome() {
     h('div', {}, h('h1', { class: 'hello' }, greeting()), h('p', { class: 'hello-sub' }, 'Ready when you are.')),
     h('button', { class: 'start', disabled: !current, onclick: () => startPractice(current.id) },
       h('strong', {}, 'Start My Practice'), h('span', {}, current ? current.title : 'Your team has not picked one yet')),
-    cards.length ? h('div', { class: 'cards' }, cards) : h('p', { class: 'hello-sub' }, 'Your team has not added any practice yet.'),
+    cards.length ? h('section', { class: 'module-section', 'aria-label': 'Choose something else' }, h('h2', {}, 'Choose something else'), h('div', { class: 'cards' }, cards)) : h('p', { class: 'hello-sub' }, 'Your team has not added any practice yet.'),
     h('button', { class: 'btn btn-quiet', onclick: renderSettings }, 'My settings'),
   );
+  $app.classList.add('home');
 }
 
 function renderPicker(mode, list) {
@@ -204,11 +218,11 @@ function renderPicker(mode, list) {
 function renderSettings() {
   const pc = privacyControls(home.consent);
   const captions = h('input', { type: 'checkbox', checked: home.settings.captions });
-  const speed = h('select', {}, [['0.8', 'Slower'], ['0.9', 'A bit slower'], ['1', 'Normal'], ['1.1', 'Faster']].map(([v, l]) => h('option', { value: v, selected: Number(v) === Number(home.settings.speech_speed) }, l)));
+  const speed = h('select', { id: 'speech-speed' }, [['0.8', 'Slower'], ['0.9', 'A bit slower'], ['1', 'Normal'], ['1.1', 'Faster']].map(([v, l]) => h('option', { value: v, selected: Number(v) === Number(home.settings.speech_speed) }, l)));
   mount(
     h('div', { class: 'p-top' }, h('h1', { class: 'hello', style: 'font-size:2rem' }, 'My settings'), h('button', { class: 'btn', onclick: renderHome }, 'Back')),
     h('label', { class: 'switch' }, captions, 'Show Foxy\u2019s words on screen'),
-    h('div', { class: 'field' }, h('label', {}, 'How fast Foxy talks'), speed),
+    h('div', { class: 'field' }, h('label', { for: 'speech-speed' }, 'How fast Foxy talks'), speed),
     ...pc.nodes,
     reminderBox(),
     h('button', { class: 'btn btn-primary', onclick: async () => {
@@ -227,6 +241,7 @@ function renderSettings() {
       if (!confirm('Delete all your practice notes? This cannot be undone.')) return;
       await api('/records', { method: 'DELETE' }); toast('Your practice notes are deleted.');
     } }, 'Delete my practice notes'),
+    h('button', { class: 'btn', onclick: () => { localStorage.removeItem(WELCOME_KEY); location.reload(); } }, 'Watch Foxy’s welcome'),
     h('p', { class: 'muted', style: 'font-size:.95rem' }, h('a', { href: '/about/' }, 'About TALVO'), ' \u00B7 why we made it, and our film'),
     h('p', { class: 'muted', style: 'font-size:.85rem' }, 'Pictures: Mulberry Symbols \u00A9 Steve Lee, CC BY-SA 4.0 (mulberrysymbols.org)'),
   );
@@ -339,7 +354,7 @@ function drawPractice() {
   const TALK = {
     speaking: { icon: 'speaker', label: 'Foxy is talking\u2026', sub: 'Wait for Foxy to finish' },
     idle: { icon: 'mic', label: 'Press to talk', sub: 'Your turn' },
-    recording: { icon: null, label: 'I\u2019m done', sub: 'Listening \u2014 press when you have finished' },
+    recording: { icon: null, label: 'Send my answer', sub: 'Listening \u2014 press when you have finished' },
     busy: { icon: 'wait', label: 'Foxy is thinking\u2026', sub: 'Got it' },
   }[state];
   // Listen to a Story: after the story the learner presses "I'm ready"; after a round with misses they choose:
@@ -385,7 +400,7 @@ function drawPractice() {
   const controls = h('div', { class: 'controls' },
     h('button', { class: 'btn', onclick: () => sendControl('repeat') }, icon('repeat'), 'Repeat'),
     // Task Buddy while doing a step: one press shows the step (or the whole list) on screen, no menu.
-    h('button', { class: 'btn', onclick: () => { if (turn.expect === 'done') { sendControl('hint'); return; } P.help = true; drawPractice(); } }, icon('help'), 'Help me'),
+    h('button', { class: 'btn', onclick: () => { if (turn.expect === 'done') { sendControl('hint'); return; } P.help = true; drawPractice(); requestAnimationFrame(() => $app.querySelector('.sheet button')?.focus()); } }, icon('help'), 'Help me'),
     h('button', { class: 'btn', onclick: () => sendControl('think') }, icon('think'), 'Let me think'),
     h('button', { class: 'btn', onclick: () => sendControl('try_again') }, icon('again'), 'Try again'),
   );
@@ -405,7 +420,7 @@ function drawPractice() {
     h('div', { class: 'p-top' }, h('p', { class: 'p-title' }, P.title), h('span', { class: 'p-btns' }, h('button', { class: 'btn', onclick: pausePractice }, icon('pause'), 'Pause'), h('button', { class: 'btn', onclick: finishPractice }, icon('stop'), 'Finish'))),
     stepBar,
     // Task Buddy without a picture to show: no empty picture area, so the steps and Buddy's words sit higher up.
-    stage || P.mode !== 'steps' ? h('div', { class: 'stage', 'data-visual': String(!!ui.step?.visual) }, stage) : null,
+    stage ? h('div', { class: 'stage', 'data-visual': String(!!ui.step?.visual) }, stage) : null,
     stepCard,
     stepList,
     board,
@@ -435,10 +450,10 @@ function typedInput() {
 }
 
 function helpSheet() {
-  const close = () => { P.help = false; drawPractice(); };
+  const close = () => { P.help = false; drawPractice(); [...$app.querySelectorAll('button')].find((b) => b.textContent.includes('Help me'))?.focus(); };
   const pick = (a) => { P.help = false; sendControl(a); };
-  return h('div', { class: 'sheet', onclick: (e) => { if (e.target.classList.contains('sheet')) close(); } },
-    h('div', { role: 'dialog', 'aria-label': 'Help me' },
+  return h('div', { class: 'sheet', onkeydown: (e) => { if (e.key === 'Escape') { e.preventDefault(); close(); } if (e.key === 'Tab') { const bs = [...e.currentTarget.querySelectorAll('button')]; if (e.shiftKey && document.activeElement === bs[0]) { e.preventDefault(); bs.at(-1).focus(); } else if (!e.shiftKey && document.activeElement === bs.at(-1)) { e.preventDefault(); bs[0].focus(); } } }, onclick: (e) => { if (e.target.classList.contains('sheet')) close(); } },
+    h('div', { role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Help me' },
       h('h2', {}, 'Help me'),
       h('button', { class: 'btn', onclick: () => pick('hint') }, 'Give me a hint'),
       h('button', { class: 'btn', onclick: () => pick('dont_understand') }, 'I don\u2019t understand'),
@@ -684,6 +699,7 @@ watchForUpdates({ files: ['/app.js', '/styles.css', '/index.html'], busy: () => 
 const launch = document.getElementById('launch');
 function hideLaunch() {
   if (!launch?.isConnected) return;
+  localStorage.setItem(WELCOME_KEY, '1');
   launch.style.opacity = '0';
   const v = document.getElementById('launch-video');
   try { v?.pause(); } catch { /* nothing to stop */ }
@@ -694,7 +710,7 @@ async function showWelcomeVideo() {
   const skip = document.getElementById('launch-skip');
   const sound = document.getElementById('launch-sound');
   // Reduce Motion: no video on its own.
-  if (!launch?.isConnected || !v || matchMedia('(prefers-reduced-motion: reduce)').matches) return hideLaunch();
+  if (!launch?.isConnected || !v || localStorage.getItem(WELCOME_KEY) === '1' || matchMedia('(prefers-reduced-motion: reduce)').matches) return hideLaunch();
   v.addEventListener('ended', hideLaunch);
   v.addEventListener('error', hideLaunch);
   skip.onclick = hideLaunch;
