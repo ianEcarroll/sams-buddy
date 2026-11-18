@@ -520,3 +520,14 @@ details.layer > summary small, details.fine-tune > summary small { font-weight: 
   .practice .bubble { font-size: 1.3125rem; }
   .practice .bubble[data-kind="story"], .practice .bubble[data-long="true"] { font-size: 1.125rem; }
 }
+
+/* Compact tablet home header; keep the greeting comfortably stacked on phones. */
+.home-header { display: flex; flex-direction: column; gap: 16px; padding: 8px 0; }
+.home-header .brand { flex: none; }
+.home-greeting { min-width: 0; overflow-wrap: anywhere; }
+.home-header .hello { margin: 0; }
+@media (min-width: 700px) {
+  .home-header { flex-direction: row; align-items: center; justify-content: space-between; gap: 24px; }
+  .home-greeting { text-align: right; }
+  .home-header .hello { font-size: clamp(1.75rem, 3.5vw, 2rem); line-height: 1.2; }
+}
