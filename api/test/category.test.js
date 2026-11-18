@@ -18,7 +18,7 @@ test('the mode exists and the starters are valid', () => {
   assert.deepEqual(STARTER_CATEGORY[1].items.map((i) => i.group), ['animals', 'fruit', 'Disney movies']);
 });
 
-test('name kind: TALVO names the group and shows one box per word asked for', () => {
+test('name kind: Foxy names the group and shows one box per word asked for', () => {
   const { turn } = createSession({ activity: name });
   assert.match(turn.lines.at(-1).text, /Here is a group: animals\./);
   assert.deepEqual(turn.ui.cueCard.labels, ['1', '2', '3']);
@@ -55,7 +55,7 @@ test('name kind: the group name and repeats do not count', async () => {
   assert.equal(Object.keys(state.item.met).length, 1);
 });
 
-test('add kind: TALVO says the list and the learner adds a different word', async () => {
+test('add kind: Foxy says the list and the learner adds a different word', async () => {
   const { state, turn } = createSession({ activity: add });
   assert.match(turn.lines.at(-1).text, /dog, cat, horse/);
   assert.deepEqual(turn.ui.cueCard.labels, ['Add a word']);
@@ -64,7 +64,7 @@ test('add kind: TALVO says the list and the learner adds a different word', asyn
   assert.match(state.completed[0].review_note, /Added "cow"/);
 });
 
-test('add kind: repeating a word TALVO said does not count', async () => {
+test('add kind: repeating a word Foxy said does not count', async () => {
   const { state } = createSession({ activity: add });
   await say(state, 'horse');
   assert.equal(state.item.met.word, undefined);

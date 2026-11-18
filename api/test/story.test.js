@@ -47,7 +47,7 @@ test('"only if stuck": no organiser at first, it appears after the first cue, an
   let { state, turn } = createSession({ activity: band('when_stuck') });
   assert.equal(turn.ui.cueCard, null);
   ({ turn } = await say(state, 'I played the drums'));
-  assert.ok(turn.ui.cueCard, 'shown once TALVO gives a cue');
+  assert.ok(turn.ui.cueCard, 'shown once Foxy gives a cue');
   assert.equal(turn.ui.cueCard.lit[4], true, 'what he already said is lit');
 });
 

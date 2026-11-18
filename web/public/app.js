@@ -137,8 +137,8 @@ function renderConsent() {
   const pc = privacyControls(home.consent);
   mount(
     h('h1', { class: 'hello' }, `Hi ${home.name}`),
-    h('p', {}, 'TALVO helps you practise what your speech therapist and teachers are working on with you.'),
-    h('p', {}, 'After each practice, TALVO saves a short note: what you said, and when TALVO gave a hint. It is not a test and there are no scores.'),
+    h('p', {}, 'Foxy helps you practise what your speech therapist and teachers are working on with you.'),
+    h('p', {}, 'After each practice, Foxy saves a short note: what you said, and when Foxy gave a hint. It is not a test and there are no scores.'),
     h('p', {}, 'You choose who can read your notes. You can change this any time in My settings.'),
     ...pc.nodes,
     h('button', { class: 'btn btn-primary', onclick: async () => {
@@ -207,8 +207,8 @@ function renderSettings() {
   const speed = h('select', {}, [['0.8', 'Slower'], ['0.9', 'A bit slower'], ['1', 'Normal'], ['1.1', 'Faster']].map(([v, l]) => h('option', { value: v, selected: Number(v) === Number(home.settings.speech_speed) }, l)));
   mount(
     h('div', { class: 'p-top' }, h('h1', { class: 'hello', style: 'font-size:2rem' }, 'My settings'), h('button', { class: 'btn', onclick: renderHome }, 'Back')),
-    h('label', { class: 'switch' }, captions, 'Show TALVO\u2019s words on screen'),
-    h('div', { class: 'field' }, h('label', {}, 'How fast TALVO talks'), speed),
+    h('label', { class: 'switch' }, captions, 'Show Foxy\u2019s words on screen'),
+    h('div', { class: 'field' }, h('label', {}, 'How fast Foxy talks'), speed),
     ...pc.nodes,
     reminderBox(),
     h('button', { class: 'btn btn-primary', onclick: async () => {
@@ -248,13 +248,13 @@ function reminderBox() {
     }
     const when = info.reminder_time ? `at ${info.reminder_time}` : 'when your team sets a time';
     if (info.subscribed) {
-      return say(h('p', { style: 'margin:0' }, `TALVO will remind you ${when} on days you have not practised.`),
+      return say(h('p', { style: 'margin:0' }, `Foxy will remind you ${when} on days you have not practised.`),
         h('button', { class: 'btn', onclick: async () => {
           const reg = await navigator.serviceWorker.ready; const sub = await reg.pushManager.getSubscription(); if (sub) await sub.unsubscribe();
           await api('/push', { method: 'DELETE' }); toast('Reminders turned off.'); reminderRefresh(box);
         } }, 'Turn off reminders'));
     }
-    say(h('p', { style: 'margin:0' }, `TALVO can remind you ${when} on days you have not practised.`),
+    say(h('p', { style: 'margin:0' }, `Foxy can remind you ${when} on days you have not practised.`),
       h('button', { class: 'btn', onclick: async () => {
         try {
           if ((await Notification.requestPermission()) !== 'granted') return toast('Reminders need permission. You can allow them in Settings.');
@@ -328,7 +328,7 @@ function drawPractice() {
     ui.cueCard.labels.flatMap((l, i) => [i ? h('li', { class: 'arrow', 'aria-hidden': 'true' }, '→') : null, h('li', { 'data-lit': String(!!ui.cueCard.lit[i]) }, l)])) : null;
 
   const confirmBox = turn.expect === 'confirm' && ui.heard ? h('div', { class: 'confirm' },
-    h('p', {}, 'TALVO heard: “', h('strong', {}, ui.heard), '”'),
+    h('p', {}, 'Foxy heard: “', h('strong', {}, ui.heard), '”'),
     h('div', { class: 'row' },
       h('button', { class: 'btn btn-primary', onclick: () => sendConfirm(true) }, 'Yes, that\u2019s right'),
       h('button', { class: 'btn', onclick: () => sendConfirm(false) }, 'Say it again'))) : null;
@@ -337,10 +337,10 @@ function drawPractice() {
   //   Buddy talking → wait (button off) · your turn → "Press to talk" · recording → "I'm done" · sent → "Buddy is thinking…"
   const state = P.talk === 'idle' && P.speaking ? 'speaking' : P.talk;
   const TALK = {
-    speaking: { icon: 'speaker', label: 'TALVO is talking\u2026', sub: 'Wait for TALVO to finish' },
+    speaking: { icon: 'speaker', label: 'Foxy is talking\u2026', sub: 'Wait for Foxy to finish' },
     idle: { icon: 'mic', label: 'Press to talk', sub: 'Your turn' },
     recording: { icon: null, label: 'I\u2019m done', sub: 'Listening \u2014 press when you have finished' },
-    busy: { icon: 'wait', label: 'TALVO is thinking\u2026', sub: 'Got it' },
+    busy: { icon: 'wait', label: 'Foxy is thinking\u2026', sub: 'Got it' },
   }[state];
   // Listen to a Story: after the story the learner presses "I'm ready"; after a round with misses they choose:
   // hear the story and retry, retry the missed questions straight away, or finish.
@@ -348,14 +348,14 @@ function drawPractice() {
   const readyBtn = turn.expect === 'ready'
     ? h('button', { class: 'talk', 'data-state': speakingNow ? 'speaking' : 'idle', disabled: speakingNow, onclick: () => sendControl('start_questions'), 'aria-label': "I'm ready" },
       icon(speakingNow ? 'speaker' : 'play'),
-      h('span', { class: 'talk-text' }, h('span', {}, speakingNow ? (P.mode === 'steps' ? 'TALVO is talking\u2026' : 'TALVO is reading\u2026') : 'I\u2019m ready'),
+      h('span', { class: 'talk-text' }, h('span', {}, speakingNow ? (P.mode === 'steps' ? 'Foxy is talking\u2026' : 'Foxy is reading\u2026') : 'I\u2019m ready'),
         h('small', {}, speakingNow ? (P.mode === 'steps' ? 'Listen to the steps' : 'Listen to the story') : 'Start the questions')))
     : null;
   // Task Buddy walk-through: after each step Buddy asks "Ready for the next step?" and waits for this button.
   const nextBtn = turn.expect === 'next'
     ? h('button', { class: 'talk', 'data-state': speakingNow ? 'speaking' : 'idle', disabled: speakingNow, onclick: () => sendControl('next_step'), 'aria-label': 'Ready for the next step' },
       icon(speakingNow ? 'speaker' : 'play'),
-      h('span', { class: 'talk-text' }, h('span', {}, speakingNow ? 'TALVO is talking\u2026' : 'Ready'),
+      h('span', { class: 'talk-text' }, h('span', {}, speakingNow ? 'Foxy is talking\u2026' : 'Ready'),
         h('small', {}, speakingNow ? 'Listen to this step' : 'Press for the next step')))
     : null;
   const choice = turn.expect === 'choice'
@@ -373,7 +373,7 @@ function drawPractice() {
   const doneBtn = turn.expect === 'done'
     ? h('button', { class: 'talk', 'data-state': speakingNow ? 'speaking' : 'idle', disabled: speakingNow, onclick: () => sendControl('step_done'), 'aria-label': 'Done' },
       icon(speakingNow ? 'speaker' : 'done'),
-      h('span', { class: 'talk-text' }, h('span', {}, speakingNow ? 'TALVO is talking\u2026' : 'Done'),
+      h('span', { class: 'talk-text' }, h('span', {}, speakingNow ? 'Foxy is talking\u2026' : 'Done'),
         h('small', {}, speakingNow ? 'Listen first' : ui.step ? 'Press when you\u2019ve finished this step' : 'Press when you\u2019ve finished everything')))
     : null;
   const talk = tapHint || readyBtn || nextBtn || choice || doneBtn || (canRecord()
@@ -451,7 +451,7 @@ async function playLines(lines) {
   const gen = ++playGen;
   const done = () => { if (gen === playGen && P) { P.speaking = false; P.nowStep = null; P.walkReveal = null; drawPractice(); } };
   for (const l of lines) {
-    await holdWhilePaused(gen); // paused: hold TALVO's next words until the learner is ready
+    await holdWhilePaused(gen); // paused: hold Foxy's next words until the learner is ready
     if (gen !== playGen) return;
     P.shown.push(l); P.thinking = false; P.speaking = true;
     if (l.step != null) { P.nowStep = l.step; P.walkReveal = l.step; } else if (P.walkReveal != null && P.walkReveal >= 0) P.nowStep = null;
@@ -516,7 +516,7 @@ async function onTalk() {
       recorder.start(250);
       P.talk = 'recording'; drawPractice();
     } catch {
-      toast('TALVO cannot use the microphone. Check that this app is allowed to use it, or type instead.');
+      toast('Foxy cannot use the microphone. Check that this app is allowed to use it, or type instead.');
       home.voice = false; drawPractice();
     }
   } else if (P.talk === 'recording') {

@@ -53,7 +53,7 @@ test('speech is generated once, then served from the saved store (even after a r
   setSpeechStore(null);
 });
 
-test('a broken store never stops TALVO speaking', async () => {
+test('a broken store never stops Foxy speaking', async () => {
   process.env.ELEVENLABS_API_KEY = 'k';
   setSpeechStore({ get: async () => { throw new Error('db down'); }, put: async () => { throw new Error('db down'); } });
   const fetchImpl = async () => ({ ok: true, arrayBuffer: async () => new Uint8Array([4]).buffer });
