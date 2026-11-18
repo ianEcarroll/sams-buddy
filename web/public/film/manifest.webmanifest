@@ -1,8 +1,8 @@
 {
   "id": "/film/",
-  "name": "Buddy Film",
-  "short_name": "Buddy Film",
-  "description": "Why we are developing Buddy: the film.",
+  "name": "TALVO Film",
+  "short_name": "TALVO Film",
+  "description": "Why we are developing TALVO: the film.",
   "lang": "en",
   "start_url": "/film/",
   "scope": "/film/",
