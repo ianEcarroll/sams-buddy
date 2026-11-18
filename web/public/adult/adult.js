@@ -254,7 +254,7 @@ addEventListener('hashchange', () => { if (/^#reset=/.test(location.hash)) boot(
 const TABS = [['activities', 'Activities'], ['plan', 'Practice plan'], ['review', 'Review practice'], ['notes', 'Observations'], ['team', 'Team & privacy']];
 const tabsFor = () => (me.admin ? [...TABS, ['families', 'Families']] : TABS);
 function renderShell() {
-  const body = h('div', {});
+  const body = h('div', { class: 'team-content' });
   // Sections that don't apply (e.g. owner-only panels) come through as null: skip them rather than print "null".
   body.append = (...kids) => HTMLElement.prototype.append.apply(body, kids.filter((k) => k != null && k !== false));
   $app.replaceChildren(
@@ -262,11 +262,11 @@ function renderShell() {
       h('div', {}, h('h1', {}, brand(me.learner.name)), h('span', { class: 'muted' }, `${me.adult.name} · ${ROLE[me.adult.role]}`)),
       h('button', { class: 'btn btn-quiet', onclick: signOut }, 'Sign out')),
     ...[installHelp()].filter(Boolean),
-    h('nav', { class: 'tabs', role: 'tablist' }, tabsFor().map(([k, l]) => h('button', { role: 'tab', 'aria-selected': String(tab === k), onclick: () => { tab = k; renderShell(); } }, l))),
-    body,
+    h('div', { class: 'team-workspace' }, h('nav', { class: 'tabs', 'aria-label': 'Support team sections' }, tabsFor().map(([k, l]) => h('button', { 'aria-current': tab === k ? 'page' : null, onclick: () => { tab = k; renderShell(); } }, l))), body),
     h('p', { class: 'muted credits' }, SYMBOL_CREDIT, ' \u00B7 ', h('a', { href: 'https://creativecommons.org/licenses/by-sa/4.0/', target: '_blank', rel: 'noopener' }, 'Licence'), ' \u00B7 ', h('a', { href: '/about/' }, 'About Foxy')),
   );
-  if (!me.voice) body.append(h('p', { class: 'panel' }, `Voice is not connected yet (ELEVENLABS_API_KEY). ${me.learner.name} can still practise by typing.`));
+  body.append(h('header', { class: 'team-page-title' }, h('h2', {}, tabsFor().find(([k]) => k === tab)[1]), h('p', { class: 'muted' }, `Support ${me.learner.name}’s practice, one step at a time.`)));
+  if (!me.voice) body.append(h('p', { class: 'panel' }, `Voice is not connected yet. ${me.learner.name} can still practise by typing.`));
   ({ plan: renderPlan, activities: renderActivities, review: renderReview, notes: renderNotes, team: renderTeam, families: renderFamilies })[tab](body).catch((e) => toast(e.message));
 }
 
@@ -285,6 +285,9 @@ async function renderPlan(root) {
   };
   const interests = h('textarea', { rows: 3, placeholder: 'e.g. drumming, marching band, gym, Disney, paper characters' }, (settings.interests || []).join(', '));
   const modeBoxes = Object.keys(modes).map((m) => h('label', { class: 'switch' }, h('input', { type: 'checkbox', value: m, checked: settings.enabled_modes.includes(m) }), h('span', {}, h('strong', {}, modes[m].label), h('br'), h('small', { class: 'muted' }, modes[m].activityName))));
+  const saveStatus = h('span', { role: 'status', class: 'muted' }, 'No unsaved changes');
+  let revision = 0;
+  root.addEventListener('input', () => { revision++; saveStatus.textContent = 'Unsaved changes'; });
   root.append(
     h('h2', {}, 'Start My Practice'),
     h('div', { class: 'panel' }, field(`When ${me.learner.name} presses Start My Practice, open:`, current, `Pick one activity so ${me.learner.name} has fewer decisions to make.`)),
@@ -308,7 +311,11 @@ async function renderPlan(root) {
       h('label', { class: 'switch' }, f.captions, 'Show captions'),
       h('label', { class: 'switch' }, f.explain_buttons, 'Explain the four buttons (Repeat, Help me, Let me think, Try again) at the start of each practice'),
     ),
-    h('button', { class: 'btn btn-primary', onclick: run(async () => {
+    h('div', { class: 'plan-save' }, saveStatus, h('button', { class: 'btn btn-primary', onclick: run(async (event) => {
+      const button = event.currentTarget;
+      const savingRevision = revision;
+      button.disabled = true; saveStatus.textContent = 'Saving…';
+      try {
       const s = {};
       for (const [k, el] of Object.entries(f)) s[k] = el.type === 'checkbox' ? el.checked : el.type === 'number' ? Number(el.value) : (el.value || null);
       s.reminder_time = f.reminder_time.value || '';
@@ -317,10 +324,21 @@ async function renderPlan(root) {
       s.enabled_modes = modeBoxes.map((b) => b.querySelector('input')).filter((i) => i.checked).map((i) => i.value);
       await api('/adult/settings', { method: 'PUT', body: { settings: s, current_activity_id: current.value } });
       me = await api('/adult/me');
-      interests.value = (me.learner.settings.interests || []).join(', ');
-      toast('Practice plan saved.');
-    }) }, 'Save practice plan'),
+      if (revision === savingRevision) interests.value = (me.learner.settings.interests || []).join(', ');
+      saveStatus.textContent = revision === savingRevision ? 'All changes saved' : 'Unsaved changes';
+      } catch (error) { saveStatus.textContent = 'Could not save. Your changes are still here.'; throw error; }
+      finally { button.disabled = false; }
+    }) }, 'Save practice plan')),
   );
+  // Keep everyday choices visible; less frequent settings remain one click away.
+  for (const heading of [...root.children].filter((el) => el.tagName === 'H2')) {
+    const panel = heading.nextElementSibling;
+    if (!panel) continue;
+    const title = heading.textContent;
+    const section = h('details', { class: 'plan-section', open: title === 'Start My Practice' || title === 'Interests and activities' },
+      h('summary', {}, title === 'Start My Practice' ? 'Today’s practice' : title));
+    heading.before(section); section.append(panel); heading.remove();
+  }
 }
 
 // Voice picker: listen to each voice saying a typical Buddy line, then choose one. No ElevenLabs account needed.
