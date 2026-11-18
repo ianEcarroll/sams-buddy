@@ -64,11 +64,16 @@ function mount(...nodes) { $app.classList.remove('practice', 'home'); $app.repla
 // Practice redraws on every line Buddy says: keep the scroll position instead of jumping back to the top.
 function mountKeep(...nodes) {
   const y = window.scrollY;
+  const scrollable = [...$app.querySelectorAll('[data-scroll-key]')].map((el) => ({ key: el.dataset.scrollKey, top: el.scrollTop, left: el.scrollLeft }));
   const active = document.activeElement;
   const buttons = [...$app.querySelectorAll('button')];
   const index = buttons.indexOf(active);
   $app.classList.remove('home'); $app.classList.add('practice');
   $app.replaceChildren(...nodes.flat().filter((n) => n != null && n !== false));
+  for (const el of $app.querySelectorAll('[data-scroll-key]')) {
+    const previous = scrollable.find((item) => item.key === el.dataset.scrollKey);
+    if (previous) { el.scrollTop = previous.top; el.scrollLeft = previous.left; }
+  }
   if (index >= 0) {
     const next = [...$app.querySelectorAll('button')].find((b) => b.textContent === active.textContent);
     if (next && !next.disabled) next.focus({ preventScroll: true });
@@ -180,7 +185,6 @@ const modesOf = (mod) => MODE_INFO[mod].modes || [mod];
 
 // "Welcome back" once this device has been used before; a plain hello the very first time.
 const SEEN_KEY = 'buddy.seen';
-const WELCOME_KEY = 'talvo.welcome-seen';
 function greeting() {
   let seen = false;
   try { seen = localStorage.getItem(SEEN_KEY) === '1'; localStorage.setItem(SEEN_KEY, '1'); } catch { /* storage unavailable: just say hi */ }
@@ -241,7 +245,7 @@ function renderSettings() {
       if (!confirm('Delete all your practice notes? This cannot be undone.')) return;
       await api('/records', { method: 'DELETE' }); toast('Your practice notes are deleted.');
     } }, 'Delete my practice notes'),
-    h('button', { class: 'btn', onclick: () => { localStorage.removeItem(WELCOME_KEY); location.reload(); } }, 'Watch Foxy’s welcome'),
+    h('button', { class: 'btn', onclick: () => { location.reload(); } }, 'Watch Foxy’s welcome'),
     h('p', { class: 'muted', style: 'font-size:.95rem' }, h('a', { href: '/about/' }, 'About TALVO'), ' \u00B7 why we made it, and our film'),
     h('p', { class: 'muted', style: 'font-size:.85rem' }, 'Pictures: Mulberry Symbols \u00A9 Steve Lee, CC BY-SA 4.0 (mulberrysymbols.org)'),
   );
@@ -330,14 +334,14 @@ function drawPractice() {
   const ui = turn.ui;
   const stage = ui.images.length === 0 ? null
     : ui.imageLayout === 'sequence'
-      ? h('div', { class: 'strip' }, ui.images.map((src, i) => h('figure', {}, h('img', { src, alt: `Picture ${i + 1}` }), h('figcaption', {}, `${i + 1}`))))
+      ? h('div', { class: 'strip', 'data-scroll-key': JSON.stringify(ui.images) }, ui.images.map((src, i) => h('figure', {}, h('img', { src, alt: `Picture ${i + 1}` }), h('figcaption', {}, `${i + 1}`))))
       : h('img', { src: ui.images[0], alt: 'Practice picture' });
 
   // Show the last two things Buddy said this turn, so feedback stays visible under the cue that follows it.
   // A step's words are left out of the captions when a question about it follows (Task Buddy), so they can't be read off.
   const said = P.shown.filter((l) => !l.noCaption);
   const bubble = captionsOn() && said.length ? h('div', { style: 'display:grid;gap:10px' }, said.slice(-2).map((l) =>
-    h('div', { class: 'bubble', 'data-kind': l.kind }, l.kind === 'movie' ? icon('film') : null, h('span', {}, l.text)))) : null;
+    h('div', { class: 'bubble', 'data-kind': l.kind, 'data-scroll-key': `${l.kind}:${l.text}`, 'data-long': String(l.text.length > 180) }, l.kind === 'movie' ? icon('film') : null, h('span', {}, l.text)))) : null;
 
   const cue = ui.cueCard ? h('ol', { class: 'cuecard', 'aria-label': 'Reminder card' },
     ui.cueCard.labels.flatMap((l, i) => [i ? h('li', { class: 'arrow', 'aria-hidden': 'true' }, '→') : null, h('li', { 'data-lit': String(!!ui.cueCard.lit[i]) }, l)])) : null;
@@ -434,12 +438,25 @@ function drawPractice() {
     P.paused ? h('div', { class: 'pause', role: 'dialog', 'aria-label': 'Paused' }, h('div', {}, h('p', {}, 'Take all the time you need.'), h('button', { class: 'btn btn-primary', onclick: resumePractice }, 'I\u2019m ready'))) : null,
     turn.ui.paused ? h('div', { class: 'pause' }, h('div', {}, h('p', {}, 'Take all the time you need.'), h('button', { class: 'btn btn-primary', onclick: () => sendControl('ready') }, 'I\u2019m ready'))) : null,
   );
-  // Keep the newest thing in view: the step Buddy is reading (Task Buddy walk-through), otherwise what Buddy just
-  // said and the talk button. Only scrolls when it is off screen.
+  // Task keeps its established step-following behaviour. Other modules follow
+  // new content, never microphone/processing redraws or the support-button row.
   const now = $app.querySelector('.step-list li[data-now="true"]');
-  if (now) now.scrollIntoView({ block: 'center', behavior: smooth() });
-  else if (P.mode === 'conversation') $app.querySelector('.controls')?.scrollIntoView({ block: 'nearest', behavior: smooth() });
-  else if (P.speaking || P.thinking || P.talk === 'idle') (talk || bubble)?.scrollIntoView({ block: 'nearest', behavior: smooth() });
+  if (P.mode === 'steps') {
+    if (now) now.scrollIntoView({ block: 'center', behavior: smooth() });
+    else if (P.speaking || P.thinking || P.talk === 'idle') (talk || bubble)?.scrollIntoView({ block: 'nearest', behavior: smooth() });
+  } else {
+    const key = JSON.stringify([said.at(-1)?.text, ui.images, ui.board, ui.heard, turn.expect]);
+    if (P.scrollKey !== key && !P.help && !P.paused && !ui.paused) {
+      P.scrollKey = key;
+      const target = confirmBox || (turn.expect === 'board' ? board : null) || bubble?.lastElementChild || stage || talk;
+      if (target) {
+        const rect = target.getBoundingClientRect();
+        if (rect.top < 16 || rect.bottom > window.innerHeight - 16) {
+          target.scrollIntoView({ block: rect.height > window.innerHeight - 32 ? 'start' : 'nearest', behavior: smooth() });
+        }
+      }
+    }
+  }
 }
 
 function typedInput() {
@@ -614,7 +631,9 @@ function walkStart(t) { const n = t.lines.filter((l) => l.step != null).map((l) 
 function applyTurn(t) {
   P.turn = t; P.talk = 'idle';
   if (t.lines.length) { P.shown = []; P.nowStep = null; P.walkReveal = walkStart(t); }
-  drawPractice();
+  // The first spoken line renders the new turn. Do not briefly render an empty
+  // caption area: that collapses the page and clamps its scroll position to zero.
+  if (!t.lines.length) drawPractice();
   playLines(t.lines).then(() => { if (t.done && P?.id === t.sessionId) renderDone(t); });
 }
 
@@ -693,13 +712,12 @@ async function boot() {
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' }).catch(() => {});
 // An installed iPad app is never reloaded by itself: pick up new versions when it comes back to the front.
 watchForUpdates({ files: ['/app.js', '/styles.css', '/index.html'], busy: () => !!P });
-// Opening the app: the fox shows while the app loads, then the welcome video starts by itself every time, with a
+// Opening the app: show the welcome overlay only when the video is playing, with a
 // Skip button. It starts with sound if the browser allows it. If not (iPads usually won't), it starts silent, which
 // is always allowed, and a big "Tap for sound" button restarts it from the beginning with sound.
 const launch = document.getElementById('launch');
 function hideLaunch() {
   if (!launch?.isConnected) return;
-  localStorage.setItem(WELCOME_KEY, '1');
   launch.style.opacity = '0';
   const v = document.getElementById('launch-video');
   try { v?.pause(); } catch { /* nothing to stop */ }
@@ -710,7 +728,8 @@ async function showWelcomeVideo() {
   const skip = document.getElementById('launch-skip');
   const sound = document.getElementById('launch-sound');
   // Reduce Motion: no video on its own.
-  if (!launch?.isConnected || !v || localStorage.getItem(WELCOME_KEY) === '1' || matchMedia('(prefers-reduced-motion: reduce)').matches) return hideLaunch();
+  if (!launch?.isConnected || !v || matchMedia('(prefers-reduced-motion: reduce)').matches) return hideLaunch();
+  v.addEventListener('playing', () => { if (launch.isConnected) launch.hidden = false; });
   v.addEventListener('ended', hideLaunch);
   v.addEventListener('error', hideLaunch);
   skip.onclick = hideLaunch;
@@ -722,6 +741,6 @@ async function showWelcomeVideo() {
     sound.onclick = () => { v.muted = false; v.currentTime = 0; sound.hidden = true; v.play().catch(hideLaunch); };
   } catch { hideLaunch(); }
 }
-// The video starts straight away (its first frame is already on screen) while the app loads behind it.
+// Load the app while the video prepares; no static launch image is displayed.
 showWelcomeVideo();
 boot().catch(() => {});

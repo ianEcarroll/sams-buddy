@@ -511,3 +511,12 @@ details.layer > summary small, details.fine-tune > summary small { font-weight: 
 
 .plan-section, .plan-section *, .plan-save { box-sizing: border-box; }
 .team-content { padding-bottom: 24px; }
+
+/* Readable prompts without enlarging long stories and explanations. */
+.practice .bubble { font-size: 1.375rem; scroll-margin-block: 16px; }
+.practice .bubble[data-kind="story"], .practice .bubble[data-long="true"] { font-size: 1.1875rem; line-height: 1.55; }
+.practice .board, .practice .confirm { scroll-margin-block: 16px; }
+@media (max-width: 600px) {
+  .practice .bubble { font-size: 1.3125rem; }
+  .practice .bubble[data-kind="story"], .practice .bubble[data-long="true"] { font-size: 1.125rem; }
+}

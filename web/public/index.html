@@ -13,24 +13,15 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="description" content="Practise talking with Foxy, a calm conversation coach.">
-  <link rel="apple-touch-startup-image" href="/icons/splash-1640x2360.jpg" media="(device-width: 820px) and (device-height: 1180px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)">
-  <link rel="apple-touch-startup-image" href="/icons/splash-1668x2388.jpg" media="(device-width: 834px) and (device-height: 1194px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)">
-  <link rel="apple-touch-startup-image" href="/icons/splash-1620x2160.jpg" media="(device-width: 810px) and (device-height: 1080px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)">
-  <link rel="apple-touch-startup-image" href="/icons/splash-2048x2732.jpg" media="(device-width: 1024px) and (device-height: 1366px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)">
-  <link rel="apple-touch-startup-image" href="/icons/splash-1179x2556.jpg" media="(device-width: 393px) and (device-height: 852px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)">
-  <link rel="apple-touch-startup-image" href="/icons/splash-1290x2796.jpg" media="(device-width: 430px) and (device-height: 932px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)">
-  <link rel="apple-touch-startup-image" href="/icons/splash-1170x2532.jpg" media="(device-width: 390px) and (device-height: 844px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)">
-  <link rel="apple-touch-startup-image" href="/icons/splash-750x1334.jpg" media="(device-width: 375px) and (device-height: 667px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Lexend:wght@400;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
-  <!-- The welcome video, every time the app opens, with a Skip button. Its first frame shows at once.
-       In the page itself so it shows at once; app.js plays the video and removes all of it. -->
-  <div id="launch" style="position:fixed;inset:0;z-index:50;background:#abcbf9;display:grid;place-items:center;transition:opacity .4s">
-    <video id="launch-video" playsinline preload="auto" poster="/img/welcome-poster.jpg"><source src="/img/welcome.mp4" type="video/mp4"></video>
+  <!-- Keep the launch overlay hidden until the video actually starts playing. -->
+  <div id="launch" hidden style="position:fixed;inset:0;z-index:50;background:#abcbf9;display:grid;place-items:center;transition:opacity .4s">
+    <video id="launch-video" playsinline preload="auto"><source src="/img/welcome.mp4" type="video/mp4"></video>
     <button id="launch-sound" class="launch-btn launch-sound" type="button" hidden>Tap for sound</button>
     <button id="launch-skip" class="launch-btn launch-skip" type="button" hidden>Skip</button>
   </div>
