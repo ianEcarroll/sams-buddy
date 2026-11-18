@@ -11,7 +11,7 @@ const judge = async (a) => keywordJudge(a);
 
 test('the same lead pattern in every module, in its own word', () => {
   const lead = (mode, i, total) => itemLead({ mode, itemIndex: i, activity: { content: { items: Array(total).fill({}) } } });
-  for (const [mode, noun] of [['think', 'situation'], ['object', 'picture'], ['follow', 'instruction'], ['explain', 'question'], ['task', 'job'], ['story', 'story'], ['conversation', 'topic'], ['listen', 'story']]) {
+  for (const [mode, noun] of [['think', 'situation'], ['object', 'picture'], ['follow', 'instruction'], ['explain', 'question'], ['task', 'job'], ['story', 'story'], ['listen', 'story']]) {
     assert.equal(lead(mode, 0, 4), `Here's the first ${noun}.`);
     assert.equal(lead(mode, 1, 4), `On to the next ${noun}.`);
     assert.equal(lead(mode, 2, 4), `Here's the next ${noun}.`);
@@ -63,4 +63,10 @@ test('Remember My Day: "Here\'s the first question." comes right before the ques
 test('Explain: "Here\'s the first question." then the question, no movie line', () => {
   const { turn } = createSession({ activity: { id: 'x', mode: 'explain', title: 'T', content: { items: [{ question: 'Tell me how you make a sandwich.', parts: ['bread'] }, { question: 'Tell me how you brush your teeth.', parts: ['brush'] }] } }, learnerName: 'Sam', settings: { explain_buttons: false } });
   assert.deepEqual(turn.lines.filter((l) => l.kind !== 'welcome').map((l) => l.text), ["Here's the first question.", 'Tell me how you make a sandwich.']);
+});
+
+test('Talk goes straight to the opener, with no "Here\'s the first topic"', () => {
+  for (const [i, total] of [[0, 6], [2, 6], [5, 6]]) {
+    assert.equal(itemLead({ mode: 'conversation', itemIndex: i, activity: { content: { items: new Array(total) } } }), null);
+  }
 });

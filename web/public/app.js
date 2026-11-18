@@ -303,7 +303,7 @@ async function startPractice(activityId) {
   try {
     const t = await api('/practice/start', { method: 'POST', body: { activityId } });
     // walkReveal must be set before the first draw, or step 1 and its picture show during the introduction.
-    P = { id: t.sessionId, title: t.title, mode: t.mode, turn: t, shown: [], talk: 'idle', speaking: false, thinking: false, help: false, walkReveal: walkStart(t) };
+    P = { id: t.sessionId, title: t.title, mode: t.mode, turn: t, shown: [], talk: 'idle', speaking: false, thinking: false, help: false, walkReveal: walkStart(t), imgReady: t.mode !== 'conversation' };
     drawPractice();
     playLines(t.lines);
   } catch (e) { toast(e.message); }
@@ -313,7 +313,9 @@ function drawPractice() {
   if (!P) return;
   const { turn } = P;
   const ui = turn.ui;
-  const stage = ui.images.length === 0 ? null
+  // Talk: the topic's picture waits until Foxy starts the opening question (Ray, 18 Nov), not during the welcome.
+  const hideImg = P.mode === 'conversation' && P.imgReady === false;
+  const stage = ui.images.length === 0 || hideImg ? null
     : ui.imageLayout === 'sequence'
       ? h('div', { class: 'strip' }, ui.images.map((src, i) => h('figure', {}, h('img', { src, alt: `Picture ${i + 1}` }), h('figcaption', {}, `${i + 1}`))))
       : h('img', { src: ui.images[0], alt: 'Practice picture' });
@@ -449,11 +451,13 @@ function helpSheet() {
 const STEPS_GAP_MS = 2000;
 async function playLines(lines) {
   const gen = ++playGen;
+  if (P && P.mode === 'conversation') P.imgReady = !lines.some((x) => x.kind === 'prompt');
   const done = () => { if (gen === playGen && P) { P.speaking = false; P.nowStep = null; P.walkReveal = null; drawPractice(); } };
   for (const l of lines) {
     await holdWhilePaused(gen); // paused: hold Foxy's next words until the learner is ready
     if (gen !== playGen) return;
     P.shown.push(l); P.thinking = false; P.speaking = true;
+    if (l.kind === 'prompt') P.imgReady = true;
     if (l.step != null) { P.nowStep = l.step; P.walkReveal = l.step; } else if (P.walkReveal != null && P.walkReveal >= 0) P.nowStep = null;
     drawPractice();
     if (l.audio) {
