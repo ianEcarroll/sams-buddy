@@ -554,8 +554,8 @@ function editActivity(root, a) {
   };
   drawSkillHint();
   const askSteps = h('input', { type: 'checkbox', checked: content.ask_steps !== false });
-  // "Tell me all the steps" at the end: off by default when learning the steps (the questions already go through them).
-  const askEnd = h('input', { type: 'checkbox', checked: (content.run || 'learn') === 'learn' ? content.ask_end === true : content.ask_end !== false });
+  // "Tell me all the steps" at the end: on by default, so Foxy checks the learner has remembered them.
+  const askEnd = h('input', { type: 'checkbox', checked: content.ask_end !== false });
 
   const itemsBox = h('div', {});
   const ctx = () => ({ organiser: organiser.value, practise_questions: practiseQ.checked,

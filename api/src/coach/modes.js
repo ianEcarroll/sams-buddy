@@ -190,7 +190,8 @@ const conversation = {
   tagline: 'Start and maintain conversations',
   activityName: 'Have a Conversation',
   defaultGoal: 'Relevant comments, personal connections and follow-up questions',
-  cueCard: (item, activity) => (activity?.content?.practise_questions ? ['Answer', 'Add', 'Ask'] : ['Answer', 'Add']),
+  // No Answer / Add / Ask card on screen (Ray, 18 Nov); Talk is a conversation, not a checklist.
+  cueCard: () => null,
   elements: () => ['turn'],
   elementLabel: { turn: 'Comment', question: 'Question' },
   cueCardIndex: () => null,

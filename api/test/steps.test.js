@@ -262,8 +262,8 @@ test('learn: the team\'s own question gets a "Step N." lead; visual support is t
   assert.equal(turn.ui.step.text, null);
 });
 
-test('learn: an honest summary at the end, with no "tell me all the steps" unless switched on', async () => {
-  const { state } = learn({ skill: 'memory' });
+test('learn: an honest summary at the end, with no "tell me all the steps" when switched off', async () => {
+  const { state } = learn({ skill: 'memory', ask_end: false });
   walkAll(state);
   control(state, 'start_questions');
   await say(state, 'put the jumper on the table');
@@ -274,6 +274,16 @@ test('learn: an honest summary at the end, with no "tell me all the steps" unles
   assert.ok(t.includes("That's all 3 steps. You answered 2 on your own and 1 with some help."), t.join(' | '));
   assert.ok(!t.some((x) => /tell me all the steps/i.test(x)));
   assert.match(state.completed[0].review_note, /^Learn the steps, practising memory\./);
+});
+
+test('learn: by default Foxy asks for all the steps at the end', async () => {
+  const { state } = learn({ skill: 'memory' });
+  walkAll(state);
+  control(state, 'start_questions');
+  await say(state, 'put the jumper on the table');
+  await say(state, 'fold both sleeves across');
+  const { turn } = await say(state, 'fold the bottom up');
+  assert.ok(texts(turn).some((x) => /tell me all the steps/i.test(x)), texts(turn).join(' | '));
 });
 
 test('practice mode: the step\'s words are not captioned when its question follows straight away', () => {
