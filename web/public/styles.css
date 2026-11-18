@@ -486,3 +486,28 @@ details.layer > summary small, details.fine-tune > summary small { font-weight: 
   .practice .controls { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .practice .controls .btn { flex-direction: row; min-height: 56px; padding: 10px; }
 }
+
+/* Team workspace: persistent navigation and focused editing. */
+.adult { max-width: 1320px; }
+.team-workspace { display: grid; grid-template-columns: 200px minmax(0, 1fr); gap: 32px; margin-top: 24px; }
+.team-workspace > .tabs { display: flex; flex-direction: column; align-self: start; position: sticky; top: 20px; gap: 6px; margin: 0; }
+.team-workspace > .tabs button { text-align: left; min-height: 48px; }
+.tabs button[aria-current="page"] { background: var(--surface); color: var(--talk); box-shadow: inset 3px 0 var(--talk); }
+.team-content { min-width: 0; }
+.team-page-title h2 { font-size: 1.75rem; margin: 0; }
+.team-page-title p { margin: 6px 0 24px; }
+.adult .mod-card { border-top-width: 3px; }
+.adult .mod-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.plan-section { border: 1px solid var(--line); border-radius: 16px; background: var(--surface); margin: 14px 0; }
+.plan-section > summary { padding: 18px 20px; }
+.plan-section > .panel { border: 0; margin: 0; padding: 4px 20px 20px; }
+.adult .plan-save { display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-top: 24px; padding: 16px; border-radius: 12px 12px 0 0; }
+@media (max-width: 850px) {
+  .team-workspace { grid-template-columns: minmax(0, 1fr); gap: 20px; }
+  .team-workspace > .tabs { position: static; flex-direction: row; flex-wrap: wrap; }
+  .adult .mod-grid { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 440px) { .adult .plan-save { flex-direction: column; align-items: stretch; } }
+
+.plan-section, .plan-section *, .plan-save { box-sizing: border-box; }
+.team-content { padding-bottom: 24px; }
