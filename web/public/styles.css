@@ -456,3 +456,33 @@ details.layer > summary small, details.fine-tune > summary small { font-weight: 
 .picker-title .card-icon:has(.fox) { width: 64px; height: 64px; border-radius: 16px; }
 
 .p-btns { display: flex; gap: 8px; }
+
+/* Learner refresh: keep familiar controls, with content-led spacing. */
+.sam.home { max-width: 880px; }
+.home .hello { font-size: clamp(2rem, 4vw, 2.6rem); }
+.home .start { box-shadow: 0 3px 0 color-mix(in srgb, var(--talk) 65%, #000); padding: 22px 24px; border-radius: 20px; }
+.module-section h2 { font-size: 1.1rem; margin: 10px 0 14px; }
+.home .cards { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.home .card { justify-content: flex-start; gap: 12px; border-top-width: 3px; min-height: 0; }
+.home .card-icon:has(.fox) { width: 64px; height: 64px; border-radius: 16px; }
+.home .card small { font-size: .9rem; }
+.home .card-count { display: inline-block; margin-top: 8px; font-size: .8rem; color: var(--ink-soft); font-weight: 400; }
+.sam.practice { max-width: 720px; height: auto; min-height: 100dvh; }
+.practice .stage { flex: 0 1 auto; min-height: 0; }
+.practice .bubble { font-size: clamp(1.3rem, 3vw, 1.65rem); border-radius: 20px; }
+.practice .talk { margin-top: auto; min-height: 96px; }
+.practice .cuecard { gap: 8px; }
+.practice .cuecard .arrow { display: none; }
+.practice .cuecard li { border-radius: 12px; }
+.practice .p-top { align-items: flex-start; margin-bottom: 12px; }
+.practice .p-title { font-size: 1.15rem; }
+.practice .p-btns .btn { min-height: 48px; padding: 8px 12px; font-size: 1rem; }
+.adult .save-row, .adult .plan-save { position: sticky; bottom: 0; background: var(--paper); padding: 12px 0; border-top: 1px solid var(--line); z-index: 2; }
+@media (max-width: 600px) {
+  .home .cards { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+  .home .card { padding: 14px; }
+  .practice .p-top { flex-direction: column; gap: 10px; }
+  .practice .p-btns { width: 100%; justify-content: flex-end; }
+  .practice .controls { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .practice .controls .btn { flex-direction: row; min-height: 56px; padding: 10px; }
+}
