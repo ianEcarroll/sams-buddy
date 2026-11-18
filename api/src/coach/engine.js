@@ -129,7 +129,7 @@ function newItemState(state) {
     unsafe: [],      // think: ideas the judge flagged as unsafe, in the learner's words
     recalled: [],    // recall: things remembered so far { text, known } (known = index in item.memories or -1)
     clueFor: null,   // recall: which listed memory the current clues are about
-    showImage: null, // recall: photo shown as the strongest clue
+    showImage: null, // recall: photo shown as the strongest clue; talk: the topic's picture, shown once a hint is given
   };
   if (state.mode === 'task' && item.unclear_instruction) { st.phase = 'clarify'; st.elements.unshift('clarify'); }
   if (state.mode === 'conversation') st.conv = { validTurns: 0, questionAsked: false, turns: [], noted: {} };
@@ -466,6 +466,8 @@ function giveCue(state, el, by, forceLevel = null) {
   const text = state.mode === 'recall' ? recallCue(state, level) : cueLadder(state.mode, state.activity, state.mode === 'category' ? categoryCueItem(state, item) : item, el)[level];
   it.supportGiven.push({ el, level, text, by });
   it.anySupport = true;
+  // Talk: the topic's picture is a hint, shown with the first cue instead of straight away (Ray, 18 Nov).
+  if (state.mode === 'conversation' && item.image_id) it.showImage = item.image_id;
   if (level === 3) it.modelGiven[el] = true;
   return line(text, level === 3 ? 'model' : 'cue', { level: LEVELS[level], element: el });
 }
@@ -1043,7 +1045,7 @@ function makeTurn(state, lines, expect = null) {
   }
   const stepUi = state.mode === 'steps' ? stepsUi(state) : null;
   const images = state.mode === 'steps' ? (stepUi?.image ? [stepUi.image] : [])
-    : state.mode === 'story' ? (item.image_ids || []) : state.mode === 'recall' ? (it?.showImage ? [it.showImage] : []) : (item.image_id ? [item.image_id] : []);
+    : state.mode === 'story' ? (item.image_ids || []) : (state.mode === 'recall' || state.mode === 'conversation') ? (it?.showImage ? [it.showImage] : []) : (item.image_id ? [item.image_id] : []);
   return {
     lines,
     expect: expect || (state.done ? 'none' : 'response'),
@@ -1287,7 +1289,8 @@ const stepsLearn = (state) => stepRunOf(state.activity) === 'learn';
 const stepsPractice = (state) => stepRunOf(state.activity) !== 'independence';
 const stepsAsk = (state) => state.activity.content?.ask_steps !== false;
 // The end "tell me all the steps" is off by default when learning the steps (the questions already go through them).
-const stepsRetell = (state) => (stepsLearn(state) ? state.activity.content?.ask_end === true : state.activity.content?.ask_end !== false);
+// "Tell me all the steps" at the end is on unless the team switches it off (Ray, 18 Nov: Learn the steps should ask it too).
+const stepsRetell = (state) => state.activity.content?.ask_end !== false;
 const STEP_RIGHT = ["That's right.", 'Yes, good.', "That's it."];
 const firstWordsOf = (t, n) => String(t || '').split(/\s+/).slice(0, n).join(' ').replace(/[.,;:!?]+$/, '');
 

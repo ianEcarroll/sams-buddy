@@ -167,3 +167,14 @@ test('the introduction names what the learner will do, in every mode', () => {
     assert.ok(turn.lines.some((l) => l.kind === 'welcome' && re.test(l.text)), mode);
   }
 });
+
+test('Talk: no Answer / Add / Ask card, and the topic picture is a hint, not shown straight away', async () => {
+  const act = JSON.parse(JSON.stringify(convActivity));
+  act.content.items[0].image_id = 'sym:cat';
+  const { state, turn } = createSession({ activity: act });
+  assert.equal(turn.ui.cueCard, null);
+  assert.deepEqual(turn.ui.images, []);
+  const r = await say(state, 'umm');
+  assert.deepEqual(r.turn.ui.images, ['sym:cat'], 'shown with the first hint');
+  assert.equal(r.turn.ui.cueCard, null);
+});
