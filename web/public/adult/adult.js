@@ -191,8 +191,8 @@ async function renderInvite(inviteToken) {
     brand(), h('h1', {}, 'Welcome to TALVO'),
     h('p', { class: 'muted', style: 'max-width:60ch' }, 'Set up TALVO for your child. You\u2019ll have the main account, and can add their speech therapist, teachers and job coach afterwards.'),
     h('div', { class: 'panel', style: 'max-width:460px;display:grid;gap:18px' },
-      field('Your child\u2019s first name', f.learnerName, 'TALVO uses it in the app, e.g. \u201cWelcome back, Alex!\u201d'),
-      field('Year of birth (optional)', f.birthYear, 'Helps TALVO talk at the right level for their age.'),
+      field('Your child\u2019s first name', f.learnerName, 'Foxy uses it in the app, e.g. \u201cWelcome back, Alex!\u201d'),
+      field('Year of birth (optional)', f.birthYear, 'Helps Foxy talk at the right level for their age.'),
       field('Your name', f.ownerName), field('Your email', f.email), field('Password (10+ characters)', f.password),
       h('button', { class: 'btn btn-primary', onclick: run(async () => {
         const r = await api(`/invite/${encodeURIComponent(inviteToken)}`, { method: 'POST', body: Object.fromEntries(Object.entries(f).map(([k, v]) => [k, v.value])) });
@@ -264,7 +264,7 @@ function renderShell() {
     ...[installHelp()].filter(Boolean),
     h('nav', { class: 'tabs', role: 'tablist' }, tabsFor().map(([k, l]) => h('button', { role: 'tab', 'aria-selected': String(tab === k), onclick: () => { tab = k; renderShell(); } }, l))),
     body,
-    h('p', { class: 'muted credits' }, SYMBOL_CREDIT, ' \u00B7 ', h('a', { href: 'https://creativecommons.org/licenses/by-sa/4.0/', target: '_blank', rel: 'noopener' }, 'Licence'), ' \u00B7 ', h('a', { href: '/about/' }, 'About TALVO')),
+    h('p', { class: 'muted credits' }, SYMBOL_CREDIT, ' \u00B7 ', h('a', { href: 'https://creativecommons.org/licenses/by-sa/4.0/', target: '_blank', rel: 'noopener' }, 'Licence'), ' \u00B7 ', h('a', { href: '/about/' }, 'About Foxy')),
   );
   if (!me.voice) body.append(h('p', { class: 'panel' }, `Voice is not connected yet (ELEVENLABS_API_KEY). ${me.learner.name} can still practise by typing.`));
   ({ plan: renderPlan, activities: renderActivities, review: renderReview, notes: renderNotes, team: renderTeam, families: renderFamilies })[tab](body).catch((e) => toast(e.message));
@@ -290,17 +290,17 @@ async function renderPlan(root) {
     h('div', { class: 'panel' }, field(`When ${me.learner.name} presses Start My Practice, open:`, current, `Pick one activity so ${me.learner.name} has fewer decisions to make.`)),
     h('h2', {}, `Interests and activities`),
     h('div', { class: 'panel' }, field(`What does ${me.learner.name} enjoy or do?`, interests,
-      `Separate with commas: hobbies, clubs, sports, favourite films, characters or music. TALVO uses these to make conversations about things ${me.learner.name} cares about, and they appear as topic suggestions when you add a Talk topic. They are sent to the AI that writes TALVO\u2019s replies, so leave out anything private.`)),
+      `Separate with commas: hobbies, clubs, sports, favourite films, characters or music. Foxy uses these to make conversations about things ${me.learner.name} cares about, and they appear as topic suggestions when you add a Talk topic. They are sent to the AI that writes Foxy\u2019s replies, so leave out anything private.`)),
     h('h2', {}, `TALVO modules ${me.learner.name} can see`),
     h('div', { class: 'panel grid2' }, modeBoxes),
-    h('h2', {}, 'TALVO\u2019s voice'),
+    h('h2', {}, 'Foxy\u2019s voice'),
     voicePicker(f.voice_id),
     h('h2', {}, 'Pace and support'),
     h('div', { class: 'panel grid2' },
       field('Thinking time after "Make a movie in your mind" (seconds)', f.think_seconds),
       field('Speech speed (0.7 slower – 1.2 faster)', f.speech_speed),
       field('Session length (minutes, checked between items)', f.session_minutes),
-      field('Attempts per item before TALVO moves on', f.max_attempts),
+      field('Attempts per item before Foxy moves on', f.max_attempts),
       field('Conversation turns per topic', f.turns_per_topic),
       field('Practice reminder time', f.reminder_time, `${me.learner.name}'s iPad or phone shows a reminder at this time on days they haven't practised. Leave blank for none. ${me.learner.name} turns reminders on in My settings.`),
       h('label', { class: 'switch' }, f.fade_support, 'Reduce support on later items'),
@@ -339,7 +339,7 @@ function voicePicker(idInput) {
       box.replaceChildren(
         data.fallback ? h('p', { class: 'muted', style: 'margin-top:0' }, 'Showing ElevenLabs\u2019 standard voices. To list every voice on the account, give the ElevenLabs API key the \u201cVoices: Read\u201d permission.') : null,
         h('p', { style: 'margin-top:0' }, 'Current voice: ', h('strong', {}, cur ? cur.name : 'Default voice'),
-          '. Press ', h('strong', {}, 'Listen'), ' to hear each voice say a typical TALVO line, then ', h('strong', {}, 'Use this voice'), `. It\u2019s a good choice to make with ${me.learner.name}.`),
+          '. Press ', h('strong', {}, 'Listen'), ' to hear each voice say a typical Foxy line, then ', h('strong', {}, 'Use this voice'), `. It\u2019s a good choice to make with ${me.learner.name}.`),
         h('ul', { class: 'voice-list' }, data.voices.map((v) => {
           const on = v.id === chosen();
           const listen = h('button', { class: 'btn', onclick: run(async () => {
@@ -359,7 +359,7 @@ function voicePicker(idInput) {
               on ? null : h('button', { class: 'btn btn-primary', onclick: run(async () => {
                 await api('/adult/settings', { method: 'PUT', body: { settings: { voice_id: v.id } } });
                 idInput.value = v.id; data.current = v.id; stopPlayer(); draw();
-                toast(`TALVO now speaks with ${v.name}\u2019s voice.`);
+                toast(`Foxy now speaks with ${v.name}\u2019s voice.`);
               }) }, 'Use this voice')));
         })),
         h('details', {}, h('summary', {}, 'Voice ID (advanced)'), field('ElevenLabs voice ID', idInput, 'Only needed for a voice not listed here. Press Save practice plan after changing it.')),
@@ -367,7 +367,7 @@ function voicePicker(idInput) {
     };
     draw();
   }
-  box.append(h('button', { class: 'btn', onclick: run(load) }, 'Choose TALVO\u2019s voice'));
+  box.append(h('button', { class: 'btn', onclick: run(load) }, 'Choose Foxy\u2019s voice'));
   return box;
 }
 
@@ -420,7 +420,7 @@ function whenUsed(iso) {
 const KIND_BLURB = {
   recall: 'Recall real things they did, with clues and the family\u2019s photos.',
   category: 'Memory test: add a word to a list, or name things in a group, such as animals or fruit.',
-  listen: 'TALVO reads a short story, then asks questions about it.',
+  listen: 'Foxy reads a short story, then asks questions about it.',
   explain: 'Explain how to do something everyday, step by step.',
   object: 'Name a picture, say its group and what it\u2019s used for.',
   follow: 'Follow spoken instructions by moving pictures on screen.',
@@ -489,8 +489,8 @@ const CUE_NAMES = {
   listen: {},
   think: { problem: 'Noticing the problem', action: 'What to do', reason: 'Why', backup: 'If that does not work' },
   recall: {}, // clues come from each memory the family enters
-  category: {}, // TALVO's clues: say it again → the group → first sound → the word
-  follow: {}, // TALVO's supports are fixed: say it back → hear it again → see it → TALVO shows it
+  category: {}, // Foxy's clues: say it again → the group → first sound → the word
+  follow: {}, // Foxy's supports are fixed: say it back → hear it again → see it → Foxy shows it
   explain: { point: 'Each part (the question, starter and model can also be set per part)' },
 };
 const LEVEL_NAMES = ['1. Reminder', '2. Specific cue', '3. Sentence starter', '4. Model'];
@@ -535,7 +535,7 @@ function editActivity(root, a) {
     [['0', 'No retries'], ['1', 'Once'], ['2', 'Twice'], ['3', 'Three times']]
       .map(([v, l]) => h('option', { value: v, selected: String(content.listen_retries ?? 2) === v }, l)));
   const organiser = h('select', {},
-    [['show', 'Show it from the start'], ['when_stuck', 'Only if they get stuck (after TALVO’s first cue)'], ['off', 'Don’t show it']]
+    [['show', 'Show it from the start'], ['when_stuck', 'Only if they get stuck (after Foxy’s first cue)'], ['off', 'Don’t show it']]
       .map(([v, l]) => h('option', { value: v, selected: (content.organiser || 'show') === v }, l)));
 
   // Task Buddy: one skill per activity, Practice (Buddy says each step) or Independence (all on their own),
@@ -544,13 +544,13 @@ function editActivity(root, a) {
   const stepSkill = h('select', {}, Object.entries(SK).map(([k, v]) => h('option', { value: k, selected: (content.skill || 'understanding') === k }, v.label)));
   const skillHint = h('small', { class: 'muted' });
   const stepRun = h('select', {},
-    [['learn', 'Learn the steps: TALVO shows them all, then asks about each one'], ['practice', 'Do it for real: press Done after each step'], ['independence', 'Independence: do all the steps on their own']]
+    [['learn', 'Learn the steps: Foxy shows them all, then asks about each one'], ['practice', 'Do it for real: press Done after each step'], ['independence', 'Independence: do all the steps on their own']]
       .map(([v, l]) => h('option', { value: v, selected: (content.run || 'learn') === v }, l)));
   const drawSkillHint = () => {
     const k = SK[stepSkill.value]; if (!k) return;
     skillHint.textContent = stepRun.value === 'learn'
-      ? `${k.goal}. TALVO goes through all the steps with their pictures first, then asks about each one, e.g. \u201c${k.learnQuestion}\u201d`
-      : `${k.goal}. TALVO asks ${k.when === 'before' ? 'before' : 'after'} ${name} does each step, e.g. \u201c${k.question}\u201d`;
+      ? `${k.goal}. Foxy goes through all the steps with their pictures first, then asks about each one, e.g. \u201c${k.learnQuestion}\u201d`
+      : `${k.goal}. Foxy asks ${k.when === 'before' ? 'before' : 'after'} ${name} does each step, e.g. \u201c${k.question}\u201d`;
   };
   drawSkillHint();
   const askSteps = h('input', { type: 'checkbox', checked: content.ask_steps !== false });
@@ -570,8 +570,8 @@ function editActivity(root, a) {
   const cueInputs = {};
   const cueNames = Object.entries(CUE_NAMES[a.mode] || {});
   const cues = cueNames.length ? h('div', {},
-    h('h3', {}, 'Cues TALVO gives'),
-    h('p', { class: 'muted' }, `When ${name} leaves something out, TALVO gives one cue at a time for that one part, from 1 (lightest) to 4 (a full model). Words in {curly brackets} are filled in from the activity, so keep them as they are.`),
+    h('h3', {}, 'Cues Foxy gives'),
+    h('p', { class: 'muted' }, `When ${name} leaves something out, Foxy gives one cue at a time for that one part, from 1 (lightest) to 4 (a full model). Words in {curly brackets} are filled in from the activity, so keep them as they are.`),
     cueNames.map(([key, label]) => {
       const current = content.cues?.[key] || modes[a.mode].defaultCues[key];
       cueInputs[key] = current.map((t) => h('input', { value: t }));
@@ -589,14 +589,14 @@ function editActivity(root, a) {
         a.mode === 'conversation' ? h('label', { class: 'switch' }, practiseQ, 'Also practise asking follow-up questions') : null,
         a.mode === 'listen' ? h('label', { class: 'switch' }, clueOnWrong, h('span', {}, 'Give a clue straight after a wrong answer',
           h('br'), h('small', { class: 'muted' }, `${name} hears the question\u2019s clue and has one more try, instead of waiting for the end. Counts as support. Check with ${name}\u2019s speech therapist before turning on.`))) : null,
-        a.mode === 'listen' ? field('Retries at the missed questions', listenRetries, `After the questions, TALVO offers ${name} another go at the ones they missed: with the story read again, or straight to the questions.`) : null,
+        a.mode === 'listen' ? field('Retries at the missed questions', listenRetries, `After the questions, Foxy offers ${name} another go at the ones they missed: with the story read again, or straight to the questions.`) : null,
         a.mode === 'steps' ? h('div', { class: 'field' }, field('Skill to practise', stepSkill), skillHint) : null,
-        a.mode === 'steps' ? field('How TALVO runs it', stepRun, `Learn the steps needs nothing but the screen. Use Do it for real when ${name} has the things to hand. In Independence, ${name} can press Help to see all the steps.`) : null,
-        a.mode === 'steps' ? h('label', { class: 'switch' }, askSteps, h('span', {}, 'Ask a question at each step', h('br'), h('small', { class: 'muted' }, 'Off: TALVO just goes through the steps.'))) : null,
-        a.mode === 'steps' ? h('label', { class: 'switch' }, askEnd, h('span', {}, 'At the end, ask for all the steps in order', h('br'), h('small', { class: 'muted' }, `${name} tells TALVO how they did the task.`))) : null,
+        a.mode === 'steps' ? field('How Foxy runs it', stepRun, `Learn the steps needs nothing but the screen. Use Do it for real when ${name} has the things to hand. In Independence, ${name} can press Help to see all the steps.`) : null,
+        a.mode === 'steps' ? h('label', { class: 'switch' }, askSteps, h('span', {}, 'Ask a question at each step', h('br'), h('small', { class: 'muted' }, 'Off: Foxy just goes through the steps.'))) : null,
+        a.mode === 'steps' ? h('label', { class: 'switch' }, askEnd, h('span', {}, 'At the end, ask for all the steps in order', h('br'), h('small', { class: 'muted' }, `${name} tells Foxy how they did the task.`))) : null,
         a.mode === 'story' ? field('Story organiser on screen', organiser, `Fade it out as ${name} gets more independent: from the start → only if stuck → off.`) : null),
       goalLine, goalPicker),
-    h('h3', {}, { conversation: 'Topics, in the order TALVO moves between them', listen: 'Stories', think: 'Situations', recall: 'What to remember', category: 'Groups', explain: 'Explanations', follow: 'Instructions', task: 'Tasks', steps: 'Tasks', story: 'Stories', object: 'Pictures' }[a.mode] || 'Items'),
+    h('h3', {}, { conversation: 'Topics, in the order Foxy moves between them', listen: 'Stories', think: 'Situations', recall: 'What to remember', category: 'Groups', explain: 'Explanations', follow: 'Instructions', task: 'Tasks', steps: 'Tasks', story: 'Stories', object: 'Pictures' }[a.mode] || 'Items'),
     itemsBox,
     h('button', { class: 'btn', onclick: () => { content.items.push(blankItem(a.mode)); drawItems(); } }, addLabel),
     h('details', { class: 'layer' }, h('summary', {}, 'For therapists ', h('small', { class: 'muted' }, '(optional: record wording, cues, what to review)')),
@@ -636,7 +636,7 @@ function previewBox(mode, it, ctx) {
       const p = await api('/adult/preview', { method: 'POST', body: { mode, item: it, content: ctx() } });
       if (mine !== seq) return;
       const shown = p.lines.map((l) => (l.kind === 'story' ? shorten(l.text, 30) : l.text));
-      box.replaceChildren(h('strong', {}, 'TALVO will say: '),
+      box.replaceChildren(h('strong', {}, 'Foxy will say: '),
         shown.length ? h('ol', {}, shown.map((t) => h('li', {}, t))) : h('span', { class: 'muted' }, 'Fill in the boxes above to see it.'),
         p.simple && shown.length ? h('small', { class: 'muted' }, `If ${me.learner.name} says “I don’t understand”: “${p.simple}”`) : null);
     } catch { /* preview is a convenience: never block editing */ }
@@ -728,13 +728,13 @@ const multi = (it, k, rows = 3) => bind(it, k, h('textarea', { rows }), lines, (
 // "Buddy will say…" at the bottom updates as the team types.
 const ITEM_NAMES = { conversation: 'Topic', listen: 'Story', story: 'Story', think: 'Situation', recall: 'Memory practice', category: 'Group', explain: 'Explanation', follow: 'Instruction', task: 'Task', object: 'Picture', steps: 'Task' };
 const FINE_TUNE = {
-  object: 'other accepted names and groups, TALVO’s question, simpler wording',
-  story: 'accepted words, target words, TALVO’s question, simpler wording',
+  object: 'other accepted names and groups, Foxy’s question, simpler wording',
+  story: 'accepted words, target words, Foxy’s question, simpler wording',
   task: 'exact wording, phrases for asking',
   conversation: 'example comment and question for the model cue',
-  think: 'example reason and plan B, ideas that aren’t safe, TALVO’s question, simpler wording',
-  recall: 'TALVO’s question',
-  category: 'introduction, TALVO’s question, simpler wording',
+  think: 'example reason and plan B, ideas that aren’t safe, Foxy’s question, simpler wording',
+  recall: 'Foxy’s question',
+  category: 'introduction, Foxy’s question, simpler wording',
 };
 function itemEditor(mode, it, i, urls, remove, ctx, addTopic) {
   const name = me.learner.name;
@@ -742,7 +742,7 @@ function itemEditor(mode, it, i, urls, remove, ctx, addTopic) {
   const head = h('div', { class: 'row-actions', style: 'justify-content:space-between' }, h('strong', {}, `${ITEM_NAMES[mode] || 'Item'} ${i + 1}`), h('button', { class: 'btn btn-quiet', onclick: remove }, 'Remove'));
   let main = [];
   let extra = [];
-  const simple = () => field('Simpler wording, if they say “I don’t understand”', txt(it, 'simple_prompt'), 'Leave blank to use TALVO’s own (shown under “TALVO will say”).');
+  const simple = () => field('Simpler wording, if they say “I don’t understand”', txt(it, 'simple_prompt'), 'Leave blank to use Foxy’s own (shown under “Foxy will say”).');
   if (mode === 'object') {
     main = [
       field('Picture', imagePicker(it, 'image_id', urls, false)),
@@ -753,14 +753,14 @@ function itemEditor(mode, it, i, urls, remove, ctx, addTopic) {
         field('Other accepted names', csv(it, 'name_alternatives'), 'Comma separated'),
         field('Other accepted groups', csv(it, 'category_alternatives'), 'Comma separated, approved by the therapist'),
         field('Key words for the use', csv(it, 'function_keywords'), 'Only used if the AI is unavailable.')),
-      field("TALVO's question", txt(it, 'prompt'), 'Leave blank to use TALVO’s own.'), simple(),
+      field("Foxy's question", txt(it, 'prompt'), 'Leave blank to use Foxy’s own.'), simple(),
     ];
   }
   if (mode === 'story') {
     main = [
       field('Pictures, in order', imagePicker(it, 'image_ids', urls, true)),
       h('div', { class: 'grid2' }, field('Story title', txt(it, 'title')), field('Where it happens', txt(it, 'setting'), 'e.g. "the park"')),
-      field('What TALVO says first', txt(it, 'intro'), `Tells ${name} which story this is, e.g. "Let’s tell the story of your trip to Ireland." Needed if there are no pictures.`),
+      field('What Foxy says first', txt(it, 'intro'), `Tells ${name} which story this is, e.g. "Let’s tell the story of your trip to Ireland." Needed if there are no pictures.`),
       field('Who was there (optional)', csv(it, 'who'), 'Comma separated, e.g. "Dad, the band". Any one of them counts.'),
       field('What happens, one event per line, in order', multi(it, 'events'), 'Up to four works well: the organiser shows them as First → Next → Then → Finally.'),
       field('How it ended, or one detail (optional)', txt(it, 'outcome'), 'e.g. "we went for pizza afterwards"'),
@@ -769,17 +769,17 @@ function itemEditor(mode, it, i, urls, remove, ctx, addTopic) {
       field('Other accepted words for where', csv(it, 'setting_alternatives'), 'Comma separated'),
       h('div', { class: 'grid2' }, field("Therapist's target words", csv(it, 'target_words'), 'e.g. spin, build, construct'), field('Approved alternative words', csv(it, 'word_alternatives'))),
       field('Model sentence using a target word', txt(it, 'vocabulary_model')),
-      field("TALVO's question", txt(it, 'prompt'), 'Leave blank to use TALVO’s own.'), simple(),
+      field("Foxy's question", txt(it, 'prompt'), 'Leave blank to use Foxy’s own.'), simple(),
     ];
   }
   if (mode === 'task') {
     const unclearOn = h('input', { type: 'checkbox', checked: !!it.unclear_instruction });
-    const unclearWrap = h('div', { hidden: !it.unclear_instruction || null }, field('Unclear version TALVO says first', txt(it, 'unclear_instruction'), `${name} succeeds by asking for clarification.`));
+    const unclearWrap = h('div', { hidden: !it.unclear_instruction || null }, field('Unclear version Foxy says first', txt(it, 'unclear_instruction'), `${name} succeeds by asking for clarification.`));
     unclearOn.addEventListener('change', () => { unclearWrap.hidden = !unclearOn.checked; if (!unclearOn.checked) delete it.unclear_instruction; });
     main = [
       h('div', { class: 'grid2' }, field('Job / task title', txt(it, 'title')), field('Picture (optional)', imagePicker(it, 'image_id', urls, false))),
       field('Steps, one per line (2–3 real job steps)', multi(it, 'steps'), 'e.g. "get the cloth and spray"'),
-      h('label', { class: 'switch' }, unclearOn, 'Practise asking for clarification (TALVO gives an unclear instruction first)'), unclearWrap,
+      h('label', { class: 'switch' }, unclearOn, 'Practise asking for clarification (Foxy gives an unclear instruction first)'), unclearWrap,
     ];
     extra = [
       field('Exact instruction wording', txt(it, 'instruction'), 'Leave blank to use "First…, Next…, Last…"'),
@@ -799,23 +799,23 @@ function itemEditor(mode, it, i, urls, remove, ctx, addTopic) {
       : h('small', { class: 'muted' }, `Add ${name}’s interests in Practice plan and they’ll appear here.`);
     main = [
       h('div', { class: 'grid2' }, h('div', { class: 'field' }, field('Topic', topic, `Or add one of ${name}’s interests as a new topic:`), chips), field('Picture (optional)', imagePicker(it, 'image_id', urls, false))),
-      field("TALVO's opening line", txt(it, 'opener'), 'A comment works well, e.g. "I watched Toy Story at the weekend."'),
+      field("Foxy's opening line", txt(it, 'opener'), 'A comment works well, e.g. "I watched Toy Story at the weekend."'),
     ];
     extra = [h('div', { class: 'grid2' }, field('Example comment (for the model cue)', txt(it, 'example_comment')), field('Example question (for the model cue)', txt(it, 'example_question')))];
   }
   if (mode === 'think') {
     main = [
       h('div', { class: 'grid2' }, field('Short title', txt(it, 'title'), 'For the team, e.g. "Trainer not at the gym"'), field('Picture (optional)', imagePicker(it, 'image_id', urls, false))),
-      field('The situation TALVO describes', bind(it, 'scenario', h('textarea', { rows: 2 })), `e.g. "You arrive at the gym, but your trainer isn’t there." Use places and activities from ${name}’s life.`),
+      field('The situation Foxy describes', bind(it, 'scenario', h('textarea', { rows: 2 })), `e.g. "You arrive at the gym, but your trainer isn’t there." Use places and activities from ${name}’s life.`),
       field('What is unexpected or wrong', txt(it, 'problem'), 'e.g. "the trainer is not there"'),
-      field('Good, safe responses, one per line', multi(it, 'good_actions', 4), 'TALVO accepts these and anything with the same meaning. Asking a trusted adult always counts. The first one is used for the model cue.'),
+      field('Good, safe responses, one per line', multi(it, 'good_actions', 4), 'Foxy accepts these and anything with the same meaning. Asking a trusted adult always counts. The first one is used for the model cue.'),
     ];
     extra = [
       h('div', { class: 'grid2' },
         field('Example reason (for the model cue)', txt(it, 'reason_example'), 'e.g. "the staff can find my trainer"'),
         field('Example plan B (for the model cue)', txt(it, 'backup_example'), 'e.g. "call my dad"')),
-      field('Not safe, one per line', multi(it, 'unsafe', 2), 'Ideas TALVO should not accept, e.g. "leave on my own". They are flagged for the team in Review practice.'),
-      field("TALVO's question", txt(it, 'question'), 'Leave blank for "What would you do?"'), simple(),
+      field('Not safe, one per line', multi(it, 'unsafe', 2), 'Ideas Foxy should not accept, e.g. "leave on my own". They are flagged for the team in Review practice.'),
+      field("Foxy's question", txt(it, 'question'), 'Leave blank for "What would you do?"'), simple(),
     ];
   }
   if (mode === 'listen') main = storyEditor(it, urls);
@@ -853,12 +853,12 @@ function stepsEditor(it, urls, ctx) {
       const qf = (key, label, hint) => field(label, bind(q, key, h('input')), hint);
       const own = ['question', 'answer', 'clue', 'model'].some((x) => q[x]);
       return h('div', { class: 'q-row step-row' }, h('div', { class: 'q-num' }, String(i + 1)), h('div', { class: 'q-fields' },
-        field('What TALVO says for this step', bind(st, 'text', h('textarea', { rows: 2 })), i === 0 ? 'One action per step, in plain words, e.g. "Lay the jumper flat on the table."' : null),
+        field('What Foxy says for this step', bind(st, 'text', h('textarea', { rows: 2 })), i === 0 ? 'One action per step, in plain words, e.g. "Lay the jumper flat on the table."' : null),
         field('Picture (optional)', imagePicker(st, 'image_id', urls, false)),
-        ask_steps ? h('details', { class: 'fine-tune', open: own || null }, h('summary', {}, `TALVO\u2019s question: ${k.label || ''} `, h('small', { class: 'muted' }, own ? '(your wording)' : '(blank = TALVO\u2019s own)')),
+        ask_steps ? h('details', { class: 'fine-tune', open: own || null }, h('summary', {}, `Foxy\u2019s question: ${k.label || ''} `, h('small', { class: 'muted' }, own ? '(your wording)' : '(blank = Foxy\u2019s own)')),
           h('div', { class: 'layer-body' },
             h('div', { class: 'grid2' }, qf('question', 'Question', `Blank = "${how === 'learn' ? learnQ(i) : skill === 'memory' && i > 0 ? 'What do you need to do next?' : k.question || ''}"`), qf('answer', 'A good answer', skill === 'memory' || skill === 'understanding' ? 'Blank = the step itself' : 'Used to check the answer and for the model')),
-            h('div', { class: 'grid2' }, qf('clue', 'Clue', 'Specific, without giving the answer'), qf('model', 'Model answer', 'The full answer TALVO says last'))))
+            h('div', { class: 'grid2' }, qf('clue', 'Clue', 'Specific, without giving the answer'), qf('model', 'Model answer', 'The full answer Foxy says last'))))
           : null),
         h('div', { class: 'step-move' },
           h('button', { type: 'button', class: 'btn btn-quiet', 'aria-label': `Move step ${i + 1} up`, disabled: i === 0, onclick: () => { [it.steps[i - 1], it.steps[i]] = [it.steps[i], it.steps[i - 1]]; draw(); } }, '\u2191'),
@@ -874,7 +874,7 @@ function stepsEditor(it, urls, ctx) {
     const { skill = 'understanding', run: how = 'learn' } = ctx();
     const texts = it.steps.map((x) => x.text || '');
     if (texts.filter((x) => x.trim()).length < 2) { toast('Write at least two steps first.'); return; }
-    draftBtn.disabled = true; note.textContent = 'TALVO is drafting the questions\u2026';
+    draftBtn.disabled = true; note.textContent = 'Foxy is drafting the questions\u2026';
     try {
       const r = await api('/adult/steps/draft', { method: 'POST', body: { task: it.title || '', steps: texts, skill, run: how } });
       let n = 0;
@@ -884,12 +884,12 @@ function stepsEditor(it, urls, ctx) {
         for (const key of ['question', 'answer', 'clue', 'model']) if (!q[key] && d[key]) { q[key] = d[key]; n++; }
       });
       draw();
-      note.textContent = n ? `TALVO filled ${n} blank boxes. Check and change them before you save; boxes you had already filled were kept.` : 'Every box already has your wording, so nothing was changed.';
+      note.textContent = n ? `Foxy filled ${n} blank boxes. Check and change them before you save; boxes you had already filled were kept.` : 'Every box already has your wording, so nothing was changed.';
     } catch (e) { note.textContent = ''; throw e; } finally { draftBtn.disabled = false; }
-  }) }, 'Draft questions with TALVO');
+  }) }, 'Draft questions with Foxy');
   draw();
   return [
-    field('Task', bind(it, 'title', h('input')), 'e.g. "Fold a jumper". TALVO says "Today\u2019s task is: Fold a jumper."'),
+    field('Task', bind(it, 'title', h('input')), 'e.g. "Fold a jumper". Foxy says "Today\u2019s task is: Fold a jumper."'),
     h('h4', {}, 'Steps, in order'),
     h('p', { class: 'muted' }, `${name} does each step for real, then presses Done. Up to ${MAX_STEPS} steps.`),
     list,
@@ -993,7 +993,7 @@ function explainEditor(it, urls) {
     h('div', { class: 'q-num' }, String(i + 1)),
     h('div', { class: 'q-fields' },
       field('Part of a clear answer', txt(pt, 'text'), 'e.g. "cut the character out with scissors". Any wording with the same meaning counts.'),
-      h('details', { class: 'fine-tune', open: !!(pt.question || pt.starter || pt.model) || null }, h('summary', {}, 'Fine-tune ', h('small', { class: 'muted' }, '(optional: TALVO\u2019s cues for this part)')),
+      h('details', { class: 'fine-tune', open: !!(pt.question || pt.starter || pt.model) || null }, h('summary', {}, 'Fine-tune ', h('small', { class: 'muted' }, '(optional: Foxy\u2019s cues for this part)')),
         h('div', { class: 'layer-body' },
           h('div', { class: 'grid2' },
             field('Question cue', txt(pt, 'question'), 'e.g. "What do you use to cut it out?"'),
@@ -1005,9 +1005,9 @@ function explainEditor(it, urls) {
     h('div', { class: 'grid2' },
       field('Short title', txt(it, 'title'), 'For the team, e.g. "Paper characters"'),
       field('Picture (optional)', imagePicker(it, 'image_id', urls, false))),
-    field("TALVO's question", txt(it, 'question'), `e.g. "Tell me how you make one of your paper characters." Things ${name} does or enjoys work best.`),
+    field("Foxy's question", txt(it, 'question'), `e.g. "Tell me how you make one of your paper characters." Things ${name} does or enjoys work best.`),
     h('h4', { class: 'q-head' }, 'What a clear answer includes'),
-    h('p', { class: 'muted', style: 'margin:0' }, `If ${name}\u2019s answer is short, TALVO asks about one missing part at a time: first "Can you tell me more?", then your question, then the starter, then the model. Three or four parts works well.`),
+    h('p', { class: 'muted', style: 'margin:0' }, `If ${name}\u2019s answer is short, Foxy asks about one missing part at a time: first "Can you tell me more?", then your question, then the starter, then the model. Three or four parts works well.`),
     list,
     h('button', { class: 'btn', onclick: () => { it.points.push({}); draw(); } }, 'Add a part'),
   ];
@@ -1023,11 +1023,11 @@ function listAge(it) {
 function listStatus(it) {
   const d = listAge(it);
   const name = me.learner.name;
-  if (d == null) return { fresh: false, text: `No list saved yet. TALVO uses general clues and ${name}\u2019s interests.` };
+  if (d == null) return { fresh: false, text: `No list saved yet. Foxy uses general clues and ${name}\u2019s interests.` };
   const when = d === 0 ? 'today' : d === 1 ? 'yesterday' : `${d} days ago`;
   return d <= RECALL_FRESH_DAYS
-    ? { fresh: true, text: `List updated ${when}. TALVO uses it for clues until it is ${RECALL_FRESH_DAYS} days old.` }
-    : { fresh: false, text: `List updated ${when}, so it is out of date. TALVO is using general clues and ${name}\u2019s interests. Update the list and save to use it again.` };
+    ? { fresh: true, text: `List updated ${when}. Foxy uses it for clues until it is ${RECALL_FRESH_DAYS} days old.` }
+    : { fresh: false, text: `List updated ${when}, so it is out of date. Foxy is using general clues and ${name}\u2019s interests. Update the list and save to use it again.` };
 }
 // ------------------------------------------------------------ Memory test: naming the members of a group
 const blankCategory = () => ({ kind: 'name', group: '', target: 3, accepted: [] });
@@ -1039,18 +1039,18 @@ function categoryEditor(it) {
   const draw = () => {
     const add = it.kind === 'add';
     body.replaceChildren(...[
-      field('Group', txt(it, 'group'), 'e.g. "animals", "fruit", "Disney movies". TALVO says it, and uses it for clues.'),
-      add ? field('Words TALVO says, separated by commas', csv(it, 'given'), `e.g. "dog, cat, horse". ${name} adds a different word that fits with these. Two to four words works well.`) : null,
+      field('Group', txt(it, 'group'), 'e.g. "animals", "fruit", "Disney movies". Foxy says it, and uses it for clues.'),
+      add ? field('Words Foxy says, separated by commas', csv(it, 'given'), `e.g. "dog, cat, horse". ${name} adds a different word that fits with these. Two to four words works well.`) : null,
       add ? null : field('How many things to ask for', bind(it, 'target', h('input', { type: 'number', min: 1, max: 8, step: 1 }), (v) => Number(v) || 3), `1 to 8. Three works well. ${name} can say more.`),
-      field('Examples that count, separated by commas', csv(it, 'accepted'), `TALVO also accepts any real member of the group. These examples are used for clues (the first sound, then the word itself) and when the AI checker is off. Leave out the words TALVO says.`)].filter(Boolean));
+      field('Examples that count, separated by commas', csv(it, 'accepted'), `Foxy also accepts any real member of the group. These examples are used for clues (the first sound, then the word itself) and when the AI checker is off. Leave out the words Foxy says.`)].filter(Boolean));
   };
   const kind = h('select', {}, [['name', 'Name things in a group'], ['add', 'Add a word to a list']].map(([v, l]) => h('option', { value: v, selected: it.kind === v }, l)));
   kind.addEventListener('change', () => { it.kind = kind.value; draw(); });
   draw();
-  const main = [field('What does TALVO ask?', kind, it.kind === 'add' ? '' : `"I'll give you the name of a group. Tell me all the things you can think of in it."`), body];
+  const main = [field('What does Foxy ask?', kind, it.kind === 'add' ? '' : `"I'll give you the name of a group. Tell me all the things you can think of in it."`), body];
   const extra = [
-    field('Introduction', bind(it, 'intro', h('textarea', { rows: 2 })), `Leave blank for TALVO\u2019s short introduction (\u201cThis is a memory test\u2026\u201d). It is said before the first group of each kind.`),
-    field("TALVO's question", txt(it, 'prompt'), 'Leave blank to let TALVO ask in the usual way.'),
+    field('Introduction', bind(it, 'intro', h('textarea', { rows: 2 })), `Leave blank for Foxy\u2019s short introduction (\u201cThis is a memory test\u2026\u201d). It is said before the first group of each kind.`),
+    field("Foxy's question", txt(it, 'prompt'), 'Leave blank to let Foxy ask in the usual way.'),
     field('Simpler wording', txt(it, 'simple_prompt'), `Said if ${name} says “I don’t understand”.`),
   ];
   return { main, extra };
@@ -1080,18 +1080,18 @@ function recallEditor(it, urls) {
       field('How many things to remember', target, '1 to 5. Three works well.')),
     h('h4', { class: 'q-head' }, `What ${name} really did`),
     (() => { const st = listStatus(it); return h('p', { class: st.fresh ? 'list-age' : 'list-age stale' }, st.text); })(),
-    h('p', { class: 'muted', style: 'margin:0' }, `TALVO uses these for clues: first the broad clue, then the specific one, then the photo. Anything else ${name} really did counts too, so the list doesn\u2019t need to be complete. Update it after each weekend or outing: TALVO only uses it for ${RECALL_FRESH_DAYS} days.`),
+    h('p', { class: 'muted', style: 'margin:0' }, `Foxy uses these for clues: first the broad clue, then the specific one, then the photo. Anything else ${name} really did counts too, so the list doesn\u2019t need to be complete. Update it after each weekend or outing: Foxy only uses it for ${RECALL_FRESH_DAYS} days.`),
     list,
     h('button', { class: 'btn', onclick: () => { it.memories.push({}); draw(); } }, 'Add something else they did'),
   ];
-  const extra = [field("TALVO's question", txt(it, 'prompt'), 'Leave blank for "Tell me three things you did at the weekend."')];
+  const extra = [field("Foxy's question", txt(it, 'prompt'), 'Leave blank for "Tell me three things you did at the weekend."')];
   return { main, extra };
 }
 
 function storyEditor(it, urls) {
   it.questions = it.questions?.length ? it.questions : blankStory().questions;
   const name = me.learner.name;
-  const story = bind(it, 'story', h('textarea', { rows: 9, placeholder: 'Write the story TALVO will read aloud. 100–200 words works well.' }));
+  const story = bind(it, 'story', h('textarea', { rows: 9, placeholder: 'Write the story Foxy will read aloud. 100–200 words works well.' }));
 
   // "Test this question": type what the learner might say and see whether Buddy would accept it.
   const tester = (q) => {
@@ -1104,8 +1104,8 @@ function storyEditor(it, urls) {
       try {
         const r = await api('/adult/test-answer', { method: 'POST', body: { story: it.story, question: q, answer: said.value } });
         out.className = `test-result ${r.correct ? 'ok' : 'no'}`;
-        out.textContent = r.help ? `TALVO would treat this as asking for help, and give the clue.`
-          : r.correct ? `✔ TALVO would count this as right.` : `✖ TALVO would count this as not right yet.`;
+        out.textContent = r.help ? `Foxy would treat this as asking for help, and give the clue.`
+          : r.correct ? `✔ Foxy would count this as right.` : `✖ Foxy would count this as not right yet.`;
         if (r.checker === 'keyword') out.textContent += ' (Marked by the basic checker, not Claude, so it only matches the accepted answers.)';
       } catch (e) { out.textContent = ''; throw e; } finally { go.disabled = false; }
     });
@@ -1124,13 +1124,13 @@ function storyEditor(it, urls) {
     return h('div', { class: 'q-row' },
       h('div', { class: 'q-num' }, `Q${i + 1}`),
       h('div', { class: 'q-fields' },
-        field('Question', question, isTitle ? 'Leave blank for TALVO’s wording.' : null),
+        field('Question', question, isTitle ? 'Leave blank for Foxy’s wording.' : null),
         h('label', { class: 'switch' }, titleOn, 'Give the story a new name (any sensible name counts)'),
         isTitle
-          ? field('Clue (optional)', txt(q, 'clue'), `e.g. "Who was the story about?" TALVO says this if ${name} asks for help`)
+          ? field('Clue (optional)', txt(q, 'clue'), `e.g. "Who was the story about?" Foxy says this if ${name} asks for help`)
           : h('div', { class: 'grid2' },
             field('Accepted answers', csv(q, 'answers'), 'Comma separated, e.g. crow, bird'),
-            field('Clue (optional)', txt(q, 'clue'), `TALVO says this if ${name} asks for help`)),
+            field('Clue (optional)', txt(q, 'clue'), `Foxy says this if ${name} asks for help`)),
         h('details', { class: 'q-test-wrap' }, h('summary', {}, 'Test this question'), tester(q)),
       ),
       h('button', { class: 'btn btn-quiet', onclick: () => { it.questions.splice(i, 1); drawQs(); } }, 'Remove'));
@@ -1160,9 +1160,9 @@ function storyEditor(it, urls) {
   story.addEventListener('input', () => { if (player) stop(); });
 
   return [
-    h('div', { class: 'grid2' }, field('Story title', txt(it, 'title'), 'TALVO says "This story is called…" first'), field('Picture (optional)', imagePicker(it, 'image_id', urls, false))),
+    h('div', { class: 'grid2' }, field('Story title', txt(it, 'title'), 'Foxy says "This story is called…" first'), field('Picture (optional)', imagePicker(it, 'image_id', urls, false))),
     field('The story', story), h('div', { class: 'story-tools' }, words, me.voice ? listen : null),
-    h('h4', { class: 'q-head' }, 'Questions TALVO asks afterwards'),
+    h('h4', { class: 'q-head' }, 'Questions Foxy asks afterwards'),
     h('p', { class: 'muted', style: 'margin:0' }, `Five works well. ${name}’s answer counts as right if it matches the meaning of one of the accepted answers. Use “Test this question” to try an answer.`),
     qBox,
     h('div', { class: 'row-actions' },
@@ -1264,8 +1264,8 @@ async function renderReview(root) {
     cards,
     h('details', { class: 'codes-key' }, h('summary', {}, 'How practice is counted'),
       h('p', {}, `Each item ${me.learner.name} finishes is one opportunity. It meets the target when every part is given with the support the plan allows for that goal (goals 1 and 2: no prompt; goals 3 and 4: one cue at most). Items stopped early, and practice not linked to a plan goal, are shown but not counted.`),
-      h('ul', {}, Object.entries(goals.codes).map(([c, l]) => h('li', {}, codeBadge(c), c === 'M' ? ' — TALVO gave one cue (reminder, question or sentence starter)' : c === 'P' ? ' — TALVO gave two or more cues' : c === 'F' ? ' — TALVO modelled the answer' : ` — ${me.learner.name} did it without a cue`))),
-      h('p', { class: 'muted' }, 'These are practice counts with TALVO, using the team’s codes. The team sets baselines and decides what counts; use Observations for school, work and home.')),
+      h('ul', {}, Object.entries(goals.codes).map(([c, l]) => h('li', {}, codeBadge(c), c === 'M' ? ' — Foxy gave one cue (reminder, question or sentence starter)' : c === 'P' ? ' — Foxy gave two or more cues' : c === 'F' ? ' — Foxy modelled the answer' : ` — ${me.learner.name} did it without a cue`))),
+      h('p', { class: 'muted' }, 'These are practice counts with Foxy, using the team’s codes. The team sets baselines and decides what counts; use Observations for school, work and home.')),
     h('div', { class: 'review-filters' }, goalSel, periodSel, actSel),
     listWrap,
   );
@@ -1288,7 +1288,7 @@ function recordCard(r, lookAt, root) {
       box('Asked for help', r.help_requests, 'own')),
     h('details', { class: 'rc-more' },
       h('summary', {}, 'Details'),
-      box('TALVO’s support', r.support_provided, 'support'),
+      box('Foxy’s support', r.support_provided, 'support'),
       r.review_note ? h('p', {}, h('strong', {}, 'Note: '), r.review_note) : null,
       r.sam_turns != null ? h('p', {}, h('strong', {}, `${me.learner.name}’s relevant turns: `), String(r.sam_turns)) : null,
       h('p', {}, h('strong', {}, 'Visual aids: '), (r.visual_aids || []).join(', ') || 'none'),
@@ -1303,7 +1303,7 @@ async function showTranscript(root, sessionId) {
     h('div', { class: 'row-actions', style: 'margin-top:14px' }, h('button', { class: 'btn', onclick: renderShell }, 'Back to records')),
     h('h2', {}, 'Practice transcript'),
     h('ul', { class: 'list panel' }, events.map((e) => h('li', {},
-      h('div', {}, h('strong', {}, e.who === 'buddy' ? 'TALVO' : e.who === 'sam' ? me.learner.name : 'System'), ` ${e.kind === 'button' ? `pressed ${e.text.replace('_', ' ')}` : e.text}`,
+      h('div', {}, h('strong', {}, e.who === 'buddy' ? 'Foxy' : e.who === 'sam' ? me.learner.name : 'System'), ` ${e.kind === 'button' ? `pressed ${e.text.replace('_', ' ')}` : e.text}`,
         e.meta?.level ? h('span', { class: 'tag supported', style: 'margin-left:6px' }, e.meta.level) : null,
         e.meta?.uncertain ? h('span', { class: 'tag', style: 'margin-left:6px' }, 'unclear audio') : null),
       e.has_audio ? h('button', { class: 'btn btn-quiet', onclick: run(async () => {

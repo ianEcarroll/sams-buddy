@@ -71,7 +71,7 @@ export async function requireDevice(req, res, next) {
   const d = await one('update devices set last_seen_at=now() where id=$1 and revoked_at is null returning id, learner_id', [p.sub]);
   if (!d) return res.status(401).json({ error: 'This device was disconnected. Ask your support team for a new code.' });
   const l = await one('select disabled_at from learners where id=$1', [d.learner_id]);
-  if (l?.disabled_at) return res.status(403).json({ error: 'TALVO is paused for now. Ask your support team.', paused: true });
+  if (l?.disabled_at) return res.status(403).json({ error: 'Foxy is paused for now. Ask your support team.', paused: true });
   req.device = d;
   req.learnerId = d.learner_id;
   next();

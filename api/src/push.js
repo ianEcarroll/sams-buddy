@@ -45,5 +45,5 @@ export function reminderDue({ now, timeZone, reminderTime, lastReminderOn, lastP
 }
 
 export function reminderMessage(name) {
-  return { title: 'TALVO', body: `Hi ${name}, TALVO is ready when you are.`, url: '/' };
+  return { title: 'TALVO', body: `Hi ${name}, Foxy is ready when you are.`, url: '/' };
 }

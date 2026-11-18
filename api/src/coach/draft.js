@@ -3,8 +3,8 @@
 // with a learner until the activity is saved.
 import { STEP_SKILLS } from './modes.js';
 
-const MOMENT = { before: 'before the learner does the step (TALVO has just said it)', after: 'after the learner has done the step' };
-const MEMORY_MOMENT = 'before TALVO says the step, so the learner has to remember it';
+const MOMENT = { before: 'before the learner does the step (Foxy has just said it)', after: 'after the learner has done the step' };
+const MEMORY_MOMENT = 'before Foxy says the step, so the learner has to remember it';
 
 export async function draftStepQuestions({ apiKey, model, workspaceId, task, steps, skill, run = 'learn', learner = {}, fetchImpl = fetch }) {
   const k = STEP_SKILLS[skill];
@@ -22,10 +22,10 @@ export async function draftStepQuestions({ apiKey, model, workspaceId, task, ste
           items: {
             type: 'object',
             properties: {
-              question: { type: 'string', description: 'The question TALVO asks. One short, literal sentence.' },
+              question: { type: 'string', description: 'The question Foxy asks. One short, literal sentence.' },
               answer: { type: 'string', description: 'One good answer, a few words.' },
               clue: { type: 'string', description: 'A specific clue that helps without giving the whole answer.' },
-              model: { type: 'string', description: 'A full model answer, as one sentence TALVO can say.' },
+              model: { type: 'string', description: 'A full model answer, as one sentence Foxy can say.' },
             },
             required: ['question', 'answer', 'clue', 'model'],
           },
@@ -39,19 +39,19 @@ export async function draftStepQuestions({ apiKey, model, workspaceId, task, ste
     `Task: ${task || 'an everyday task'}`,
     `Steps, in order:\n${list.map((s, i) => `${i + 1}. ${s}`).join('\n')}`,
     `Skill being practised: ${k.label}: ${k.goal}.`,
-    run === 'learn' ? 'TALVO has read out all the steps first; the learner is not doing the task, and answers each question from memory. TALVO says "Step N." before each question, so do not start the question with the step number.' : `TALVO asks each question ${skill === 'memory' ? MEMORY_MOMENT : MOMENT[k.when]}.`,
+    run === 'learn' ? 'Foxy has read out all the steps first; the learner is not doing the task, and answers each question from memory. Foxy says "Step N." before each question, so do not start the question with the step number.' : `Foxy asks each question ${skill === 'memory' ? MEMORY_MOMENT : MOMENT[k.when]}.`,
     `Write exactly ${list.length} entries, one per step, in order.`,
   ].join('\n\n');
-  const system = `You write coaching questions for TALVO, a speech and language practice app for ${who} who may be autistic or have a language disorder. They are doing a real task with their hands, one step at a time. Use plain, literal British English: short sentences, no idioms, no sarcasm, nothing babyish. Each question is about that one step only and has one clear, sensible answer. For Memory, ask what the step is (e.g. "What do you need to do next?" or, when learning the steps, "What do you do at this step?"), never repeat the step itself in the question. For Understanding, ask about the key action or thing in the step TALVO just said. For Expressive language, ask them to tell you what they did. For Reasoning, ask why the step matters, or what to do if something goes wrong. For Checking my own work, ask how they know the step is finished. Clues must not give the whole answer. Always answer by calling the questions tool once.`;
+  const system = `You write coaching questions for Foxy, a speech and language practice app for ${who} who may be autistic or have a language disorder. They are doing a real task with their hands, one step at a time. Use plain, literal British English: short sentences, no idioms, no sarcasm, nothing babyish. Each question is about that one step only and has one clear, sensible answer. For Memory, ask what the step is (e.g. "What do you need to do next?" or, when learning the steps, "What do you do at this step?"), never repeat the step itself in the question. For Understanding, ask about the key action or thing in the step TALVO just said. For Expressive language, ask them to tell you what they did. For Reasoning, ask why the step matters, or what to do if something goes wrong. For Checking my own work, ask how they know the step is finished. Clues must not give the whole answer. Always answer by calling the questions tool once.`;
   const res = await fetchImpl('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: { 'content-type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', ...(workspaceId ? { 'anthropic-workspace-id': workspaceId } : {}) },
     body: JSON.stringify({ model, max_tokens: 2500, system, tools: [tool], tool_choice: { type: 'auto' }, messages: [{ role: 'user', content: user }] }),
   });
-  if (!res.ok) throw new Error(`TALVO could not draft the questions right now (${res.status}).`);
+  if (!res.ok) throw new Error(`Foxy could not draft the questions right now (${res.status}).`);
   const data = await res.json();
   const out = data.content?.find((b) => b.type === 'tool_use')?.input?.steps;
-  if (!Array.isArray(out)) throw new Error('TALVO could not draft the questions right now.');
+  if (!Array.isArray(out)) throw new Error('Foxy could not draft the questions right now.');
   const clean = (v) => String(v || '').replace(/\s+/g, ' ').trim().slice(0, 300);
   return list.map((_, i) => ({ question: clean(out[i]?.question), answer: clean(out[i]?.answer), clue: clean(out[i]?.clue), model: clean(out[i]?.model) }));
 }

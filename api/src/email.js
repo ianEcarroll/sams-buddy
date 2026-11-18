@@ -53,7 +53,7 @@ export function practiceEmail({ learnerName, adultName, activityTitle, records, 
   const text = [
     `Hi ${adultName},`,
     '',
-    `${learnerName} just finished "${activityTitle}" with TALVO.${tally ? ` ${met} of ${counted.length} met the target.` : ''}`,
+    `${learnerName} just finished "${activityTitle}" with Foxy.${tally ? ` ${met} of ${counted.length} met the target.` : ''}`,
     stopped,
     '',
     ...items.flatMap((i) => [
@@ -70,7 +70,7 @@ export function practiceEmail({ learnerName, adultName, activityTitle, records, 
 
   const html = `<div style="font-family:Lexend,Segoe UI,Arial,sans-serif;font-size:16px;line-height:1.5;color:#14305a;max-width:560px">
 <p>Hi ${esc(adultName)},</p>
-<p><strong>${esc(learnerName)}</strong> just finished <strong>${esc(activityTitle)}</strong> with TALVO.${tally ? ` ${met} of ${counted.length} met the target.` : ''}</p>
+<p><strong>${esc(learnerName)}</strong> just finished <strong>${esc(activityTitle)}</strong> with Foxy.${tally ? ` ${met} of ${counted.length} met the target.` : ''}</p>
 ${stopped ? `<p>${esc(stopped)}</p>` : ''}
 ${items.map((i) => `<div style="border:1px solid #d3deea;border-radius:12px;padding:12px 16px;margin:12px 0">
 <div><strong>${esc(i.label)}</strong> · ${esc(i.result)}</div>

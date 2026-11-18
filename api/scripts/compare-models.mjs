@@ -58,7 +58,7 @@ const explain = (text, expectParts, why) => ({
 const chatItem = { topic: 'the gym', opener: 'Do you go to the gym?' };
 const chat = (text, relevant, why) => ({
   group: 'Talk (reply quality: read these)', label: `"${text}"`, expect: relevant ? 'on topic' : 'off topic', why,
-  args: { mode: 'conversation', item: chatItem, elements: ['turn'], text, history: [{ who: 'TALVO', text: chatItem.opener }], inviteQuestion: true },
+  args: { mode: 'conversation', item: chatItem, elements: ['turn'], text, history: [{ who: 'Foxy', text: chatItem.opener }], inviteQuestion: true },
   read: (j) => (j.relevant ? 'on topic' : 'off topic'),
   reply: true,
 });
@@ -144,7 +144,7 @@ CASES.forEach((c, i) => {
 });
 const chats = CASES.map((c, i) => [c, i]).filter(([c]) => c.reply);
 if (chats.length) {
-  out.push('', '## What TALVO would say back in Talk', '');
+  out.push('', '## What Foxy would say back in Talk', '');
   for (const [c, i] of chats) {
     out.push(`**Sam: ${c.label}**`, '', `- ${A}: ${runs[A].results[i].reply || '(no reply)'}`, `- ${B}: ${runs[B].results[i].reply || '(no reply)'}`, '');
   }

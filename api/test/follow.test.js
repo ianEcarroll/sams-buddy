@@ -65,7 +65,7 @@ test('remembering: cannot say it back, gets it right after hearing it again', as
   assert.match(state.completed[0].review_note, /needed to hear it again \(remembering\)/);
 });
 
-test('understanding: still wrong after hearing it again, so it is shown on screen; then TALVO shows it', async () => {
+test('understanding: still wrong after hearing it again, so it is shown on screen; then Foxy shows it', async () => {
   let { state } = createSession({ activity: one(touchMove) });
   act(state, { type: 'token', token: 'yellow-star' });
   await say(state, 'um');
