@@ -18,7 +18,7 @@ export async function transcribe(buffer, mime = 'audio/webm') {
   form.append('language_code', 'en');
   form.append('tag_audio_events', 'false');
   // Verbatim on purpose: we record Sam's actual words, including repetitions.
-  const res = await fetch('https://api.elevenlabs.io/v1/speech-to-text', { method: 'POST', headers: { 'xi-api-key': KEY() }, body: form });
+  const res = await fetch('https://api.elevenlabs.io/v1/speech-to-text', { method: 'POST', headers: { 'xi-api-key': KEY() }, body: form, signal: AbortSignal.timeout(30000) });
   if (!res.ok) throw new Error(`Speech-to-text failed (${res.status}): ${(await res.text()).slice(0, 200)}`);
   const data = await res.json();
   const words = (data.words || []).filter((w) => w.type === 'word' || (!w.type && w.text?.trim()));
@@ -57,6 +57,7 @@ export async function speak(text, { voiceId, speed = 1, fetchImpl = fetch } = {}
   }
   const res = await fetchImpl(`https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(v)}?output_format=mp3_44100_128`, {
     method: 'POST',
+    signal: AbortSignal.timeout(30000),
     headers: { 'xi-api-key': KEY(), 'content-type': 'application/json', accept: 'audio/mpeg' },
     body: JSON.stringify({
       text,

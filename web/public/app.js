@@ -87,12 +87,21 @@ function toast(msg) {
   setTimeout(() => t.remove(), 4000);
 }
 
-async function api(path, { method = 'GET', body, form } = {}) {
-  const res = await fetch(`/api/device${path}`, {
-    method,
-    headers: { ...(token ? { authorization: `Bearer ${token}` } : {}), ...(body ? { 'content-type': 'application/json' } : {}) },
-    body: form || (body ? JSON.stringify(body) : undefined),
-  });
+// A request that gets no answer must not leave the learner stuck: after `timeout` ms it stops and says so.
+async function api(path, { method = 'GET', body, form, timeout = 60000 } = {}) {
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), timeout);
+  let res;
+  try {
+    res = await fetch(`/api/device${path}`, {
+      signal: ctl.signal,
+      method,
+      headers: { ...(token ? { authorization: `Bearer ${token}` } : {}), ...(body ? { 'content-type': 'application/json' } : {}) },
+      body: form || (body ? JSON.stringify(body) : undefined),
+    });
+  } catch (e) {
+    throw new Error(e.name === 'AbortError' ? 'That took too long. Please try again.' : 'No connection. Check the internet and try again.');
+  } finally { clearTimeout(timer); }
   const data = res.headers.get('content-type')?.includes('json') ? await res.json() : null;
   if (res.status === 401) { localStorage.removeItem(TOKEN_KEY); token = null; renderPair(data?.error); throw new Error(data?.error); }
   if (!res.ok) throw new Error(data?.error || 'Something went wrong. Try again.');
@@ -491,21 +500,27 @@ async function playLines(lines) {
     drawPractice();
     if (l.audio) {
       try {
-        const r = await fetch(l.audio, { headers: { authorization: `Bearer ${token}` } });
-        if (!r.ok) throw new Error();
-        const url = URL.createObjectURL(await r.blob());
+        // If Foxy's voice does not arrive in 25 s, carry on with the words alone instead of freezing.
+        const actl = new AbortController();
+        const atimer = setTimeout(() => actl.abort(), 25000);
+        let url;
+        try {
+          const r = await fetch(l.audio, { headers: { authorization: `Bearer ${token}` }, signal: actl.signal });
+          if (!r.ok) throw new Error();
+          url = URL.createObjectURL(await r.blob());
+        } finally { clearTimeout(atimer); }
         if (gen !== playGen) return;
         $voice.src = url;
         await holdWhilePaused(gen);
         if (gen !== playGen) return;
         await $voice.play();
-        await new Promise((res) => { $voice.onended = res; $voice.onpause = res; });
+        await playedOrStalled(l);
         // Paused part-way through the line: carry on from the same spot when the learner is ready.
         while (P && P.paused && gen === playGen && !$voice.ended) {
           await holdWhilePaused(gen);
           if (gen !== playGen || $voice.ended) break;
           await $voice.play();
-          await new Promise((res) => { $voice.onended = res; $voice.onpause = res; });
+          await playedOrStalled(l);
         }
         URL.revokeObjectURL(url);
       } catch { await wait(Math.min(4000, 400 * l.text.split(' ').length), gen); }
@@ -522,6 +537,16 @@ async function playLines(lines) {
     }
   }
   done();
+}
+// Waits for the line to finish playing. If the phone never reports the end (a call, a lock screen, a dropped
+// connection part-way through), give up after a generous time so the exercise carries on instead of freezing.
+function playedOrStalled(l) {
+  const limit = 15000 + 1500 * l.text.split(' ').length;
+  return new Promise((res) => {
+    const t = setTimeout(res, limit);
+    const end = () => { clearTimeout(t); res(); };
+    $voice.onended = end; $voice.onpause = end; $voice.onerror = end;
+  });
 }
 async function holdWhilePaused(gen) {
   while (P && P.paused && gen === playGen) await new Promise((r) => setTimeout(r, 200));
