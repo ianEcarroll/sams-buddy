@@ -180,7 +180,6 @@ const modesOf = (mod) => MODE_INFO[mod].modes || [mod];
 
 // "Welcome back" once this device has been used before; a plain hello the very first time.
 const SEEN_KEY = 'buddy.seen';
-const WELCOME_KEY = 'talvo.welcome-seen';
 function greeting() {
   let seen = false;
   try { seen = localStorage.getItem(SEEN_KEY) === '1'; localStorage.setItem(SEEN_KEY, '1'); } catch { /* storage unavailable: just say hi */ }
@@ -241,7 +240,7 @@ function renderSettings() {
       if (!confirm('Delete all your practice notes? This cannot be undone.')) return;
       await api('/records', { method: 'DELETE' }); toast('Your practice notes are deleted.');
     } }, 'Delete my practice notes'),
-    h('button', { class: 'btn', onclick: () => { localStorage.removeItem(WELCOME_KEY); location.reload(); } }, 'Watch Foxy’s welcome'),
+    h('button', { class: 'btn', onclick: () => { location.reload(); } }, 'Watch Foxy’s welcome'),
     h('p', { class: 'muted', style: 'font-size:.95rem' }, h('a', { href: '/about/' }, 'About TALVO'), ' \u00B7 why we made it, and our film'),
     h('p', { class: 'muted', style: 'font-size:.85rem' }, 'Pictures: Mulberry Symbols \u00A9 Steve Lee, CC BY-SA 4.0 (mulberrysymbols.org)'),
   );
@@ -693,13 +692,12 @@ async function boot() {
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' }).catch(() => {});
 // An installed iPad app is never reloaded by itself: pick up new versions when it comes back to the front.
 watchForUpdates({ files: ['/app.js', '/styles.css', '/index.html'], busy: () => !!P });
-// Opening the app: the fox shows while the app loads, then the welcome video starts by itself every time, with a
+// Opening the app: show the welcome overlay only when the video is playing, with a
 // Skip button. It starts with sound if the browser allows it. If not (iPads usually won't), it starts silent, which
 // is always allowed, and a big "Tap for sound" button restarts it from the beginning with sound.
 const launch = document.getElementById('launch');
 function hideLaunch() {
   if (!launch?.isConnected) return;
-  localStorage.setItem(WELCOME_KEY, '1');
   launch.style.opacity = '0';
   const v = document.getElementById('launch-video');
   try { v?.pause(); } catch { /* nothing to stop */ }
@@ -710,7 +708,8 @@ async function showWelcomeVideo() {
   const skip = document.getElementById('launch-skip');
   const sound = document.getElementById('launch-sound');
   // Reduce Motion: no video on its own.
-  if (!launch?.isConnected || !v || localStorage.getItem(WELCOME_KEY) === '1' || matchMedia('(prefers-reduced-motion: reduce)').matches) return hideLaunch();
+  if (!launch?.isConnected || !v || matchMedia('(prefers-reduced-motion: reduce)').matches) return hideLaunch();
+  v.addEventListener('playing', () => { if (launch.isConnected) launch.hidden = false; });
   v.addEventListener('ended', hideLaunch);
   v.addEventListener('error', hideLaunch);
   skip.onclick = hideLaunch;
@@ -722,6 +721,6 @@ async function showWelcomeVideo() {
     sound.onclick = () => { v.muted = false; v.currentTime = 0; sound.hidden = true; v.play().catch(hideLaunch); };
   } catch { hideLaunch(); }
 }
-// The video starts straight away (its first frame is already on screen) while the app loads behind it.
+// Load the app while the video prepares; no static launch image is displayed.
 showWelcomeVideo();
 boot().catch(() => {});
