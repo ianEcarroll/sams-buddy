@@ -656,14 +656,14 @@ export const STEP_SKILLS = {
     },
   },
   independence: {
-    label: 'Checking my own work',
-    goal: 'Check their own work and know when a step is finished',
+    label: 'Problem solving',
+    goal: 'Work out what to do when something goes wrong or does not look right',
     when: 'after',
-    question: () => 'How do you know that step is finished?',
-    clues: () => ['Look at what you have done.', 'What should it look like now?', 'Look at the screen. Does yours look like this?', 'I know it is finished because it looks like the picture.'],
+    question: () => 'What could you do if that step went wrong?',
+    clues: () => ['Think about what could go wrong.', 'You could try\u2026', 'Look at the screen. What could you change?', 'You could try it again, or ask an adult for help.'],
     learn: {
-      question: (s, i) => `How would you know step ${i + 1} is finished?`,
-      clues: () => ['Think about what it should look like.', 'What should it look like when it\u2019s done?', 'Look at the picture. What should it look like?', 'I would know it is finished because it looks like the picture.'],
+      question: (s, i) => `What could you do if step ${i + 1} went wrong?`,
+      clues: () => ['Think about what could go wrong at that step.', 'You could try\u2026', 'Look at the picture. What could you change?', 'You could try it again, or ask an adult for help.'],
     },
   },
 };
@@ -728,22 +728,22 @@ export const STARTER_STEPS = [
         st('Put the jumper on the table with the front facing up. Smooth out any wrinkles.', 'jumper', {
           understanding: { question: 'Where should you put the jumper?', answer: 'on the table, front facing up' },
           reasoning: { question: 'Why should the jumper be flat before folding it?', answer: 'so it folds neatly without creases' },
-          independence: { question: 'How will you know when you are ready for the next step?', answer: 'it is flat with no wrinkles' },
+          independence: { question: 'What could you do if the jumper has wrinkles?', answer: 'smooth it flat with my hands' },
         }),
         st('Fold one sleeve across the middle. Then fold the other sleeve across.', 'fold-clothes-to', {
           understanding: { question: 'Which part of the jumper do you fold?', answer: 'the sleeves' },
           reasoning: { question: 'Why do we fold the sleeves towards the middle?', answer: 'so they do not hang out and the jumper is neat' },
-          independence: { question: 'Are both sleeves folded? How can you tell?', answer: 'both sleeves are across the middle' },
+          independence: { question: 'What could you do if a sleeve slips out of place?', answer: 'fold it across the middle again' },
         }),
         st('Take the bottom of the jumper and fold it up towards the neck.', 'fold-clothes-to', {
           understanding: { question: 'Which part of the jumper do you lift?', answer: 'the bottom' },
           reasoning: { question: 'Why is it helpful to make the jumper smaller?', answer: 'it takes less space and fits in the basket' },
-          independence: { question: 'Look at your jumper. Does it look neatly folded?', answer: 'the edges line up' },
+          independence: { question: 'What could you do if the jumper does not look neat?', answer: 'fold it again so the edges line up' },
         }),
         st('Straighten the edges and smooth the jumper so it looks neat.', 'tidy-up-to', {
           understanding: { question: 'What do you need to straighten?', answer: 'the edges' },
           reasoning: { question: 'Why is it important to fold clothes neatly?', answer: 'so they do not get creased and are easy to find' },
-          independence: { question: 'How can you check whether your jumper is tidy?', answer: 'the edges are straight and it is smooth' },
+          independence: { question: 'What could you do if the folded jumper is crooked?', answer: 'straighten the edges and smooth it' },
         }),
         st('Find the size label inside the jumper. Tell me what size it says.', 'jumper', {
           understanding: { question: 'Where can you find the size label?', answer: 'inside the jumper, near the neck' },
@@ -753,12 +753,12 @@ export const STARTER_STEPS = [
         st('Look at the labels on the baskets. Find the one that matches the size of your jumper.', 'basket', {
           understanding: { question: 'Where does the jumper go?', answer: 'in the basket with the same size', broad: "Think about the jumper's size.", clue: 'Look for the basket with the same size label.', model: 'The jumper is size M, so it goes in the M basket.' },
           reasoning: { question: 'Why should the jumper go in the matching basket?', answer: 'so it is easy to find the right size' },
-          independence: { question: 'How do you know you have found the right basket?', answer: 'the basket label matches the jumper label' },
+          independence: { question: 'What could you do if no basket matches the jumper?', answer: 'ask an adult' },
         }),
         st('Put the folded jumper neatly in the basket with the matching size.', 'basket-2', {
           understanding: { question: 'Where should you put the jumper?', answer: 'in the basket with the matching size' },
           reasoning: { question: 'Why is it important to put the jumper in the right place?', answer: 'so you can find it next time' },
-          independence: { question: 'How could you do this task next time without help?', answer: 'remember the steps or look at the pictures' },
+          independence: { question: 'What could you do if you forget a step next time?', answer: 'look at the pictures or ask for help' },
         }),
       ],
     }],

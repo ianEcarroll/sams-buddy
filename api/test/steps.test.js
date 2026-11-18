@@ -188,6 +188,8 @@ test('basic checker for step answers', () => {
   assert.ok(j('reasoning', 'because it looks neater'));
   assert.ok(!j('reasoning', 'yes'));
   assert.ok(j('independence', 'it looks like the picture'));
+  assert.ok(j('independence', 'I would try it again'));
+  assert.ok(!j('independence', 'yes'));
 });
 
 test('the five starter tasks open with the walk-through and use symbols', () => {
