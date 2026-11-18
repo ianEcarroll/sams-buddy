@@ -18,7 +18,6 @@ const OLD = new Set([
   'How can you check whether your jumper is tidy?',
   'How do you know you have found the right basket?',
   'How could you do this task next time without help?',
-  'What could you do if you cannot find the label?',
 ]);
 const starter = STARTER_STEPS.find((a) => a.title === 'Fold a jumper').items[0];
 
