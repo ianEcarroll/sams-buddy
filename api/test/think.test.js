@@ -39,7 +39,7 @@ test('asks "why?" when no reason is given', async () => {
   assert.equal(turn.lines.at(-1).text, THINK_FOLLOW_UPS.reason);
 });
 
-test('"I\'d ask for help" is an answer in Think Buddy, not a help request', async () => {
+test('"I\'d ask for help" is an answer in Think, not a help request', async () => {
   assert.equal(helpFor('think', detectHelp('I need help so I would ask my coach')), 'none');
   assert.equal(helpFor('think', detectHelp("I don't understand")), 'dont_understand');
   assert.equal(helpFor('task', detectHelp('I need help')), 'need_help');
@@ -71,7 +71,7 @@ test('an unsafe idea is not accepted and is flagged for the team', async () => {
   assert.equal(rec.success, false);
 });
 
-test('Think Buddy is linked to plan goal 1 and has three starter situations', () => {
+test('Think is linked to plan goal 1 and has three starter situations', () => {
   assert.ok(PLAN_GOALS.unexpected.modes.includes('think'));
   assert.equal(MODES.think.label, 'Think');
   assert.equal(STARTER_SCENARIOS.items.length, 3);

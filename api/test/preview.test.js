@@ -6,7 +6,7 @@ import { MODES, STARTER_SCENARIOS } from '../src/coach/modes.js';
 
 const texts = (p) => p.lines.map((l) => l.text);
 
-test('Think Buddy: the situation and the question, no movie phrase', () => {
+test('Think: the situation and the question, no movie phrase', () => {
   const p = previewLines({ mode: 'think', item: STARTER_SCENARIOS.items[0] });
   assert.ok(texts(p).includes("You arrive at the gym for your session, but your trainer isn't there."));
   assert.ok(!texts(p).includes('Make a movie in your mind.'));
@@ -14,17 +14,17 @@ test('Think Buddy: the situation and the question, no movie phrase', () => {
   assert.ok(p.simple);
 });
 
-test('Chat Buddy: the opener, or "Let\'s talk about…" when there is none', () => {
+test('Talk: the opener, or "Let\'s talk about…" when there is none', () => {
   assert.deepEqual(texts(previewLines({ mode: 'conversation', item: { topic: 'Tinker Bell', opener: 'I watched Tinker Bell at the weekend.' } })), ['I watched Tinker Bell at the weekend.']);
   assert.deepEqual(texts(previewLines({ mode: 'conversation', item: { topic: 'football' } })), ["Let's talk about football."]);
 });
 
-test('Listen Buddy: the instruction in order, with First / Then / Finally', () => {
+test('Listen: the instruction in order, with First / Then / Finally', () => {
   const p = previewLines({ mode: 'task', item: { steps: ['get the cloth', 'wipe the table'] } });
   assert.ok(texts(p).some((t) => /^First, get the cloth\. .*wipe the table/.test(t)));
 });
 
-test('Memory Buddy: asks for the number of things the team chose', () => {
+test('Memory: asks for the number of things the team chose', () => {
   const p = previewLines({ mode: 'recall', item: { when: 'at the weekend', target: 2, memories: [] } });
   assert.match(texts(p).at(-1), /two things you did at the weekend/i);
 });

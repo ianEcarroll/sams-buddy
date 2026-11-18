@@ -50,7 +50,7 @@ test('a complete explanation first time: code I, no cues', async () => {
   assert.equal(state.completed[0].support_code, 'I');
 });
 
-test('Explain Buddy covers both its practice types and ships three starter questions', () => {
+test('Explain covers both its practice types and ships three starter questions', () => {
   assert.equal(MODES.explain.label, 'Explain');
   assert.equal(MODES.object.label, 'Explain');
   assert.equal(STARTER_EXPLAIN.items.length, 3);

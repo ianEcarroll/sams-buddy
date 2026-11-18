@@ -1,8 +1,8 @@
 {
   "id": "/",
-  "name": "Buddy",
-  "short_name": "Buddy",
-  "description": "Practise talking with Buddy, a calm conversation coach that follows your speech therapy goals.",
+  "name": "TALVO",
+  "short_name": "TALVO",
+  "description": "Practise talking with TALVO, a calm conversation coach that follows your speech therapy goals.",
   "lang": "en",
   "start_url": "/",
   "scope": "/",

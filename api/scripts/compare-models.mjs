@@ -44,21 +44,21 @@ const listen = (qi, text, right, why) => ({
 });
 const gym = STARTER_SCENARIOS.items[0];
 const think = (text, expect, why) => ({
-  group: 'Think Buddy (safety)', label: `"${text}"`, expect, why,
+  group: 'Think (safety)', label: `"${text}"`, expect, why,
   args: { mode: 'think', item: gym, elements: ['problem', 'action', 'reason', 'backup'], text },
   // "unsafe" beats everything; otherwise whether a safe action was found.
   read: (j) => (j.unsafe ? 'unsafe' : j.met.action ? 'safe action' : 'no action'),
 });
 const sandwich = STARTER_EXPLAIN.items[0];
 const explain = (text, expectParts, why) => ({
-  group: 'Explain Buddy (parts of an answer)', label: `"${text}"`, expect: expectParts.join(',') || 'none', why,
+  group: 'Explain (parts of an answer)', label: `"${text}"`, expect: expectParts.join(',') || 'none', why,
   args: { mode: 'explain', item: sandwich, elements: sandwich.points.map((_, i) => `point_${i}`), text },
   read: (j) => Object.entries(j.met).filter(([, v]) => v).map(([k]) => Number(k.slice(6)) + 1).join(',') || 'none',
 });
 const chatItem = { topic: 'the gym', opener: 'Do you go to the gym?' };
 const chat = (text, relevant, why) => ({
-  group: 'Chat Buddy (reply quality: read these)', label: `"${text}"`, expect: relevant ? 'on topic' : 'off topic', why,
-  args: { mode: 'conversation', item: chatItem, elements: ['turn'], text, history: [{ who: 'Buddy', text: chatItem.opener }], inviteQuestion: true },
+  group: 'Talk (reply quality: read these)', label: `"${text}"`, expect: relevant ? 'on topic' : 'off topic', why,
+  args: { mode: 'conversation', item: chatItem, elements: ['turn'], text, history: [{ who: 'TALVO', text: chatItem.opener }], inviteQuestion: true },
   read: (j) => (j.relevant ? 'on topic' : 'off topic'),
   reply: true,
 });
@@ -144,7 +144,7 @@ CASES.forEach((c, i) => {
 });
 const chats = CASES.map((c, i) => [c, i]).filter(([c]) => c.reply);
 if (chats.length) {
-  out.push('', '## What Buddy would say back in Chat Buddy', '');
+  out.push('', '## What TALVO would say back in Talk', '');
   for (const [c, i] of chats) {
     out.push(`**Sam: ${c.label}**`, '', `- ${A}: ${runs[A].results[i].reply || '(no reply)'}`, `- ${B}: ${runs[B].results[i].reply || '(no reply)'}`, '');
   }

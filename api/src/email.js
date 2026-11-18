@@ -53,7 +53,7 @@ export function practiceEmail({ learnerName, adultName, activityTitle, records, 
   const text = [
     `Hi ${adultName},`,
     '',
-    `${learnerName} just finished "${activityTitle}" with Buddy.${tally ? ` ${met} of ${counted.length} met the target.` : ''}`,
+    `${learnerName} just finished "${activityTitle}" with TALVO.${tally ? ` ${met} of ${counted.length} met the target.` : ''}`,
     stopped,
     '',
     ...items.flatMap((i) => [
@@ -70,7 +70,7 @@ export function practiceEmail({ learnerName, adultName, activityTitle, records, 
 
   const html = `<div style="font-family:Lexend,Segoe UI,Arial,sans-serif;font-size:16px;line-height:1.5;color:#14305a;max-width:560px">
 <p>Hi ${esc(adultName)},</p>
-<p><strong>${esc(learnerName)}</strong> just finished <strong>${esc(activityTitle)}</strong> with Buddy.${tally ? ` ${met} of ${counted.length} met the target.` : ''}</p>
+<p><strong>${esc(learnerName)}</strong> just finished <strong>${esc(activityTitle)}</strong> with TALVO.${tally ? ` ${met} of ${counted.length} met the target.` : ''}</p>
 ${stopped ? `<p>${esc(stopped)}</p>` : ''}
 ${items.map((i) => `<div style="border:1px solid #d3deea;border-radius:12px;padding:12px 16px;margin:12px 0">
 <div><strong>${esc(i.label)}</strong> · ${esc(i.result)}</div>
@@ -87,11 +87,11 @@ ${link ? `<p><a href="${esc(link)}" style="color:#0f7a6a">See every detail in Re
 
 // "Forgot password": the link is single-use and expires, and the email says what to do if it wasn't them.
 export function resetEmail({ name, link, minutes }) {
-  const subject = 'Reset your Buddy password';
-  const text = `Hi ${name || 'there'},\n\nSomeone asked to reset the password for your Buddy support-team account. If it was you, open this link within ${minutes} minutes to choose a new password:\n\n${link}\n\nThe link works once. Choosing a new password signs you out on your other devices.\n\nIf you didn't ask for this, you can ignore this email: your password hasn't changed.\n`;
+  const subject = 'Reset your TALVO password';
+  const text = `Hi ${name || 'there'},\n\nSomeone asked to reset the password for your TALVO support-team account. If it was you, open this link within ${minutes} minutes to choose a new password:\n\n${link}\n\nThe link works once. Choosing a new password signs you out on your other devices.\n\nIf you didn't ask for this, you can ignore this email: your password hasn't changed.\n`;
   const html = `<div style="font-family:system-ui,sans-serif;font-size:16px;line-height:1.5;color:#14305a;max-width:520px">
 <p>Hi ${esc(name || 'there')},</p>
-<p>Someone asked to reset the password for your Buddy support-team account. If it was you, choose a new password within ${minutes} minutes:</p>
+<p>Someone asked to reset the password for your TALVO support-team account. If it was you, choose a new password within ${minutes} minutes:</p>
 <p><a href="${esc(link)}" style="display:inline-block;background:#0f7a6a;color:#fff;padding:12px 18px;border-radius:10px;text-decoration:none;font-weight:600">Choose a new password</a></p>
 <p style="color:#4a5b75">The link works once. Choosing a new password signs you out on your other devices.</p>
 <p style="color:#4a5b75">If you didn't ask for this, you can ignore this email: your password hasn't changed.</p></div>`;

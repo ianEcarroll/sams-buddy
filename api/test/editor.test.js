@@ -14,7 +14,7 @@ test('basic checker: any real name counts for "give it a new name"; not knowing 
 
 test('reset email: link, time limit, and what to do if it wasn\'t you', () => {
   const m = resetEmail({ name: 'Ray', link: 'https://app.growwithbuddy.com/adult/#reset=abc', minutes: 60 });
-  assert.match(m.subject, /Reset your Buddy password/);
+  assert.match(m.subject, /Reset your TALVO password/);
   for (const part of [m.text, m.html]) {
     assert.ok(part.includes('https://app.growwithbuddy.com/adult/#reset=abc'));
     assert.match(part, /60 minutes/);

@@ -74,7 +74,7 @@ test('6. Sam can pause, repeat or stop at any point', async () => {
   let { state, turn: first } = createSession({ activity: storyActivity });
   let { turn } = control(state, 'think');
   assert.equal(turn.ui.paused, true);
-  assert.equal(turn.lines.length, 0, 'Buddy stays quiet while Sam thinks');
+  assert.equal(turn.lines.length, 0, 'TALVO stays quiet while Sam thinks');
   ({ turn } = control(state, 'ready'));
   ({ turn } = control(state, 'repeat'));
   assert.deepEqual(texts(turn), first.lines.filter((l) => l.kind !== 'welcome').map((l) => l.text), 'repeat replays the same instruction (not the welcome) without adding information');
