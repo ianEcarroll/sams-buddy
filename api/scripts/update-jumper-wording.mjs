@@ -23,15 +23,16 @@ const starter = STARTER_STEPS.find((a) => a.title === 'Fold a jumper').items[0];
 
 try {
   fs.mkdirSync('recovered', { recursive: true });
-  const acts = await many(`select id, learner_id, title, content from activities where mode = 'steps' and title = 'Fold a jumper'`);
-  if (!acts.length) console.log('No "Fold a jumper" activity found.');
+  const acts = await many(`select id, learner_id, title, content from activities where mode = 'steps'`);
+  console.log(`Task activities found: ${acts.map((a) => `"${a.title}"`).join(', ') || 'none'}\n`);
   let total = 0;
   for (const a of acts) {
     const content = JSON.parse(JSON.stringify(a.content || {}));
     let changed = 0, kept = 0;
     for (const it of content.items || []) {
-      if (it.title !== starter.title) continue;
       (it.steps || []).forEach((s, j) => {
+        // Matched by the step's own words, so a renamed activity or item is still found.
+        if (!starter.steps[j] || String(s.text || '').trim() !== starter.steps[j].text) return;
         const want = starter.steps[j]?.q?.independence;
         const have = s.q?.independence;
         if (!want || !have) return;
