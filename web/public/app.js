@@ -64,11 +64,16 @@ function mount(...nodes) { $app.classList.remove('practice', 'home'); $app.repla
 // Practice redraws on every line Buddy says: keep the scroll position instead of jumping back to the top.
 function mountKeep(...nodes) {
   const y = window.scrollY;
+  const scrollable = [...$app.querySelectorAll('[data-scroll-key]')].map((el) => ({ key: el.dataset.scrollKey, top: el.scrollTop, left: el.scrollLeft }));
   const active = document.activeElement;
   const buttons = [...$app.querySelectorAll('button')];
   const index = buttons.indexOf(active);
   $app.classList.remove('home'); $app.classList.add('practice');
   $app.replaceChildren(...nodes.flat().filter((n) => n != null && n !== false));
+  for (const el of $app.querySelectorAll('[data-scroll-key]')) {
+    const previous = scrollable.find((item) => item.key === el.dataset.scrollKey);
+    if (previous) { el.scrollTop = previous.top; el.scrollLeft = previous.left; }
+  }
   if (index >= 0) {
     const next = [...$app.querySelectorAll('button')].find((b) => b.textContent === active.textContent);
     if (next && !next.disabled) next.focus({ preventScroll: true });
@@ -329,14 +334,14 @@ function drawPractice() {
   const ui = turn.ui;
   const stage = ui.images.length === 0 ? null
     : ui.imageLayout === 'sequence'
-      ? h('div', { class: 'strip' }, ui.images.map((src, i) => h('figure', {}, h('img', { src, alt: `Picture ${i + 1}` }), h('figcaption', {}, `${i + 1}`))))
+      ? h('div', { class: 'strip', 'data-scroll-key': JSON.stringify(ui.images) }, ui.images.map((src, i) => h('figure', {}, h('img', { src, alt: `Picture ${i + 1}` }), h('figcaption', {}, `${i + 1}`))))
       : h('img', { src: ui.images[0], alt: 'Practice picture' });
 
   // Show the last two things Buddy said this turn, so feedback stays visible under the cue that follows it.
   // A step's words are left out of the captions when a question about it follows (Task Buddy), so they can't be read off.
   const said = P.shown.filter((l) => !l.noCaption);
   const bubble = captionsOn() && said.length ? h('div', { style: 'display:grid;gap:10px' }, said.slice(-2).map((l) =>
-    h('div', { class: 'bubble', 'data-kind': l.kind }, l.kind === 'movie' ? icon('film') : null, h('span', {}, l.text)))) : null;
+    h('div', { class: 'bubble', 'data-kind': l.kind, 'data-scroll-key': `${l.kind}:${l.text}`, 'data-long': String(l.text.length > 180) }, l.kind === 'movie' ? icon('film') : null, h('span', {}, l.text)))) : null;
 
   const cue = ui.cueCard ? h('ol', { class: 'cuecard', 'aria-label': 'Reminder card' },
     ui.cueCard.labels.flatMap((l, i) => [i ? h('li', { class: 'arrow', 'aria-hidden': 'true' }, '→') : null, h('li', { 'data-lit': String(!!ui.cueCard.lit[i]) }, l)])) : null;
@@ -433,12 +438,25 @@ function drawPractice() {
     P.paused ? h('div', { class: 'pause', role: 'dialog', 'aria-label': 'Paused' }, h('div', {}, h('p', {}, 'Take all the time you need.'), h('button', { class: 'btn btn-primary', onclick: resumePractice }, 'I\u2019m ready'))) : null,
     turn.ui.paused ? h('div', { class: 'pause' }, h('div', {}, h('p', {}, 'Take all the time you need.'), h('button', { class: 'btn btn-primary', onclick: () => sendControl('ready') }, 'I\u2019m ready'))) : null,
   );
-  // Keep the newest thing in view: the step Buddy is reading (Task Buddy walk-through), otherwise what Buddy just
-  // said and the talk button. Only scrolls when it is off screen.
+  // Task keeps its established step-following behaviour. Other modules follow
+  // new content, never microphone/processing redraws or the support-button row.
   const now = $app.querySelector('.step-list li[data-now="true"]');
-  if (now) now.scrollIntoView({ block: 'center', behavior: smooth() });
-  else if (P.mode === 'conversation') $app.querySelector('.controls')?.scrollIntoView({ block: 'nearest', behavior: smooth() });
-  else if (P.speaking || P.thinking || P.talk === 'idle') (talk || bubble)?.scrollIntoView({ block: 'nearest', behavior: smooth() });
+  if (P.mode === 'steps') {
+    if (now) now.scrollIntoView({ block: 'center', behavior: smooth() });
+    else if (P.speaking || P.thinking || P.talk === 'idle') (talk || bubble)?.scrollIntoView({ block: 'nearest', behavior: smooth() });
+  } else {
+    const key = JSON.stringify([said.at(-1)?.text, ui.images, ui.board, ui.heard, turn.expect]);
+    if (P.scrollKey !== key && !P.help && !P.paused && !ui.paused) {
+      P.scrollKey = key;
+      const target = confirmBox || (turn.expect === 'board' ? board : null) || bubble?.lastElementChild || stage || talk;
+      if (target) {
+        const rect = target.getBoundingClientRect();
+        if (rect.top < 16 || rect.bottom > window.innerHeight - 16) {
+          target.scrollIntoView({ block: rect.height > window.innerHeight - 32 ? 'start' : 'nearest', behavior: smooth() });
+        }
+      }
+    }
+  }
 }
 
 function typedInput() {
@@ -613,7 +631,9 @@ function walkStart(t) { const n = t.lines.filter((l) => l.step != null).map((l) 
 function applyTurn(t) {
   P.turn = t; P.talk = 'idle';
   if (t.lines.length) { P.shown = []; P.nowStep = null; P.walkReveal = walkStart(t); }
-  drawPractice();
+  // The first spoken line renders the new turn. Do not briefly render an empty
+  // caption area: that collapses the page and clamps its scroll position to zero.
+  if (!t.lines.length) drawPractice();
   playLines(t.lines).then(() => { if (t.done && P?.id === t.sessionId) renderDone(t); });
 }
 

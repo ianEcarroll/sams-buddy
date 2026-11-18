@@ -486,3 +486,12 @@ details.layer > summary small, details.fine-tune > summary small { font-weight: 
   .practice .controls { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .practice .controls .btn { flex-direction: row; min-height: 56px; padding: 10px; }
 }
+
+/* Readable prompts without enlarging long stories and explanations. */
+.practice .bubble { font-size: 1.375rem; scroll-margin-block: 16px; }
+.practice .bubble[data-kind="story"], .practice .bubble[data-long="true"] { font-size: 1.1875rem; line-height: 1.55; }
+.practice .board, .practice .confirm { scroll-margin-block: 16px; }
+@media (max-width: 600px) {
+  .practice .bubble { font-size: 1.3125rem; }
+  .practice .bubble[data-kind="story"], .practice .bubble[data-long="true"] { font-size: 1.125rem; }
+}
