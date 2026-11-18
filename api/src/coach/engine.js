@@ -149,7 +149,8 @@ export function itemLead(state) {
   const total = state.activity.content.items?.length || 1;
   const i = state.itemIndex;
   const noun = ITEM_NOUN[state.mode] || 'one';
-  if (total <= 1) return null;
+  // Talk (Ray, 18 Nov): no "Here's the first topic." — Foxy goes straight to the opener.
+  if (total <= 1 || state.mode === 'conversation') return null;
   if (i === 0) return `Here's the first ${noun}.`;
   if (i === total - 1) return `And here's the last ${noun}.`;
   return NEXT_ITEM[(i - 1) % NEXT_ITEM.length].replace('{noun}', noun);
