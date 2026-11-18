@@ -325,8 +325,10 @@ export function makeClaudeJudge({ apiKey, model, workspaceId, fetchImpl = fetch 
       mode === 'conversation' ? convReplyRules(inviteQuestion, learner) : 'Set reply to an empty string.',
     ].filter(Boolean).join('\n\n');
 
+    // A slow Claude call must not leave the learner waiting for ever: after 25 s the keyword checker takes over.
     const res = await fetchImpl('https://api.anthropic.com/v1/messages', {
       method: 'POST',
+      signal: AbortSignal.timeout(25000),
       headers: { 'content-type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', ...(workspaceId ? { 'anthropic-workspace-id': workspaceId } : {}) },
       // tool_choice "auto" works on every model (some reject a forced tool); the system prompt requires the call.
       body: JSON.stringify({ model, max_tokens: 2000, system: `${systemFor(learner)}\nAlways answer by calling the report tool exactly once. Do not reply with plain text.`, tools: [tool], tool_choice: { type: 'auto' }, messages: [{ role: 'user', content: user }] }),
