@@ -251,7 +251,7 @@ watchForUpdates({ files: ['/adult/adult.js', '/adult/', '/styles.css'], busy: ()
 addEventListener('hashchange', () => { if (/^#reset=/.test(location.hash)) boot(); });
 
 // ------------------------------------------------------------ shell
-const TABS = [['activities', 'Activities'], ['plan', 'Practice plan'], ['review', 'Review practice'], ['notes', 'Observations'], ['team', 'Team & privacy']];
+const TABS = [['activities', 'Activities'], ['library', 'Library'], ['plan', 'Practice plan'], ['review', 'Review practice'], ['notes', 'Observations'], ['team', 'Team & privacy']];
 const tabsFor = () => (me.admin ? [...TABS, ['families', 'Families']] : TABS);
 function renderShell() {
   const body = h('div', { class: 'team-content' });
@@ -267,7 +267,48 @@ function renderShell() {
   );
   body.append(h('header', { class: 'team-page-title' }, h('h2', {}, tabsFor().find(([k]) => k === tab)[1]), h('p', { class: 'muted' }, `Support ${me.learner.name}’s practice, one step at a time.`)));
   if (!me.voice) body.append(h('p', { class: 'panel' }, `Voice is not connected yet. ${me.learner.name} can still practise by typing.`));
-  ({ plan: renderPlan, activities: renderActivities, review: renderReview, notes: renderNotes, team: renderTeam, families: renderFamilies })[tab](body).catch((e) => toast(e.message));
+  ({ plan: renderPlan, activities: renderActivities, library: renderLibrary, review: renderReview, notes: renderNotes, team: renderTeam, families: renderFamilies })[tab](body).catch((e) => toast(e.message));
+}
+
+// ------------------------------------------------------------ activity library
+// Ready-made activities. "Add" copies one into this learner's activities as a draft; the original never changes.
+const lib = { module: '', level: '', q: '' };
+async function renderLibrary(root) {
+  const { items, pictureCredit } = await api('/adult/library');
+  const name = me.learner.name;
+  const modeLabel = (m) => modes[m]?.label || m;
+  const out = h('div', { class: 'lib-grid' });
+  const modSel = h('select', { 'aria-label': 'Module' }, h('option', { value: '' }, 'All modules'), [...new Set(items.map((i) => i.mode))].map((m) => h('option', { value: m, selected: lib.module === m }, modeLabel(m))));
+  const lvlSel = h('select', { 'aria-label': 'Level' }, h('option', { value: '' }, 'Any level'), [...new Set(items.map((i) => i.level))].map((l) => h('option', { value: l, selected: lib.level === l }, l)));
+  const search = h('input', { type: 'search', placeholder: 'Search, e.g. kitchen, morning', 'aria-label': 'Search the library', value: lib.q });
+  const add = (it) => run(async () => {
+    const r = await api(`/adult/library/${it.id}/add`, { method: 'POST' });
+    toast(r.already ? `${it.title} is already in ${name}’s activities.` : `Added to ${name}’s activities as a draft. Check it, then make it ready.`);
+    renderShell();
+  });
+  function draw() {
+    const needle = lib.q.trim().toLowerCase();
+    const shown = items.filter((i) => (!lib.module || i.mode === lib.module) && (!lib.level || i.level === lib.level)
+      && (!needle || `${i.title} ${i.tags.join(' ')} ${i.steps.join(' ')}`.toLowerCase().includes(needle)));
+    out.replaceChildren(...(shown.length ? shown.map((it) => h('article', { class: 'lib-card' },
+      h('div', { class: 'lib-pics', 'aria-hidden': 'true' }, it.images.slice(0, 5).map((id) => h('img', { src: `/symbols/${id.slice(4)}.svg`, alt: '', class: 'sym', loading: 'lazy' }))),
+      h('h3', {}, it.title),
+      h('p', { class: 'muted lib-meta' }, `${modeLabel(it.mode)} · ${it.stepCount} steps · ${it.level} · ages ${it.age}`),
+      h('p', { class: 'lib-tags' }, it.tags.map((t) => h('span', { class: 'tag' }, t))),
+      h('details', {}, h('summary', {}, 'See the steps'), h('ol', {}, it.steps.map((t) => h('li', {}, t)))),
+      it.added
+        ? h('div', { class: 'row-actions' }, h('span', { class: 'tag supported' }, it.added.status === 'draft' ? 'Added · draft' : 'Added'), h('button', { class: 'btn btn-quiet', onclick: () => { tab = 'activities'; renderShell(); } }, 'Open Activities'))
+        : h('button', { class: 'btn btn-primary', onclick: add(it) }, `Add to ${name}’s activities`))) : [h('p', { class: 'panel' }, 'Nothing matches. Try clearing the filters.')]));
+  }
+  modSel.addEventListener('change', () => { lib.module = modSel.value; draw(); });
+  lvlSel.addEventListener('change', () => { lib.level = lvlSel.value; draw(); });
+  search.addEventListener('input', () => { lib.q = search.value; draw(); });
+  draw();
+  root.append(
+    h('p', { class: 'muted', style: 'max-width:70ch' }, `Ready-made activities to add to ${name}’s own. Each one is added as a draft, so you or the therapist can check the wording and pictures, change anything, and then make it ready. The library itself never changes.`),
+    h('div', { class: 'review-filters' }, modSel, lvlSel, search),
+    out,
+    h('p', { class: 'muted', style: 'max-width:70ch;font-size:.85rem' }, 'Easy and Medium are only a first guide; the therapist knows what suits each learner. Text written for TALVO. ', pictureCredit, '.'));
 }
 
 // ------------------------------------------------------------ practice plan + settings

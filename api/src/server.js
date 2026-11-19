@@ -15,6 +15,7 @@ import { emailEnabled, sendEmail, recipientsFor, practiceEmail, resetEmail } fro
 import { isPlatformAdmin, newInviteToken, INVITE_DAYS, estimateCost, ratesFor, validateFamily, ageFrom, cleanInterests } from './families.js';
 import { pushEnabled, pushPublicKey, sendPush, reminderDue, reminderMessage } from './push.js';
 import { cleanSignup, corsHeaders, notifyList, notificationEmail } from './waitlist.js';
+import { LIBRARY, libraryById, libraryCard, activityFromLibrary, LIBRARY_PICTURE_CREDIT } from './library.js';
 
 const app = express();
 app.set('trust proxy', true);
@@ -460,6 +461,28 @@ async function imagesOwned(content, learnerId) {
   const n = await one('select count(*)::int n from images where id = any($1::uuid[]) and learner_id=$2', [ids, learnerId]);
   return n.n === ids.length;
 }
+// ---- activity library: ready-made activities. Adding one copies it into this learner's activities as a draft.
+async function libraryCopies(learnerId) {
+  const rows = await many("select id, status, content->>'library_id' as lib from activities where learner_id=$1 and content ? 'library_id' and status <> 'archived' order by created_at desc", [learnerId]);
+  return new Map(rows.map((r) => [r.lib, { id: r.id, status: r.status }]));
+}
+adult.get('/library', wrap(async (req, res) => {
+  const copies = await libraryCopies(req.learnerId);
+  res.json({ items: LIBRARY.map((it) => libraryCard(it, copies.get(it.id) || null)), pictureCredit: LIBRARY_PICTURE_CREDIT });
+}));
+adult.post('/library/:id/add', wrap(async (req, res) => {
+  const item = libraryById(req.params.id);
+  if (!item) return res.status(404).json({ error: 'That library activity was not found.' });
+  const have = (await libraryCopies(req.learnerId)).get(item.id);
+  if (have) return res.json({ id: have.id, already: true });
+  const a = activityFromLibrary(item);
+  const row = await one('insert into activities(learner_id, mode, title, goal, plan_goal, status, content, created_by) values ($1,$2,$3,$4,$5,$6,$7,$8) returning id', [req.learnerId, a.mode, a.title, a.goal, a.plan_goal, a.status, a.content, req.adult.id]);
+  // Make sure the learner's home can show the module this activity belongs to.
+  const l = await one('select settings from learners where id=$1', [req.learnerId]);
+  const modes = settingsOf(l).enabled_modes;
+  if (!modes.includes(a.mode)) await q('update learners set settings = settings || $1::jsonb where id=$2', [{ enabled_modes: [...modes, a.mode] }, req.learnerId]);
+  res.json({ id: row.id, already: false });
+}));
 adult.post('/activities', wrap(async (req, res) => {
   const err = validateActivity(req.body || {});
   if (err) return res.status(400).json({ error: err });
