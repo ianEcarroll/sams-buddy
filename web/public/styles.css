@@ -221,6 +221,31 @@ details > summary { cursor: pointer; font-weight: 700; padding: 6px 0; }
 .c-P { background: var(--notyet-soft); color: var(--notyet); }
 .c-F { background: var(--none-soft); color: var(--ink-soft); }
 
+/* Review practice: progress charts (plain HTML bars, no library) */
+.ch-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; margin: 14px 0 6px; }
+.ch-card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; display: grid; gap: 8px; align-content: start; }
+.ch-card h3 { margin: 0; font-size: 1rem; }
+.ch-big { margin: 0; font-size: 1.05rem; }
+.ch-big strong { font-size: 1.8rem; line-height: 1; }
+.ch-note { margin: 2px 0 0; font-size: .82rem; max-width: 60ch; }
+.ch-bars { display: flex; gap: 2px; align-items: flex-end; height: 120px; padding-top: 4px; border-bottom: 2px solid var(--line); }
+.ch-col { flex: 1 1 0; min-width: 3px; height: 100%; display: flex; align-items: flex-end; }
+.ch-stack { width: 100%; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; gap: 1px; }
+.ch-seg { display: block; width: 100%; min-height: 3px; border-radius: 3px 3px 0 0; }
+.ch-seg.own { background: var(--met); }
+.ch-seg.help { background: var(--notyet); opacity: .75; }
+.ch-axis { display: flex; justify-content: space-between; font-size: .78rem; color: var(--ink-soft); }
+.ch-legend { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: .84rem; }
+.ch-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.ch-legend .sw { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+.ch-legend .sw.own { background: var(--met); } .ch-legend .sw.help { background: var(--notyet); opacity: .75; }
+.ch-cal { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; max-width: 360px; }
+.ch-wd { text-align: center; font-size: .72rem; color: var(--ink-soft); font-weight: 700; }
+.ch-day { aspect-ratio: 1; display: grid; place-items: center; border-radius: 8px; font-size: .75rem; background: var(--none-soft); color: var(--ink-soft); }
+.ch-day.some { background: var(--met-soft); color: var(--met); font-weight: 700; }
+.ch-day.many { background: var(--met); color: var(--paper); font-weight: 700; }
+.ch-day.empty { background: none; }
+
 .codes-key { margin: 6px 0 14px; font-size: .95rem; }
 .codes-key ul { list-style: none; padding: 0; display: grid; gap: 6px; }
 .codes-key p { max-width: 75ch; }
