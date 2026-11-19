@@ -1217,6 +1217,74 @@ function codeBadge(code) {
   return h('span', { class: `code-badge c-${code}`, title: goals.codes[code] }, h('b', {}, code), ` ${goals.codes[code]}`);
 }
 
+// ---- progress charts. Built from the per-day summary the page already loads, so they need no extra data.
+// "On their own" is code I; "with support" is M, P and F together. Counts only: no scores or trend lines, because a few
+// practice days say little and a harder activity can lower them.
+const WEEKDAY_LETTERS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+const mondayIndex = (k) => (new Date(`${k}T12:00:00`).getDay() + 6) % 7;
+
+// Day keys (YYYY-MM-DD, oldest first) for the chosen period, ending today. "All practice" starts at the first practice, at most 90 days back.
+function chartDays(days, period) {
+  const first = days.length ? days.reduce((m, d) => (d.day < m ? d.day : m), days[0].day) : daysAgo(6);
+  let n = period === 'all' ? 7 : Number(period);
+  if (period === 'all') { while (n < 90 && daysAgo(n - 1) > first) n += 1; }
+  return Array.from({ length: n }, (_, i) => daysAgo(n - 1 - i));
+}
+
+function reviewCharts(days, state) {
+  const keys = chartDays(days, state.period);
+  const goalDays = days.filter((d) => !state.goal || d.plan_goal === state.goal);
+  const sum = (rows, f) => rows.reduce((n, d) => n + f(d), 0);
+  const perDay = keys.map((k) => {
+    const rows = goalDays.filter((d) => d.day === k);
+    return { k, own: sum(rows, (d) => d.I), help: sum(rows, (d) => d.M + d.P + d.F) };
+  });
+  const allItems = (k) => sum(days.filter((d) => d.day === k), (d) => d.items);
+  const own = sum(perDay, (d) => d.own);
+  const help = sum(perDay, (d) => d.help);
+  const answered = own + help;
+  const goalName = state.goal ? (goals.goals[state.goal].n < 5 ? goals.goals[state.goal].label : goals.goals[state.goal].short) : 'all goals';
+
+  // 1. Independence by day: stacked bars, the teal part is answered without a cue.
+  const top = Math.max(4, ...perDay.map((d) => d.own + d.help));
+  const bars = h('div', { class: 'ch-bars', role: 'img',
+    'aria-label': answered ? `Answers per day for ${goalName}: ${own} on their own and ${help} with support in this period.` : `No counted answers for ${goalName} in this period.` },
+    perDay.map((d) => {
+      const total = d.own + d.help;
+      return h('div', { class: 'ch-col', title: total ? `${dayShort(d.k)}: ${d.own} on their own, ${d.help} with support` : `${dayShort(d.k)}: no practice` },
+        h('div', { class: 'ch-stack' }, total ? [
+          d.help ? h('span', { class: 'ch-seg help', style: `height:${(d.help / top) * 100}%` }) : null,
+          d.own ? h('span', { class: 'ch-seg own', style: `height:${(d.own / top) * 100}%` }) : null] : null));
+    }));
+  const first = keys[0], last = keys[keys.length - 1];
+  const independence = h('section', { class: 'ch-card' },
+    h('h3', {}, `On their own, by day · ${goalName}`),
+    answered
+      ? h('p', { class: 'ch-big' }, h('strong', {}, String(own)), ` of ${answered} answers without a cue`, h('span', { class: 'muted' }, ` (${Math.round((own / answered) * 100)}%)`))
+      : h('p', { class: 'muted' }, 'No counted answers in this period yet.'),
+    bars,
+    h('div', { class: 'ch-axis' }, h('span', {}, dayShort(first)), h('span', {}, dayShort(last))),
+    h('div', { class: 'ch-legend' }, h('span', {}, h('i', { class: 'sw own' }), `${me.learner.name} did it on their own`), h('span', {}, h('i', { class: 'sw help' }), 'With a cue or support')),
+    h('p', { class: 'muted ch-note' }, 'Look at the pattern over weeks, not single days. A harder activity or a tired day can lower a bar. These are counts with the team’s codes, not a grade.'));
+
+  // 2. Practice days: a small calendar. Any activity counts, whatever goal is selected.
+  const practised = keys.filter((k) => allItems(k) > 0).length;
+  const cells = [...Array(mondayIndex(first)).fill(null), ...keys];
+  const calendar = h('section', { class: 'ch-card' },
+    h('h3', {}, 'Practice days'),
+    h('p', { class: 'ch-big' }, h('strong', {}, String(practised)), ` of the last ${keys.length} days`),
+    h('div', { class: 'ch-cal', role: 'img', 'aria-label': `${me.learner.name} practised on ${practised} of the last ${keys.length} days.` },
+      WEEKDAY_LETTERS.map((l) => h('span', { class: 'ch-wd', 'aria-hidden': 'true' }, l)),
+      cells.map((k) => {
+        if (!k) return h('span', { class: 'ch-day empty', 'aria-hidden': 'true' });
+        const n = allItems(k);
+        return h('span', { class: `ch-day ${n ? (n > 3 ? 'many' : 'some') : ''}`, title: `${dayShort(k)}: ${n ? `${n} item${n === 1 ? '' : 's'}` : 'no practice'}` }, String(Number(k.slice(8))));
+      })),
+    h('p', { class: 'muted ch-note' }, 'Shows every activity. Regular short practice usually matters more than long sessions.'));
+
+  return h('div', { class: 'ch-grid' }, independence, calendar);
+}
+
 async function renderReview(root) {
   let records, summary;
   try { [records, summary] = await Promise.all([api('/adult/records'), api(`/adult/summary?tz=${encodeURIComponent(TZ)}`)]); }
@@ -1256,8 +1324,10 @@ async function renderReview(root) {
 
   // ---- record list, grouped by day
   const listWrap = h('div', {});
+  const chartsWrap = h('div', { class: 'ch-wrap' });
   function draw() {
     goalSel.value = review.goal;
+    chartsWrap.replaceChildren(reviewCharts(summary.days, review));
     const from = review.period === 'all' ? '' : daysAgo(Number(review.period) - 1);
     const rows = records.filter((r) => (!review.goal || r.plan_goal === review.goal) && (!review.activity || r.activity_title === review.activity) && (!from || dayKey(r.created_at) >= from));
     if (!rows.length) { listWrap.replaceChildren(h('p', { class: 'panel' }, records.length ? 'No practice matches these filters.' : `No practice yet. Records appear here after ${me.learner.name} finishes an activity.`)); return; }
@@ -1285,6 +1355,7 @@ async function renderReview(root) {
       h('ul', {}, Object.entries(goals.codes).map(([c, l]) => h('li', {}, codeBadge(c), c === 'M' ? ' — Foxy gave one cue (reminder, question or sentence starter)' : c === 'P' ? ' — Foxy gave two or more cues' : c === 'F' ? ' — Foxy modelled the answer' : ` — ${me.learner.name} did it without a cue`))),
       h('p', { class: 'muted' }, 'These are practice counts with Foxy, using the team’s codes. The team sets baselines and decides what counts; use Observations for school, work and home.')),
     h('div', { class: 'review-filters' }, goalSel, periodSel, actSel),
+    chartsWrap,
     listWrap,
   );
 }
