@@ -590,3 +590,15 @@ details.layer > summary small, details.fine-tune > summary small { font-weight: 
   .report { margin: 0; padding: 0; max-width: none; border-radius: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   .ch-card, .rep-goal, .rep-ex, .rep-table tr { break-inside: avoid; }
 }
+
+/* Activity library */
+.lib-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; margin: 14px 0; }
+.lib-card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; display: grid; gap: 8px; align-content: start; }
+.lib-card h3 { margin: 0; font-size: 1.05rem; }
+.lib-meta { margin: 0; font-size: .85rem; }
+.lib-pics { display: flex; gap: 6px; }
+.lib-pics img { width: 44px; height: 44px; object-fit: contain; background: #fff; border-radius: 8px; border: 1px solid var(--line); padding: 3px; }
+.lib-tags { display: flex; flex-wrap: wrap; gap: 4px; margin: 0; }
+.lib-card details { font-size: .9rem; }
+.lib-card ol { margin: 6px 0 0; padding-left: 1.2rem; }
+.review-filters input[type="search"] { border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; background: var(--surface); min-height: 42px; min-width: 220px; }
