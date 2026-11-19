@@ -14,6 +14,7 @@ import { PLAN_GOALS, GOAL_KEYS, SUPPORT_CODES } from './coach/goals.js';
 import { emailEnabled, sendEmail, recipientsFor, practiceEmail, resetEmail } from './email.js';
 import { isPlatformAdmin, newInviteToken, INVITE_DAYS, estimateCost, ratesFor, validateFamily, ageFrom, cleanInterests } from './families.js';
 import { pushEnabled, pushPublicKey, sendPush, reminderDue, reminderMessage } from './push.js';
+import { cleanSignup, corsHeaders, notifyList, notificationEmail } from './waitlist.js';
 
 const app = express();
 app.set('trust proxy', true);
@@ -139,6 +140,23 @@ app.post('/api/adult/reset', rateLimit(10), wrap(async (req, res) => {
   res.json({ ok: true, email: a.email });
 }));
 
+// ---- waiting list (public): the TALVO website posts here through the Worker. Always answers ok for a valid address,
+// so nobody can find out who is already on the list.
+app.options('/api/waitlist', (req, res) => res.set(corsHeaders(req.get('origin'))).status(204).end());
+app.post('/api/waitlist', rateLimit(10), wrap(async (req, res) => {
+  res.set(corsHeaders(req.get('origin')));
+  const c = cleanSignup(req.body);
+  if (c.spam) return res.json({ ok: true });
+  if (c.error) return res.status(400).json({ error: c.error });
+  const added = await one('insert into waitlist (email, role, source) values ($1,$2,$3) on conflict (email) do nothing returning id', [c.email, c.role, c.source]);
+  if (added && emailEnabled()) {
+    const { n } = await one('select count(*)::int as n from waitlist');
+    const msg = notificationEmail({ email: c.email, role: c.role, total: n });
+    for (const to of notifyList()) sendEmail({ to, ...msg }).catch((e) => console.error('[waitlist] notify failed', e.message));
+  }
+  res.json({ ok: true });
+}));
+
 app.get('/api/invite/:token', rateLimit(30), wrap(async (req, res) => {
   const inv = await inviteByToken(req.params.token);
   res.json({ valid: !!inv });
@@ -222,6 +240,11 @@ adult.post('/admin/families/:id/pause', requirePlatformAdmin, wrap(async (req, r
   if (req.params.id === req.learnerId && req.body?.paused) return res.status(400).json({ error: "You can't pause your own family's account from here." });
   await q('update learners set disabled_at = case when $1 then coalesce(disabled_at, now()) else null end where id=$2', [!!req.body?.paused, req.params.id]);
   res.json({ ok: true });
+}));
+adult.get('/admin/waitlist.csv', requirePlatformAdmin, wrap(async (req, res) => {
+  const rows = await many('select email, role, source, to_char(created_at, \'YYYY-MM-DD HH24:MI\') as joined from waitlist order by created_at');
+  res.set('content-type', 'text/csv; charset=utf-8').set('content-disposition', 'attachment; filename="talvo-waiting-list.csv"')
+    .send(toCsv(['Email', 'Role', 'Source', 'Joined (UTC)'], rows.map((r) => [r.email, r.role || '', r.source, r.joined])));
 }));
 adult.get('/admin/invites', requirePlatformAdmin, wrap(async (req, res) => {
   res.json(await many(`select i.id, i.note, i.created_at, i.expires_at, i.used_at, l.name as learner_name

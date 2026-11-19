@@ -1285,6 +1285,87 @@ function reviewCharts(days, state) {
   return h('div', { class: 'ch-grid' }, independence, calendar);
 }
 
+// ---- printable progress report: one page for a therapy session, school meeting or the family's own records.
+// Built from what Review practice already holds (per-day summary and records). Print / Save as PDF uses the browser.
+const REPORT_PERIODS = [['30', 'Last 30 days'], ['7', 'Last 7 days'], ['all', 'All practice']];
+
+// Pure: the numbers for one period. `days` is the per-day summary, `records` the practice records, `from` the first day (or '').
+function reportData(days, records, from, goalKeys) {
+  const inRange = (day) => !from || day >= from;
+  const sum = (rows, f) => rows.reduce((n, d) => n + f(d), 0);
+  const perGoal = goalKeys.map((k) => {
+    const rows = days.filter((d) => d.plan_goal === k && inRange(d.day));
+    const codes = Object.fromEntries(['I', 'M', 'P', 'F'].map((c) => [c, sum(rows, (d) => d[c])]));
+    return { k, practiceDays: rows.filter((d) => d.opportunities > 0).length, opp: sum(rows, (d) => d.opportunities), met: sum(rows, (d) => d.successes), ...codes };
+  });
+  const dayItems = new Map();
+  for (const d of days) if (inRange(d.day) && d.items > 0) dayItems.set(d.day, (dayItems.get(d.day) || 0) + d.items);
+  const own = sum(perGoal, (g) => g.I);
+  const cued = sum(perGoal, (g) => g.M + g.P + g.F);
+  const examples = Object.fromEntries(goalKeys.map((k) => [k, records
+    .filter((r) => r.plan_goal === k && r.sam_response && inRange(dayKey(r.created_at)))
+    .sort((a, b) => new Date(b.created_at) - new Date(a.created_at)).slice(0, 2)]));
+  return { perGoal, practisedDays: dayItems.size, own, cued, answered: own + cued, examples };
+}
+
+function openReport(days, records, startPeriod) {
+  const name = me.learner.name;
+  const state = { period: REPORT_PERIODS.some(([v]) => v === startPeriod) ? startPeriod : '30' };
+  const goalKeys = Object.keys(goals.goals).filter((k) => k !== 'other');
+  const body = h('div', { class: 'report' });
+  const periodSel = h('select', { 'aria-label': 'Report period' }, REPORT_PERIODS.map(([v, l]) => h('option', { value: v, selected: state.period === v }, l)));
+  const overlay = h('div', { class: 'report-overlay', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Progress report' });
+  const onKey = (e) => { if (e.key === 'Escape') close(); };
+  function close() { document.removeEventListener('keydown', onKey); document.body.classList.remove('printing-report'); overlay.remove(); }
+
+  function draw() {
+    const keys = chartDays(days, state.period);
+    const from = state.period === 'all' ? '' : keys[0];
+    const d = reportData(days, records, from, goalKeys);
+    const periodText = state.period === 'all' ? `All practice, to ${dayTitle(keys[keys.length - 1])}` : `${dayTitle(keys[0])} to ${dayTitle(keys[keys.length - 1])}`;
+    const goalLabel = (k) => `${goals.goals[k].n}. ${goals.goals[k].label}`;
+    const pct = d.answered ? Math.round((d.own / d.answered) * 100) : 0;
+    const exampleBlocks = d.perGoal.filter((g) => d.examples[g.k].length).map((g) => h('div', { class: 'rep-goal' },
+      h('h3', {}, goalLabel(g.k)),
+      d.examples[g.k].map((r) => {
+        const after = String(r.sam_response).split(' / ').filter(Boolean).map((a) => a.replace(/^\[after support\] /, '(after support) ')).join(' / ');
+        return h('div', { class: 'rep-ex' },
+          h('div', { class: 'rep-ex-head' }, h('strong', {}, r.item_label), h('span', { class: 'muted' }, ` · ${r.activity_title} · ${dayShort(dayKey(r.created_at))}`),
+            r.support_code ? h('span', { class: `code-badge c-${r.support_code}` }, h('b', {}, r.support_code), ` ${goals.codes[r.support_code]}`) : null),
+          h('p', {}, `${name} said: “${after.length > 240 ? `${after.slice(0, 239)}…` : after}”`));
+      })));
+
+    body.replaceChildren(...[
+      h('header', { class: 'rep-head' },
+        h('div', {}, h('h1', {}, 'TALVO practice report'), h('p', { class: 'rep-sub' }, `${name} · ${periodText}`)),
+        h('p', { class: 'muted rep-date' }, `Prepared ${new Date().toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' })}`)),
+      h('p', { class: 'rep-lead' }, ...(d.practisedDays
+        ? [`${name} practised on `, h('strong', {}, `${d.practisedDays} of ${keys.length} days`),
+          ...(d.answered ? [`. Of ${d.answered} counted answers, `, h('strong', {}, `${d.own} (${pct}%)`), ' were given without a cue.'] : ['.'])]
+        : ['No practice recorded in this period.'])),
+      h('h2', {}, 'By plan goal'),
+      h('table', { class: 'rep-table' },
+        h('thead', {}, h('tr', {}, ['Goal', 'Practice days', 'Met target', 'On their own (I)', 'One cue (M)', 'Two or more cues (P)', 'Modelled (F)'].map((t) => h('th', {}, t)))),
+        h('tbody', {}, d.perGoal.map((g) => h('tr', {}, h('td', {}, goalLabel(g.k)), h('td', { class: 'num' }, String(g.practiceDays)),
+          h('td', { class: 'num' }, g.opp ? `${g.met} of ${g.opp}` : '–'), ...['I', 'M', 'P', 'F'].map((c) => h('td', { class: 'num' }, g.opp || g[c] ? String(g[c]) : '–')))))),
+      reviewCharts(days, { goal: '', period: state.period }),
+      exampleBlocks.length ? h('h2', {}, 'Examples of what was said') : null,
+      ...exampleBlocks,
+      h('footer', { class: 'rep-foot' },
+        h('p', {}, `Each item ${name} finishes is one opportunity. It meets the target when every part is given with the support the plan allows for that goal (goals 1 and 2: no prompt; goals 3 and 4: one cue at most). Items stopped early, and practice not linked to a plan goal, are not counted.`),
+        h('p', {}, 'These are counts of practice with Foxy in the TALVO app, using the team’s support codes. They show practice, not a clinical assessment, and they sit alongside observations from school, work and home.')),
+    ].filter(Boolean));
+  }
+  periodSel.addEventListener('change', () => { state.period = periodSel.value; draw(); });
+  const printBtn = h('button', { class: 'btn btn-primary', onclick: () => window.print() }, 'Print or save as PDF');
+  overlay.append(h('div', { class: 'report-bar' }, h('strong', {}, 'Progress report'), periodSel, printBtn, h('button', { class: 'btn btn-quiet', onclick: close }, 'Close')), body);
+  draw();
+  document.body.classList.add('printing-report');
+  document.body.append(overlay);
+  document.addEventListener('keydown', onKey);
+  printBtn.focus();
+}
+
 async function renderReview(root) {
   let records, summary;
   try { [records, summary] = await Promise.all([api('/adult/records'), api(`/adult/summary?tz=${encodeURIComponent(TZ)}`)]); }
@@ -1346,6 +1427,7 @@ async function renderReview(root) {
     h('div', { class: 'review-top' },
       h('h2', {}, 'Progress on the plan goals'),
       h('div', { class: 'row-actions' },
+        h('button', { class: 'btn btn-primary', onclick: () => openReport(summary.days, records, review.period) }, 'Print report'),
         h('button', { class: 'btn', onclick: run(() => download('/adult/export/weekly.csv', `${fileName()}-weekly-record.csv`)) }, 'Weekly record (CSV)'),
         h('button', { class: 'btn btn-quiet', onclick: run(() => download('/adult/export/items.csv', `${fileName()}-all-practice.csv`)) }, 'All practice (CSV)'),
         h('button', { class: 'btn btn-quiet', onclick: run(() => download('/adult/export', `${fileName()}-records.json`)) }, 'Full backup (JSON)'))),
@@ -1449,6 +1531,9 @@ async function renderFamilies(root) {
         note.value = '';
       }) }, 'Create invite link')),
       out),
+    h('h2', {}, 'Website waiting list'),
+    h('div', { class: 'panel' }, h('p', { style: 'margin-top:0' }, 'Everyone who signed up on the TALVO website. You also get an email for each new sign-up.'),
+      h('button', { class: 'btn', onclick: run(() => download('/adult/admin/waitlist.csv', 'talvo-waiting-list.csv')) }, 'Download waiting list (CSV)')),
     h('h2', {}, `Families (${families.length})`),
     h('div', { class: 'panel table-wrap' }, h('table', { class: 'table' },
       h('thead', {}, h('tr', {}, ['Child', 'Main account', 'Team', 'Devices', 'Practice 7 / 30 days', 'Last practice', 'AI cost, 30 days', ''].map((t) => h('th', {}, t)))),
