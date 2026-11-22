@@ -278,7 +278,7 @@ async function renderLibrary(root) {
   const name = me.learner.name;
   const modeLabel = (m) => modes[m]?.label || m;
   const out = h('div', { class: 'lib-grid' });
-  const modSel = h('select', { 'aria-label': 'Module' }, h('option', { value: '' }, 'All modules'), [...new Set(items.map((i) => i.mode))].map((m) => h('option', { value: m, selected: lib.module === m }, modeLabel(m))));
+  const modSel = h('select', { 'aria-label': 'Module' }, h('option', { value: '' }, 'All modules'), [...new Set(items.map((i) => modeLabel(i.mode)))].map((l) => h('option', { value: l, selected: lib.module === l }, l)));
   const lvlSel = h('select', { 'aria-label': 'Level' }, h('option', { value: '' }, 'Any level'), [...new Set(items.map((i) => i.level).filter(Boolean))].map((l) => h('option', { value: l, selected: lib.level === l }, l)));
   const search = h('input', { type: 'search', placeholder: 'Search, e.g. kitchen, morning', 'aria-label': 'Search the library', value: lib.q });
   const add = (it) => run(async () => {
@@ -286,19 +286,50 @@ async function renderLibrary(root) {
     toast(r.already ? `${it.title} is already in ${name}’s activities.` : `Added to ${name}’s activities as a draft. Check it, then make it ready.`);
     renderShell();
   });
+  // Read-only view of the whole activity. Nothing in here can be edited: the library never changes, and the
+  // learner's own copy (made with "Add") is where the team changes wording, answers and pictures.
+  async function viewItem(it) {
+    let d;
+    try { d = await api(`/adult/library/${encodeURIComponent(it.id)}`); } catch (e) { toast(e.message); return; }
+    const opener = document.activeElement;
+    const close = () => { overlay.remove(); document.removeEventListener('keydown', onKey); document.body.classList.remove('lib-open'); opener?.focus?.(); };
+    const onKey = (ev) => { if (ev.key === 'Escape') close(); };
+    const value = (v) => (!Array.isArray(v) ? h('span', {}, v) : v.length > 6 ? h('span', {}, v.join(', ')) : h('ul', {}, v.map((x) => h('li', {}, x))));
+    const addBtn = d.added
+      ? h('button', { class: 'btn btn-quiet', onclick: () => { close(); tab = 'activities'; renderShell(); } }, `Open ${name}’s copy in Activities`)
+      : h('button', { class: 'btn btn-primary', onclick: async () => { await add(it)(); close(); } }, `Add to ${name}’s activities to edit it`);
+    const overlay = h('div', { class: 'lib-view', role: 'dialog', 'aria-modal': 'true', 'aria-label': `${d.title}, read only` },
+      h('div', { class: 'lib-view-panel' },
+        h('div', { class: 'lib-view-head' },
+          h('div', {}, h('h2', {}, d.title), h('p', { class: 'muted' }, [modeLabel(d.mode), `${d.count} ${d.unit}`, d.level, `ages ${d.age}`].filter(Boolean).join(' · '))),
+          h('button', { class: 'btn btn-quiet', onclick: close, 'aria-label': 'Close' }, 'Close')),
+        h('p', { class: 'lib-readonly' }, h('strong', {}, 'Read only. '), `This is the library version, so it can’t be changed here. Add it to ${name}’s activities and you can edit your own copy: the wording, the answers that are accepted, and the pictures.`),
+        h('p', { class: 'muted' }, `Goal: ${d.goal}`),
+        d.parts.map((p) => h('section', { class: 'lib-part' },
+          h('h3', {}, p.heading),
+          p.image ? h('img', { src: `/symbols/${p.image.slice(4)}.svg`, alt: '', class: 'sym lib-part-pic' }) : null,
+          h('dl', {}, p.rows.flatMap(([label, v]) => [h('dt', {}, label), h('dd', {}, value(v))])))),
+        h('div', { class: 'lib-view-foot' }, addBtn, h('button', { class: 'btn btn-quiet', onclick: close }, 'Close'))));
+    (document.querySelector('main.adult') || document.body).append(overlay);
+    document.body.classList.add('lib-open');
+    document.addEventListener('keydown', onKey);
+    overlay.querySelector('.lib-view-head button').focus();
+  }
   function draw() {
     const needle = lib.q.trim().toLowerCase();
-    const shown = items.filter((i) => (!lib.module || i.mode === lib.module) && (!lib.level || i.level === lib.level)
+    const shown = items.filter((i) => (!lib.module || modeLabel(i.mode) === lib.module) && (!lib.level || i.level === lib.level)
       && (!needle || `${i.title} ${i.tags.join(' ')} ${i.lines.join(' ')}`.toLowerCase().includes(needle)));
     out.replaceChildren(...(shown.length ? shown.map((it) => h('article', { class: 'lib-card' },
       it.images.length ? h('div', { class: 'lib-pics', 'aria-hidden': 'true' }, it.images.slice(0, 5).map((id) => h('img', { src: `/symbols/${id.slice(4)}.svg`, alt: '', class: 'sym', loading: 'lazy' }))) : null,
       h('h3', {}, it.title),
-      h('p', { class: 'muted lib-meta' }, [modeLabel(it.mode), `${it.count} ${it.unit}`, it.level, `ages ${it.age}`].filter(Boolean).join(' · ')),
+      h('p', { class: 'muted lib-meta' }, [modeLabel(it.mode), modes[it.mode]?.activityName, `${it.count} ${it.unit}`, it.level, `ages ${it.age}`].filter(Boolean).join(' · ')),
       h('p', { class: 'lib-tags' }, it.tags.map((t) => h('span', { class: 'tag' }, t))),
-      h('details', {}, h('summary', {}, `See the ${it.unit}`), h('ol', {}, it.lines.map((t) => h('li', {}, t)))),
-      it.added
-        ? h('div', { class: 'row-actions' }, h('span', { class: 'tag supported' }, it.added.status === 'draft' ? 'Added · draft' : 'Added'), h('button', { class: 'btn btn-quiet', onclick: () => { tab = 'activities'; renderShell(); } }, 'Open Activities'))
-        : h('button', { class: 'btn btn-primary', onclick: add(it) }, `Add to ${name}’s activities`))) : [h('p', { class: 'panel' }, 'Nothing matches. Try clearing the filters.')]));
+      h('ul', { class: 'lib-peek' }, it.lines.slice(0, 2).map((t) => h('li', {}, t)), it.lines.length > 2 ? h('li', { class: 'muted' }, `and ${it.lines.length - 2} more`) : null),
+      h('div', { class: 'row-actions' },
+        h('button', { class: 'btn btn-quiet', onclick: () => viewItem(it) }, 'View'),
+        it.added
+          ? [h('span', { class: 'tag supported' }, it.added.status === 'draft' ? 'Added · draft' : 'Added'), h('button', { class: 'btn btn-quiet', onclick: () => { tab = 'activities'; renderShell(); } }, 'Open Activities')]
+          : h('button', { class: 'btn btn-primary', onclick: add(it) }, `Add to ${name}’s activities`)))) : [h('p', { class: 'panel' }, 'Nothing matches. Try clearing the filters.')]));
   }
   modSel.addEventListener('change', () => { lib.module = modSel.value; draw(); });
   lvlSel.addEventListener('change', () => { lib.level = lvlSel.value; draw(); });
