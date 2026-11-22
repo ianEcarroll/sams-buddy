@@ -272,15 +272,12 @@ function renderShell() {
 
 // ------------------------------------------------------------ activity library
 // Ready-made activities. "Add" copies one into this learner's activities as a draft; the original never changes.
-const lib = { module: '', level: '', q: '' };
+const lib = { type: '', level: '', q: '' };
 async function renderLibrary(root) {
   const { items, pictureCredit } = await api('/adult/library');
   const name = me.learner.name;
   const modeLabel = (m) => modes[m]?.label || m;
-  const out = h('div', { class: 'lib-grid' });
-  const modSel = h('select', { 'aria-label': 'Module' }, h('option', { value: '' }, 'All modules'), [...new Set(items.map((i) => modeLabel(i.mode)))].map((l) => h('option', { value: l, selected: lib.module === l }, l)));
-  const lvlSel = h('select', { 'aria-label': 'Level' }, h('option', { value: '' }, 'Any level'), [...new Set(items.map((i) => i.level).filter(Boolean))].map((l) => h('option', { value: l, selected: lib.level === l }, l)));
-  const search = h('input', { type: 'search', placeholder: 'Search, e.g. kitchen, morning', 'aria-label': 'Search the library', value: lib.q });
+  const search = h('input', { type: 'search', placeholder: 'Search every activity, e.g. brush teeth', 'aria-label': 'Search the library', value: lib.q, style: 'width:min(100%, 380px)' });
   const add = (it) => run(async () => {
     const r = await api(`/adult/library/${it.id}/add`, { method: 'POST' });
     toast(r.already ? `${it.title} is already in ${name}’s activities.` : `Added to ${name}’s activities as a draft. Check it, then make it ready.`);
@@ -301,7 +298,7 @@ async function renderLibrary(root) {
     const overlay = h('div', { class: 'lib-view', role: 'dialog', 'aria-modal': 'true', 'aria-label': `${d.title}, read only` },
       h('div', { class: 'lib-view-panel' },
         h('div', { class: 'lib-view-head' },
-          h('div', {}, h('h2', {}, d.title), h('p', { class: 'muted' }, [modeLabel(d.mode), `${d.count} ${d.unit}`, d.level, `ages ${d.age}`].filter(Boolean).join(' · '))),
+          h('div', {}, h('h2', {}, d.title), h('p', { class: 'muted' }, [typeTitle(d.mode), `${d.count} ${d.unit}`, d.level, `ages ${d.age}`].filter(Boolean).join(' · '))),
           h('button', { class: 'btn btn-quiet', onclick: close, 'aria-label': 'Close' }, 'Close')),
         h('p', { class: 'lib-readonly' }, h('strong', {}, 'Read only. '), `This is the library version, so it can’t be changed here. Add it to ${name}’s activities and you can edit your own copy: the wording, the answers that are accepted, and the pictures.`),
         h('p', { class: 'muted' }, `Goal: ${d.goal}`),
@@ -315,30 +312,64 @@ async function renderLibrary(root) {
     document.addEventListener('keydown', onKey);
     overlay.querySelector('.lib-view-head button').focus();
   }
+  // Step 1: pick a type of activity. Step 2: see only that type. Typing in the search box looks across every type.
+  const TYPES = [
+    ['steps', 'Step by Step', 'Everyday jobs, one picture step at a time'],
+    ['think', 'Solve a Problem', 'What to do when something unexpected happens'],
+    ['conversation', 'Have a Conversation', 'Chat about a topic: comments and questions'],
+    ['explain', 'How Do You…?', 'Explain how to do something, clearly and in order'],
+    ['recall', 'Remember My Day', `Remember real things ${name} did`],
+    ['category', 'Memory Test', 'Name or add things that belong in a group'],
+    ['listen', 'Listen to a Story', 'A short story, then questions about it'],
+  ].filter(([k]) => items.some((i) => i.mode === k));
+  const typeTitle = (k) => TYPES.find(([key]) => key === k)?.[1] || modeLabel(k);
+  const body = h('div', { class: 'lib-body' });
+  const card = (it) => h('article', { class: 'lib-card' },
+    it.images.length ? h('div', { class: 'lib-pics', 'aria-hidden': 'true' }, it.images.slice(0, 5).map((id) => h('img', { src: `/symbols/${id.slice(4)}.svg`, alt: '', class: 'sym', loading: 'lazy' }))) : null,
+    h('h3', {}, it.title),
+    h('p', { class: 'muted lib-meta' }, [typeTitle(it.mode), `${it.count} ${it.unit}`, it.level, `ages ${it.age}`].filter(Boolean).join(' · ')),
+    h('p', { class: 'lib-tags' }, it.tags.map((t) => h('span', { class: 'tag' }, t))),
+    h('ul', { class: 'lib-peek' }, it.lines.slice(0, 2).map((t) => h('li', {}, t)), it.lines.length > 2 ? h('li', { class: 'muted' }, `and ${it.lines.length - 2} more`) : null),
+    h('div', { class: 'row-actions' },
+      h('button', { class: 'btn btn-quiet', onclick: () => viewItem(it) }, 'View'),
+      it.added
+        ? [h('span', { class: 'tag supported' }, it.added.status === 'draft' ? 'Added · draft' : 'Added'), h('button', { class: 'btn btn-quiet', onclick: () => { tab = 'activities'; renderShell(); } }, 'Open Activities')]
+        : h('button', { class: 'btn btn-primary', onclick: add(it) }, `Add to ${name}’s activities`)));
   function draw() {
     const needle = lib.q.trim().toLowerCase();
-    const shown = items.filter((i) => (!lib.module || modeLabel(i.mode) === lib.module) && (!lib.level || i.level === lib.level)
-      && (!needle || `${i.title} ${i.tags.join(' ')} ${i.lines.join(' ')}`.toLowerCase().includes(needle)));
-    out.replaceChildren(...(shown.length ? shown.map((it) => h('article', { class: 'lib-card' },
-      it.images.length ? h('div', { class: 'lib-pics', 'aria-hidden': 'true' }, it.images.slice(0, 5).map((id) => h('img', { src: `/symbols/${id.slice(4)}.svg`, alt: '', class: 'sym', loading: 'lazy' }))) : null,
-      h('h3', {}, it.title),
-      h('p', { class: 'muted lib-meta' }, [modeLabel(it.mode), modes[it.mode]?.activityName, `${it.count} ${it.unit}`, it.level, `ages ${it.age}`].filter(Boolean).join(' · ')),
-      h('p', { class: 'lib-tags' }, it.tags.map((t) => h('span', { class: 'tag' }, t))),
-      h('ul', { class: 'lib-peek' }, it.lines.slice(0, 2).map((t) => h('li', {}, t)), it.lines.length > 2 ? h('li', { class: 'muted' }, `and ${it.lines.length - 2} more`) : null),
-      h('div', { class: 'row-actions' },
-        h('button', { class: 'btn btn-quiet', onclick: () => viewItem(it) }, 'View'),
-        it.added
-          ? [h('span', { class: 'tag supported' }, it.added.status === 'draft' ? 'Added · draft' : 'Added'), h('button', { class: 'btn btn-quiet', onclick: () => { tab = 'activities'; renderShell(); } }, 'Open Activities')]
-          : h('button', { class: 'btn btn-primary', onclick: add(it) }, `Add to ${name}’s activities`)))) : [h('p', { class: 'panel' }, 'Nothing matches. Try clearing the filters.')]));
+    if (!needle && !lib.type) {
+      body.replaceChildren(h('div', { class: 'lib-tiles' }, TYPES.map(([key, title, blurb]) => {
+        const of = items.filter((i) => i.mode === key);
+        const added = of.filter((i) => i.added).length;
+        return h('button', { class: 'lib-tile', onclick: () => { lib.type = key; lib.level = ''; draw(); window.scrollTo?.({ top: 0 }); }, 'aria-label': `${title}, ${of.length} activities` },
+          h('strong', {}, title), h('span', {}, blurb),
+          h('small', { class: 'muted' }, `${of.length} ${of.length === 1 ? 'activity' : 'activities'}${added ? ` · ${added} added` : ''}`));
+      })));
+      return;
+    }
+    const pool = needle ? items : items.filter((i) => i.mode === lib.type);
+    const levels = [...new Set(pool.map((i) => i.level).filter(Boolean))];
+    if (!levels.includes(lib.level)) lib.level = '';
+    const shown = pool.filter((i) => (needle || !lib.level || i.level === lib.level)
+      && (!needle || `${i.title} ${i.tags.join(' ')} ${i.lines.join(' ')} ${typeTitle(i.mode)}`.toLowerCase().includes(needle)));
+    const lvlSel = !needle && levels.length > 1
+      ? h('select', { 'aria-label': 'Level' }, h('option', { value: '' }, 'Any level'), levels.map((l) => h('option', { value: l, selected: lib.level === l }, l)))
+      : null;
+    lvlSel?.addEventListener('change', () => { lib.level = lvlSel.value; draw(); });
+    body.replaceChildren(
+      h('div', { class: 'lib-head' },
+        needle ? null : h('button', { class: 'btn btn-quiet', onclick: () => { lib.type = ''; lib.level = ''; draw(); } }, '← All types'),
+        h('h3', {}, needle ? `Results for “${lib.q.trim()}”` : typeTitle(lib.type)),
+        h('span', { class: 'muted' }, `${shown.length} ${shown.length === 1 ? 'activity' : 'activities'}`),
+        lvlSel),
+      h('div', { class: 'lib-grid' }, shown.length ? shown.map(card) : [h('p', { class: 'panel' }, needle ? 'Nothing matches that search.' : 'Nothing here yet.')]));
   }
-  modSel.addEventListener('change', () => { lib.module = modSel.value; draw(); });
-  lvlSel.addEventListener('change', () => { lib.level = lvlSel.value; draw(); });
   search.addEventListener('input', () => { lib.q = search.value; draw(); });
   draw();
   root.append(
     h('p', { class: 'muted', style: 'max-width:70ch' }, `Ready-made activities to add to ${name}’s own. Each one is added as a draft, so you or the therapist can check the wording and pictures, change anything, and then make it ready. The library itself never changes.`),
-    h('div', { class: 'review-filters' }, modSel, lvlSel, search),
-    out,
+    h('div', { class: 'review-filters' }, search),
+    body,
     h('p', { class: 'muted', style: 'max-width:70ch;font-size:.85rem' }, 'Easy and Medium on tasks are only a first guide; the therapist knows what suits each learner. Text written for TALVO. ', pictureCredit, '.'));
 }
 
