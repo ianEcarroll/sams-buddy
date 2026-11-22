@@ -8,7 +8,7 @@ const slugs = new Set(JSON.parse(readFileSync(new URL('../../web/public/symbols/
 
 test('every library item is complete and every picture exists', () => {
   assert.ok(LIBRARY.length >= 30);
-  for (const mode of ['steps', 'think', 'conversation', 'explain', 'category', 'listen', 'recall', 'story']) assert.ok(LIBRARY.some((i) => i.mode === mode), `no ${mode} items`);
+  for (const mode of ['steps', 'think', 'conversation', 'explain', 'category', 'listen', 'recall', 'story', 'object', 'follow']) assert.ok(LIBRARY.some((i) => i.mode === mode), `no ${mode} items`);
   assert.deepEqual(libraryProblems(slugs), []);
 });
 
@@ -156,4 +156,29 @@ test('Tell a story sets have one picture per event, real pictures, and show them
   assert.match(p, /no-such-picture not found/);
   assert.match(p, /no outcome/);
   assert.match(p, /no who/);
+});
+
+test('Describe a picture and Follow on screen items are complete and read well', () => {
+  const objs = LIBRARY.filter((i) => i.mode === 'object');
+  const fols = LIBRARY.filter((i) => i.mode === 'follow');
+  assert.ok(objs.length >= 5 && fols.length >= 4);
+  assert.deepEqual(fols.map((f) => f.level), ['Easy', 'Easy', 'Medium', 'Harder']);
+  const first = libraryCard(libraryById('follow-shapes-2'));
+  assert.equal(first.lines[0], 'First, put the yellow star in box 2. Then, put the green square in box 4.');
+  assert.equal(libraryCard(libraryById('describe-bathroom')).images.length, 6);
+  const d = JSON.stringify(libraryDetail(libraryById('describe-kitchen')));
+  assert.match(d, /Words that show the use/);
+  const f = libraryDetail(libraryById('follow-pictures-2'));
+  assert.ok(f.parts[0].images.length >= 2);
+  const bad = [
+    { id: 'o', mode: 'object', title: 'O', tags: ['a'], content: { items: [{ image_id: 'sym:no-such-picture', name: 'x', function: '', category: 'c', category_alternatives: [], function_keywords: [] }, {}, {}] } },
+    { id: 'f', mode: 'follow', title: 'F', tags: ['a'], content: { items: [{ title: 'x', tokens: ['red-circle', 'red-circle'], steps: [{ type: 'box', token: 'red-circle', box: 9 }] }, { title: 'y', tokens: ['red-circle', 'blue-square'], steps: [{ type: 'next_to', token: 'red-circle', target: 'red-circle' }, { type: 'box', token: 'blue-square', box: 2 }, { type: 'box', token: 'red-circle', box: 2 }] }] } },
+  ];
+  const p = libraryProblems(slugs, bad).join(' | ');
+  assert.match(p, /no-such-picture not found/);
+  assert.match(p, /picture 1: no function/);
+  assert.match(p, /choose 2 to 4 different shapes or objects/);
+  assert.match(p, /box must be 1 to 4/);
+  assert.match(p, /needs a different one to put it next to/);
+  assert.match(p, /two steps use the same box/);
 });

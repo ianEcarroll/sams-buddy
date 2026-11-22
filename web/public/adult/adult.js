@@ -320,6 +320,8 @@ async function renderLibrary(root) {
     ['conversation', 'Have a Conversation', 'Chat about a topic: comments and questions'],
     ['explain', 'How Do You…?', 'Explain how to do something, clearly and in order'],
     ['story', 'Tell a Story', 'Look at the pictures and tell what happens, in order'],
+    ['object', 'Describe a Picture', 'Name it, say what group it is in and what it is for'],
+    ['follow', 'Follow on Screen', 'Listen, then move shapes or pictures in order'],
     ['recall', 'Remember My Day', `Remember real things ${name} did`],
     ['category', 'Memory Test', 'Name or add things that belong in a group'],
     ['listen', 'Listen to a Story', 'A short story, then questions about it'],

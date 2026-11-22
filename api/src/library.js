@@ -4,6 +4,8 @@
 // personalised in Activities afterwards. The original is never changed.
 //
 // Text is TALVO's own. Pictures are Mulberry Symbols (CC BY-SA 4.0, © Steve Lee), stored as "sym:<name>".
+import { FOLLOW_OBJECTS, FOLLOW_STEP_TYPES, FOLLOW_BOXES, isFollowToken, followInstruction, tokenName } from './coach/modes.js';
+
 export const LIBRARY_SOURCE = 'Text written for TALVO';
 export const LIBRARY_PICTURE_CREDIT = 'Pictures: Mulberry Symbols © Steve Lee, CC BY-SA 4.0 (mulberrysymbols.org)';
 
@@ -424,11 +426,109 @@ LIBRARY.push(
   ]),
 );
 
+// ---- Describe a picture: name it, say what group it belongs to, and say what it is for. "alts" are other names that count;
+// the groups and use words are what Foxy listens for. Any sensible answer is also accepted.
+const object = (id, title, tags, items) => ({
+  id: `describe-${id}`, mode: 'object', title,
+  goal: 'Name, group and use in one sentence',
+  plan_goal: 'other', level: null, tags, age: '10–20', source: LIBRARY_SOURCE,
+  content: { items },
+});
+const obj = (pic, name, alts, category, categories, use, keywords) => ({ image_id: `sym:${pic}`, name, name_alternatives: alts, category, category_alternatives: categories, function: use, function_keywords: keywords });
+const WASH = ['things for washing', 'things for keeping clean', 'personal care', 'hygiene'];
+const EAT = ['kitchen things', 'things for eating', 'things for cooking'];
+const SCHOOL_CATS = ['school', 'stationery', 'things for school'];
+const WEAR = ['things you wear', 'clothing', 'things to put on'];
+const TRAVEL = ['vehicles', 'ways to travel', 'ways to get around'];
+
+LIBRARY.push(
+  object('bathroom', 'Describe: in the bathroom', ['bathroom', 'daily living'], [
+    obj('toothbrush', 'toothbrush', ['tooth brush'], 'bathroom things', ['bathroom', ...WASH], 'brush your teeth', ['teeth', 'tooth', 'brush', 'clean']),
+    obj('toothpaste', 'toothpaste', [], 'bathroom things', ['bathroom', ...WASH], 'clean your teeth', ['teeth', 'tooth', 'brush', 'clean']),
+    obj('soap', 'soap', ['bar of soap'], 'bathroom things', ['bathroom', ...WASH], 'wash your hands', ['wash', 'hands', 'clean', 'germs']),
+    obj('towel', 'towel', [], 'bathroom things', ['bathroom', ...WASH], 'dry yourself after a bath or shower', ['dry', 'wet', 'bath', 'shower', 'hands']),
+    obj('comb', 'comb', ['hair comb'], 'bathroom things', ['bathroom', 'grooming', 'things for hair', 'personal care'], 'tidy your hair', ['hair', 'tidy', 'brush', 'neat']),
+    obj('shampoo', 'shampoo', ['hair wash'], 'bathroom things', ['bathroom', ...WASH], 'wash your hair', ['hair', 'wash', 'clean', 'shower']),
+  ]),
+  object('kitchen', 'Describe: in the kitchen', ['kitchen', 'food'], [
+    obj('fridge', 'fridge', ['refrigerator'], 'kitchen things', ['kitchen', 'appliances', 'electrical things'], 'keep food cold and fresh', ['cold', 'food', 'fresh', 'keep']),
+    obj('spoon', 'spoon', ['teaspoon'], 'cutlery', ['kitchen things', 'things for eating', 'knives and forks'], 'eat soup or cereal', ['soup', 'cereal', 'eat', 'stir']),
+    obj('fork', 'fork', [], 'cutlery', ['kitchen things', 'things for eating', 'knives and forks'], 'pick up food to eat', ['eat', 'food', 'pick', 'spear']),
+    obj('knife', 'knife', [], 'cutlery', ['kitchen things', 'things for eating', 'knives and forks', 'tools'], 'cut food', ['cut', 'food', 'slice', 'chop']),
+    obj('plate', 'plate', ['dinner plate'], 'tableware', EAT, 'put your food on', ['food', 'eat', 'dinner', 'meal']),
+    obj('saucepan', 'saucepan', ['pan', 'pot'], 'kitchen things', ['pots and pans', 'cooking things', ...EAT], 'cook food on the hob', ['cook', 'boil', 'hob', 'food', 'pasta']),
+  ]),
+  object('school', 'Describe: school things', ['school'], [
+    obj('pencil', 'pencil', [], 'school things', SCHOOL_CATS, 'write or draw', ['write', 'draw', 'pencil']),
+    obj('pen', 'pen', ['biro'], 'school things', [...SCHOOL_CATS, 'writing things'], 'write with ink', ['write', 'ink', 'writing']),
+    obj('scissors', 'scissors', [], 'school things', [...SCHOOL_CATS, 'craft things'], 'cut paper', ['cut', 'paper', 'card']),
+    obj('glue', 'glue', ['glue stick'], 'school things', [...SCHOOL_CATS, 'craft things'], 'stick paper together', ['stick', 'paper', 'join']),
+    obj('calculator', 'calculator', [], 'school things', [...SCHOOL_CATS, 'maths things', 'technology'], 'work out sums', ['sum', 'sums', 'maths', 'add', 'numbers', 'count']),
+    obj('school-bag', 'school bag', ['bag', 'backpack', 'rucksack'], 'school things', [...SCHOOL_CATS, 'things you carry', 'bags'], 'carry your books to school', ['carry', 'books', 'school']),
+  ]),
+  object('clothes', 'Describe: clothes', ['clothes', 'daily living'], [
+    obj('coat', 'coat', ['jacket'], 'clothes', [...WEAR, 'winter clothes', 'outdoor clothes'], 'keep you warm and dry outside', ['warm', 'dry', 'cold', 'rain', 'outside']),
+    obj('socks', 'socks', ['sock'], 'clothes', WEAR, 'keep your feet warm and comfy in shoes', ['feet', 'warm', 'shoes', 'comfy']),
+    obj('t-shirt', 't-shirt', ['tee shirt', 'shirt', 'top'], 'clothes', WEAR, 'wear on the top half of your body', ['wear', 'top', 'body', 'summer']),
+    obj('trousers', 'trousers', ['pants', 'jeans'], 'clothes', WEAR, 'cover your legs', ['legs', 'wear', 'cover']),
+    obj('shoe-mans', 'shoes', ['shoe', 'trainers'], 'clothes', [...WEAR, 'footwear'], 'protect your feet when you walk', ['feet', 'walk', 'protect']),
+    obj('gloves', 'gloves', ['glove'], 'clothes', [...WEAR, 'winter clothes'], 'keep your hands warm', ['hands', 'warm', 'cold']),
+  ]),
+  object('transport', 'Describe: getting around', ['transport', 'out and about'], [
+    obj('bus', 'bus', [], 'transport', [...TRAVEL, 'public transport'], 'travel with lots of other people', ['travel', 'people', 'ride', 'go', 'public']),
+    obj('train', 'train', [], 'transport', [...TRAVEL, 'public transport'], 'travel a long way on rails', ['travel', 'rails', 'track', 'station', 'far']),
+    obj('bicycle', 'bike', ['bicycle'], 'transport', [...TRAVEL, 'sports things'], 'ride to get somewhere', ['ride', 'cycle', 'travel', 'go', 'get']),
+    obj('car', 'car', [], 'transport', TRAVEL, 'drive to places', ['drive', 'travel', 'road', 'go']),
+    obj('aeroplane', 'plane', ['aeroplane', 'airplane'], 'transport', TRAVEL, 'fly to faraway places', ['fly', 'air', 'travel', 'holiday', 'far']),
+    obj('boat', 'boat', ['ship'], 'transport', TRAVEL, 'travel across water', ['water', 'sea', 'sail', 'travel', 'river']),
+  ]),
+);
+
+// ---- Follow on screen: listen to the whole instruction, then move shapes or pictures into boxes in order. Easy sets have two
+// steps, Medium three, Harder four. Uses the same shapes, pictures and step types as the activity editor.
+const follow = (id, title, level, tags, items) => ({
+  id: `follow-${id}`, mode: 'follow', title,
+  goal: 'Listen to the whole instruction, then follow the steps in order',
+  plan_goal: 'instructions', level, tags, age: '10–20', source: LIBRARY_SOURCE,
+  content: { items },
+});
+const fo = (title, tokens, steps) => ({ title, tokens, steps });
+const box = (token, n) => ({ type: 'box', token, box: n });
+const touch = (token) => ({ type: 'touch', token });
+const nextTo = (token, target) => ({ type: 'next_to', token, target });
+const leftOf = (token, target) => ({ type: 'left_of', token, target });
+const rightOf = (token, target) => ({ type: 'right_of', token, target });
+
+LIBRARY.push(
+  follow('shapes-2', 'Follow on screen: two steps with shapes', 'Easy', ['shapes', 'two steps'], [
+    fo('Yellow star, green square', ['yellow-star', 'green-square'], [box('yellow-star', 2), box('green-square', 4)]),
+    fo('Touch, then move', ['blue-triangle', 'red-heart'], [touch('red-heart'), box('red-heart', 1)]),
+    fo('Purple circle and orange square', ['purple-circle', 'orange-square', 'green-star'], [box('purple-circle', 3), nextTo('orange-square', 'purple-circle')]),
+    fo('Red star on the left', ['red-star', 'blue-heart'], [box('red-star', 4), leftOf('blue-heart', 'red-star')]),
+  ]),
+  follow('pictures-2', 'Follow on screen: two steps with pictures', 'Easy', ['pictures', 'two steps'], [
+    fo('Apple and mug', ['obj-apple', 'obj-mug'], [box('obj-apple', 1), box('obj-mug', 3)]),
+    fo('Touch the key', ['obj-phone', 'obj-key'], [touch('obj-key'), box('obj-key', 2)]),
+    fo('Pencil and scissors', ['obj-pencil', 'obj-scissors', 'obj-clock'], [box('obj-pencil', 2), nextTo('obj-scissors', 'obj-pencil')]),
+    fo('Banana and sandwich', ['obj-sandwich', 'obj-banana'], [box('obj-banana', 4), leftOf('obj-sandwich', 'obj-banana')]),
+  ]),
+  follow('three', 'Follow on screen: three steps', 'Medium', ['shapes', 'pictures', 'three steps'], [
+    fo('Red circle, blue square', ['red-circle', 'blue-square', 'yellow-star'], [touch('red-circle'), box('red-circle', 2), nextTo('blue-square', 'red-circle')]),
+    fo('Green triangle and purple heart', ['green-triangle', 'purple-heart', 'orange-square'], [box('green-triangle', 1), rightOf('purple-heart', 'green-triangle'), { type: 'say_right' }]),
+    fo('Money in box four', ['obj-umbrella', 'obj-bus', 'obj-money'], [touch('obj-money'), box('obj-money', 4), { type: 'say_box', box: 4 }]),
+    fo('Guitar and drum', ['obj-guitar', 'obj-drum', 'obj-headphones'], [box('obj-guitar', 1), nextTo('obj-drum', 'obj-guitar'), { type: 'say_left' }]),
+  ]),
+  follow('four', 'Follow on screen: four steps', 'Harder', ['shapes', 'pictures', 'four steps'], [
+    fo('Four shapes', ['red-circle', 'blue-square', 'green-triangle', 'yellow-star'], [box('red-circle', 1), box('blue-square', 2), rightOf('green-triangle', 'blue-square'), { type: 'say_box', box: 2 }]),
+    fo('Key, phone and wallet', ['obj-key', 'obj-phone', 'obj-wallet'], [touch('obj-phone'), box('obj-phone', 1), box('obj-key', 3), { type: 'say_box', box: 3 }]),
+  ]),
+);
+
 export const libraryById = (id) => LIBRARY.find((x) => x.id === id) || null;
 
 // What the Library page shows for each item: no questions or answers, just enough to choose.
 const recallPrompt = (x) => `Tell me ${NUM_WORDS[x.target] || x.target} thing${x.target === 1 ? '' : 's'} you did ${x.when}.`;
-const UNITS = { steps: 'steps', think: 'situations', conversation: 'topics', explain: 'explanations', category: 'groups', listen: 'questions', recall: 'prompts', story: 'stories' };
+const UNITS = { steps: 'steps', think: 'situations', conversation: 'topics', explain: 'explanations', category: 'groups', listen: 'questions', recall: 'prompts', story: 'stories', object: 'pictures', follow: 'instructions' };
 export function libraryLines(item) {
   const items = item.content.items;
   if (item.mode === 'steps') return items[0].steps.map((x) => x.text);
@@ -438,6 +538,8 @@ export function libraryLines(item) {
   if (item.mode === 'listen') return items[0].questions.map((x) => x.question);
   if (item.mode === 'recall') return items.map((x) => recallPrompt(x));
   if (item.mode === 'story') return items.map((x) => `${x.title}: ${x.events[0]}…`);
+  if (item.mode === 'object') return items.map((x) => x.name);
+  if (item.mode === 'follow') return items.map((x) => followInstruction(x));
   return items.map((x) => `${x.topic}: ${x.opener}`);
 }
 export function libraryCard(item, added = null) {
@@ -445,7 +547,7 @@ export function libraryCard(item, added = null) {
   return {
     id: item.id, mode: item.mode, title: item.title, goal: item.goal, level: item.level, tags: item.tags, age: item.age, source: item.source,
     count: lines.length, unit: UNITS[item.mode] || 'items', lines,
-    images: item.mode === 'steps' ? item.content.items[0].steps.map((x) => x.image_id) : item.mode === 'story' ? item.content.items.map((x) => x.image_ids[0]) : [],
+    images: item.mode === 'steps' ? item.content.items[0].steps.map((x) => x.image_id) : item.mode === 'story' ? item.content.items.map((x) => x.image_ids[0]) : item.mode === 'object' ? item.content.items.map((x) => x.image_id) : [],
     added, // { id, status } of the learner's copy, or null
   };
 }
@@ -470,6 +572,10 @@ export function libraryDetail(item) {
       x.kind === 'add' ? ['Foxy says', x.given.join(', ')] : ['The task', `Name ${x.target} things that belong in this group`],
       ...(x.kind === 'add' ? [['The learner', 'adds a word that fits']] : []),
       ['Example words that are accepted (any real member of the group is also accepted)', x.accepted]] }));
+  } else if (item.mode === 'object') {
+    parts = list.map((x) => ({ heading: x.name.charAt(0).toUpperCase() + x.name.slice(1), image: x.image_id, rows: [['Name', [x.name, ...x.name_alternatives].join(', ')], ['Group', [x.category, ...x.category_alternatives]], ['What it is for', x.function], ['Words that show the use', x.function_keywords]] }));
+  } else if (item.mode === 'follow') {
+    parts = list.map((x) => ({ heading: x.title, images: x.tokens.filter((k) => k.startsWith('obj-')).map((k) => `sym:${FOLLOW_OBJECTS[k.slice(4)].file}`), rows: [['Foxy says', followInstruction(x)], ['Shapes or pictures on screen', x.tokens.map(tokenName)]] }));
   } else if (item.mode === 'story') {
     parts = list.map((x) => ({ heading: x.title, images: x.image_ids, rows: [['Who', x.who], ['Where', x.setting], ['What happens, in order', x.events], ['How it ended', x.outcome], ...(x.target_words?.length ? [['Words Foxy listens for', x.target_words]] : [])] }));
   } else if (item.mode === 'recall') {
@@ -542,6 +648,30 @@ export function libraryProblems(symbolSlugs, items = LIBRARY) {
         if ((x.accepted || []).filter(text).length < 8) out.push(`${where}: needs at least eight accepted words`);
         if (x.kind === 'add') { if ((x.given || []).filter(text).length < 2) out.push(`${where}: needs at least two given words`); }
         else if (!(Number.isInteger(x.target) && x.target >= 1 && x.target <= 8)) out.push(`${where}: target must be 1 to 8`);
+      });
+    } else if (it.mode === 'object') {
+      if (list.length < 3 || list.length > 8) out.push(`${it.id}: ${list.length} pictures (want 3 to 8)`);
+      list.forEach((x, i) => {
+        const where = `${it.id} picture ${i + 1}`;
+        for (const k of ['name', 'category', 'function']) if (!text(x[k])) out.push(`${where}: no ${k}`);
+        if (!x.image_id?.startsWith('sym:') || !symbolSlugs.has(x.image_id.slice(4))) out.push(`${where}: picture ${x.image_id} not found`);
+        if (!(x.category_alternatives || []).length || !(x.function_keywords || []).length) out.push(`${where}: needs other accepted groups and use words`);
+      });
+    } else if (it.mode === 'follow') {
+      if (list.length < 2 || list.length > 6) out.push(`${it.id}: ${list.length} instructions (want 2 to 6)`);
+      list.forEach((x, i) => {
+        const where = `${it.id} instruction ${i + 1}`;
+        const toks = x.tokens || [];
+        if (toks.length < 2 || toks.length > 4 || !toks.every(isFollowToken) || new Set(toks).size !== toks.length) out.push(`${where}: choose 2 to 4 different shapes or objects`);
+        const steps = x.steps || [];
+        if (!steps.length || steps.length > 4) out.push(`${where}: ${steps.length} steps (want 1 to 4)`);
+        steps.forEach((st, k) => {
+          if (!FOLLOW_STEP_TYPES.includes(st?.type)) out.push(`${where} step ${k + 1}: needs a type`);
+          else if (!st.type.startsWith('say_') && !toks.includes(st.token)) out.push(`${where} step ${k + 1}: not one of this instruction's shapes or objects`);
+          if (['box', 'say_box'].includes(st?.type) && !(Number(st.box) >= 1 && Number(st.box) <= FOLLOW_BOXES)) out.push(`${where} step ${k + 1}: box must be 1 to ${FOLLOW_BOXES}`);
+          if (['next_to', 'left_of', 'right_of'].includes(st?.type) && (!toks.includes(st.target) || st.target === st.token)) out.push(`${where} step ${k + 1}: needs a different one to put it next to`);
+        });
+        if (new Set(steps.filter((st) => st.type === 'box').map((st) => st.box)).size !== steps.filter((st) => st.type === 'box').length) out.push(`${where}: two steps use the same box`);
       });
     } else if (it.mode === 'story') {
       if (list.length < 2 || list.length > 5) out.push(`${it.id}: ${list.length} stories (want 2 to 5)`);
