@@ -1387,6 +1387,10 @@ function reviewCharts(days, state) {
         const n = allItems(k);
         return h('span', { class: `ch-day ${n ? (n > 3 ? 'many' : 'some') : ''}`, title: `${dayShort(k)}: ${n ? `${n} item${n === 1 ? '' : 's'}` : 'no practice'}` }, String(Number(k.slice(8))));
       })),
+    h('div', { class: 'ch-legend' },
+      h('span', {}, h('i', { class: 'sw none' }), 'No practice'),
+      h('span', {}, h('i', { class: 'sw some' }), '1 to 3 items'),
+      h('span', {}, h('i', { class: 'sw many' }), '4 or more items')),
     h('p', { class: 'muted ch-note' }, 'Shows every activity. Regular short practice usually matters more than long sessions.'));
 
   return h('div', { class: 'ch-grid' }, independence, calendar);

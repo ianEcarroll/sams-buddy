@@ -524,6 +524,44 @@ LIBRARY.push(
   ]),
 );
 
+// ---- Harder sets: five-picture stories and longer explanations for learners who have done the Easy and Medium ones.
+LIBRARY.push(
+  tell('harder', 'Tell a story: five pictures', 'Harder', ['pictures', 'five events'], [
+    pic('A flat tyre', 'Ravi', 'the road', ['Ravi rides his bike to the shop', 'the tyre goes flat', 'Ravi pushes the bike home', 'Dad mends the tyre', 'Ravi puts on his helmet and rides again'], ['bicycle', 'flat-tyre', 'walk-to', 'mend', 'helmet'], 'the bike works again', ['flat', 'repair']),
+    pic('Growing a flower', 'Amy', 'the garden', ['Amy gets the seeds', 'Amy plants them in the soil', 'Amy waters the plants every day', 'a small plant grows', 'a flower opens'], ['seeds', 'plant-to', 'water-plants-to', 'seedling', 'flower'], 'Amy is proud of her flower', ['patient', 'grow']),
+    pic('A fall at the park', 'Jo, a kind boy', 'the park', ['Jo runs across the park', 'Jo trips and falls over', 'a boy comes to help him up', 'Jo gets a plaster', 'Jo goes back on the swing'], ['run-to', 'fall-over-to', 'help-to', 'plaster', 'swing'], 'Jo felt better', ['trip', 'helpful']),
+  ]),
+  explain('life', 'Explain: looking after myself', ['daily living', 'independence'], [
+    { title: 'Washing my clothes', question: 'Tell me how you wash your clothes.', points: [
+      pt('put the dirty clothes in the laundry basket', 'Where do dirty clothes go?', 'First I put the dirty clothes in ___.', 'First I put the dirty clothes in the laundry basket.'),
+      pt('put them in the washing machine, with washing powder, and choose the setting', 'What do you do at the machine?', 'Then I put them in the ___.', 'Then I put them in the washing machine with the powder and choose the setting.'),
+      pt('take them out when the machine has finished', 'When do you take them out?', 'I take them out when ___.', 'I take them out when the machine has finished.'),
+      pt('hang them up to dry or put them in the dryer', 'How do they get dry?', 'Then I ___.', 'Then I hang them up to dry.'),
+      pt('fold them and put them away', 'What do you do last?', 'Last I ___.', 'Last I fold them and put them away.'),
+    ] },
+    { title: 'Feeling ill at school', question: 'Tell me what you do if you feel ill at school.', points: [
+      pt('tell my teacher or an adult straight away', 'Who do you tell?', 'First I tell ___.', 'First I tell my teacher.'),
+      pt('say what is wrong, such as a sore tummy or a headache', 'What do you say?', 'I say ___.', 'I say I have a headache.'),
+      pt('go to the school office or the nurse if they say so', 'Where might you go?', 'They might send me to ___.', 'They might send me to the school office.'),
+      pt('wait for a grown-up to phone home', 'What happens next?', 'Then ___.', 'Then a grown-up phones home.'),
+    ] },
+    { title: 'Asking for help in a shop', question: 'Tell me how you ask for help in a shop when you cannot find something.', points: [
+      pt('look around for a person who works there', 'Who do you look for?', 'First I look for ___.', 'First I look for a person who works there.'),
+      pt('say excuse me and wait for them to look at me', 'What do you say first?', 'I say ___.', 'I say excuse me.'),
+      pt('say what I am looking for', 'What do you tell them?', 'I say I am looking for ___.', 'I say I am looking for the milk.'),
+      pt('listen to where it is and say thank you', 'What do you say at the end?', 'At the end I say ___.', 'At the end I say thank you.'),
+    ] },
+  ]),
+);
+
+// Levels are a first guide only: the therapist decides what is easy or hard for each learner.
+const SET_LEVELS = {
+  'think-home': 'Easy', 'think-school': 'Easy', 'think-out': 'Medium', 'think-friends': 'Medium', 'think-travel': 'Harder', 'think-work': 'Harder',
+  'talk-favourites': 'Easy', 'talk-my-day': 'Easy', 'talk-weekend': 'Medium', 'talk-hobbies': 'Medium', 'talk-family': 'Medium', 'talk-school': 'Medium', 'talk-out': 'Medium',
+  'explain-routines': 'Easy', 'explain-things': 'Medium', 'explain-out': 'Medium', 'explain-life': 'Harder',
+};
+for (const it of LIBRARY) if (SET_LEVELS[it.id]) it.level = SET_LEVELS[it.id];
+
 export const libraryById = (id) => LIBRARY.find((x) => x.id === id) || null;
 
 // What the Library page shows for each item: no questions or answers, just enough to choose.

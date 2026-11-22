@@ -239,6 +239,7 @@ details > summary { cursor: pointer; font-weight: 700; padding: 6px 0; }
 .ch-legend span { display: inline-flex; align-items: center; gap: 6px; }
 .ch-legend .sw { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
 .ch-legend .sw.own { background: var(--met); } .ch-legend .sw.help { background: var(--notyet); opacity: .75; }
+.ch-legend .sw.none { background: var(--none-soft); box-shadow: inset 0 0 0 1px var(--ink-soft); } .ch-legend .sw.some { background: var(--met-soft); box-shadow: inset 0 0 0 1px var(--met); } .ch-legend .sw.many { background: var(--met); }
 .ch-cal { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; max-width: 360px; }
 .ch-wd { text-align: center; font-size: .72rem; color: var(--ink-soft); font-weight: 700; }
 .ch-day { aspect-ratio: 1; display: grid; place-items: center; border-radius: 8px; font-size: .75rem; background: var(--none-soft); color: var(--ink-soft); }

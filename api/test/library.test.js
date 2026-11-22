@@ -68,9 +68,9 @@ test('Think and Talk items copy into drafts with the right plan goal and no step
   assert.deepEqual([c.mode, c.plan_goal], ['conversation', 'conversation']);
 });
 
-test('Think and Talk cards list their situations and topics, with no level', () => {
+test('Think and Talk cards list their situations and topics, with a level', () => {
   const t = libraryCard(libraryById('think-home'));
-  assert.equal(t.unit, 'situations'); assert.equal(t.level, null); assert.deepEqual(t.images, []);
+  assert.equal(t.unit, 'situations'); assert.equal(t.level, 'Easy'); assert.deepEqual(t.images, []);
   assert.match(t.lines[0], /^The wifi stops: /);
   const c = libraryCard(libraryById('talk-hobbies'));
   assert.equal(c.unit, 'topics'); assert.match(c.lines[0], /^video games: /);
@@ -181,4 +181,15 @@ test('Describe a picture and Follow on screen items are complete and read well',
   assert.match(p, /box must be 1 to 4/);
   assert.match(p, /needs a different one to put it next to/);
   assert.match(p, /two steps use the same box/);
+});
+
+test('Think, Talk, Explain and Story sets have levels, and the harder sets are longer', () => {
+  for (const mode of ['think', 'conversation', 'explain', 'story']) {
+    const levels = new Set(LIBRARY.filter((i) => i.mode === mode).map((i) => i.level));
+    assert.ok([...levels].every((l) => ['Easy', 'Medium', 'Harder'].includes(l)), `${mode} has an unlevelled set`);
+    assert.ok(levels.size >= 2, `${mode} needs at least two levels`);
+  }
+  const harder = LIBRARY.find((i) => i.id === 'tell-harder');
+  assert.ok(harder.content.items.every((s) => s.events.length === 5 && s.image_ids.length === 5));
+  assert.ok(LIBRARY.find((i) => i.id === 'explain-life').content.items.every((x) => x.points.length >= 4));
 });
