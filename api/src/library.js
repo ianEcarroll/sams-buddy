@@ -392,11 +392,43 @@ LIBRARY.push(
   ]),
 );
 
+// ---- Story: "Tell a story". The learner looks at a short row of pictures and tells it: who, where, what happened first, next,
+// then and finally, and how it ended. One picture for each event. Easy sets have three events; Medium sets have four and a
+// few words Foxy listens for. Added copies can be changed or given the family's own photos.
+const tell = (id, title, level, tags, items) => ({
+  id: `tell-${id}`, mode: 'story', title,
+  goal: 'Who and where, events in order (First → Next → Then → Finally) and how it ended',
+  plan_goal: 'narrative', level, tags, age: '10–20', source: LIBRARY_SOURCE,
+  content: { items },
+});
+const pic = (title, who, setting, events, pictures, outcome, target_words = []) => ({
+  title, who, setting, events, image_ids: pictures.map((x) => `sym:${x}`), outcome,
+  ...(target_words.length ? { target_words, vocabulary_model: `One word that fits is "${target_words[0]}".` } : {}),
+});
+
+LIBRARY.push(
+  tell('easy', 'Tell a story: three pictures', 'Easy', ['pictures', 'first, next, then'], [
+    pic('A rainy walk', 'Mia', 'street', ['it starts to rain', 'Mia opens her umbrella', 'Mia walks to school'], ['rain', 'umbrella', 'school'], 'Mia stays dry'),
+    pic('Feeding the dog', 'Dan, the dog', 'kitchen', ['Dan gets the dog food', 'Dan puts the food in the bowl', 'the dog eats it'], ['dog-food', 'food-bowl-dog', 'dog'], 'the dog is happy'),
+    pic('A birthday cake', 'Mum, Ben', 'kitchen', ['Mum puts a candle on the cake', 'Ben makes a wish', 'everyone eats the cake'], ['cake', 'candle-2', 'celebrate-birthday'], 'it was a happy birthday'),
+  ]),
+  tell('out', 'Tell a story: out and about', 'Medium', ['pictures', 'out and about'], [
+    pic('A day at the beach', 'Zara, Leo', 'beach', ['Zara and Leo go to the beach', 'they play with the ball', 'they eat a picnic', 'they go home on the bus'], ['beach', 'ball-beach', 'picnic', 'bus'], 'they had a lovely day', ['picnic', 'delicious']),
+    pic('At the park', 'Jo', 'park', ['Jo goes to the park', 'Jo goes on the swing', 'Jo goes down the slide', 'Jo goes back home'], ['park-to', 'swing', 'slide', 'house'], 'Jo was tired and happy', ['swing', 'tired']),
+    pic('Catching the bus', 'Ali', 'bus stop', ['Ali waits for the bus', 'the bus arrives', 'Ali gets on the bus', 'Ali sits down'], ['wait-to', 'bus', 'get-on-bus-to', 'sit-to'], 'Ali is on his way', ['wait', 'arrives']),
+    pic('A football match', 'Max, the team', 'football pitch', ['Max kicks the ball', 'Max shoots at the goal', 'Max scores', 'the team claps'], ['kick-ball-to', 'football', 'score-goal-to', 'clap-hands-to'], 'the team won', ['score', 'cheer']),
+  ]),
+  tell('home', 'Tell a story: at home and in the cold', 'Medium', ['pictures', 'home'], [
+    pic('Making a pizza', 'Tom, his family', 'kitchen', ['Tom makes the pizza', 'Tom cooks it on the cooker', 'Tom cuts the pizza', 'the family eats it'], ['pizza', 'cooker', 'pizza-cutter', 'plate'], 'everyone enjoyed the pizza', ['delicious', 'slice']),
+    pic('A snow day', 'Lily', 'garden', ['it snows in the night', 'Lily puts on her hat, scarf and gloves', 'Lily goes on the sledge', 'Lily has a hot chocolate'], ['snow', 'scarf', 'sledge', 'hot-chocolate'], 'Lily felt warm and happy', ['freezing', 'warm']),
+  ]),
+);
+
 export const libraryById = (id) => LIBRARY.find((x) => x.id === id) || null;
 
 // What the Library page shows for each item: no questions or answers, just enough to choose.
 const recallPrompt = (x) => `Tell me ${NUM_WORDS[x.target] || x.target} thing${x.target === 1 ? '' : 's'} you did ${x.when}.`;
-const UNITS = { steps: 'steps', think: 'situations', conversation: 'topics', explain: 'explanations', category: 'groups', listen: 'questions', recall: 'prompts' };
+const UNITS = { steps: 'steps', think: 'situations', conversation: 'topics', explain: 'explanations', category: 'groups', listen: 'questions', recall: 'prompts', story: 'stories' };
 export function libraryLines(item) {
   const items = item.content.items;
   if (item.mode === 'steps') return items[0].steps.map((x) => x.text);
@@ -405,6 +437,7 @@ export function libraryLines(item) {
   if (item.mode === 'category') return items.map((x) => (x.kind === 'add' ? `Add a word to: ${x.given.join(', ')} (${x.group})` : `Name ${x.target} ${x.group}`));
   if (item.mode === 'listen') return items[0].questions.map((x) => x.question);
   if (item.mode === 'recall') return items.map((x) => recallPrompt(x));
+  if (item.mode === 'story') return items.map((x) => `${x.title}: ${x.events[0]}…`);
   return items.map((x) => `${x.topic}: ${x.opener}`);
 }
 export function libraryCard(item, added = null) {
@@ -412,7 +445,7 @@ export function libraryCard(item, added = null) {
   return {
     id: item.id, mode: item.mode, title: item.title, goal: item.goal, level: item.level, tags: item.tags, age: item.age, source: item.source,
     count: lines.length, unit: UNITS[item.mode] || 'items', lines,
-    images: item.mode === 'steps' ? item.content.items[0].steps.map((x) => x.image_id) : [],
+    images: item.mode === 'steps' ? item.content.items[0].steps.map((x) => x.image_id) : item.mode === 'story' ? item.content.items.map((x) => x.image_ids[0]) : [],
     added, // { id, status } of the learner's copy, or null
   };
 }
@@ -437,6 +470,8 @@ export function libraryDetail(item) {
       x.kind === 'add' ? ['Foxy says', x.given.join(', ')] : ['The task', `Name ${x.target} things that belong in this group`],
       ...(x.kind === 'add' ? [['The learner', 'adds a word that fits']] : []),
       ['Example words that are accepted (any real member of the group is also accepted)', x.accepted]] }));
+  } else if (item.mode === 'story') {
+    parts = list.map((x) => ({ heading: x.title, images: x.image_ids, rows: [['Who', x.who], ['Where', x.setting], ['What happens, in order', x.events], ['How it ended', x.outcome], ...(x.target_words?.length ? [['Words Foxy listens for', x.target_words]] : [])] }));
   } else if (item.mode === 'recall') {
     parts = list.map((x) => ({ heading: x.title, rows: [['Foxy asks', recallPrompt(x)], ['How many things to remember', String(x.target)], ['Clues', 'Add the things he really did, with a broad clue, a specific clue and a photo, in your own copy. Until then, any real thing he remembers counts.']] }));
   } else if (item.mode === 'listen') {
@@ -507,6 +542,16 @@ export function libraryProblems(symbolSlugs, items = LIBRARY) {
         if ((x.accepted || []).filter(text).length < 8) out.push(`${where}: needs at least eight accepted words`);
         if (x.kind === 'add') { if ((x.given || []).filter(text).length < 2) out.push(`${where}: needs at least two given words`); }
         else if (!(Number.isInteger(x.target) && x.target >= 1 && x.target <= 8)) out.push(`${where}: target must be 1 to 8`);
+      });
+    } else if (it.mode === 'story') {
+      if (list.length < 2 || list.length > 5) out.push(`${it.id}: ${list.length} stories (want 2 to 5)`);
+      list.forEach((x, i) => {
+        const where = `${it.id} story ${i + 1}`;
+        for (const k of ['title', 'who', 'setting', 'outcome']) if (!text(x[k])) out.push(`${where}: no ${k}`);
+        const n = (x.events || []).length;
+        if (n < 3 || n > 5 || !(x.events || []).every(text)) out.push(`${where}: ${n} events (want 3 to 5, all with words)`);
+        if ((x.image_ids || []).length !== n) out.push(`${where}: needs one picture for each event`);
+        for (const id of x.image_ids || []) if (!id.startsWith('sym:') || !symbolSlugs.has(id.slice(4))) out.push(`${where}: picture ${id} not found`);
       });
     } else if (it.mode === 'recall') {
       if (list.length < 2 || list.length > 6) out.push(`${it.id}: ${list.length} prompts (want 2 to 6)`);

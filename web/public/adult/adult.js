@@ -305,6 +305,7 @@ async function renderLibrary(root) {
         d.parts.map((p) => h('section', { class: 'lib-part' },
           h('h3', {}, p.heading),
           p.image ? h('img', { src: `/symbols/${p.image.slice(4)}.svg`, alt: '', class: 'sym lib-part-pic' }) : null,
+          p.images?.length ? h('div', { class: 'lib-part-pics', 'aria-hidden': 'true' }, p.images.map((id) => h('img', { src: `/symbols/${id.slice(4)}.svg`, alt: '', class: 'sym lib-part-pic' }))) : null,
           h('dl', {}, p.rows.flatMap(([label, v]) => [h('dt', {}, label), h('dd', {}, value(v))])))),
         h('div', { class: 'lib-view-foot' }, addBtn, h('button', { class: 'btn btn-quiet', onclick: close }, 'Close'))));
     (document.querySelector('main.adult') || document.body).append(overlay);
@@ -318,6 +319,7 @@ async function renderLibrary(root) {
     ['think', 'Solve a Problem', 'What to do when something unexpected happens'],
     ['conversation', 'Have a Conversation', 'Chat about a topic: comments and questions'],
     ['explain', 'How Do You…?', 'Explain how to do something, clearly and in order'],
+    ['story', 'Tell a Story', 'Look at the pictures and tell what happens, in order'],
     ['recall', 'Remember My Day', `Remember real things ${name} did`],
     ['category', 'Memory Test', 'Name or add things that belong in a group'],
     ['listen', 'Listen to a Story', 'A short story, then questions about it'],
