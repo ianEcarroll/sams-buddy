@@ -1,5 +1,5 @@
 // Caches the app shells only (the learner's app and the team app). Data and audio always come from the network.
-const CACHE = 'buddy-shell-v17';
+const CACHE = 'buddy-shell-v18';
 const SHELL = ['/', '/index.html', '/offline.html', '/styles.css', '/app.js', '/manifest.webmanifest', '/icons/favicon-64.png', '/icons/icon-192.png', '/icons/apple-touch-icon.png', '/img/talvo-fox.jpg',
   '/autoupdate.js', '/adult/', '/adult/adult.js', '/adult/manifest.webmanifest', '/icons/team/icon.svg', '/icons/team/icon-192.png', '/icons/team/apple-touch-icon.png'];
 self.addEventListener('install', (e) => e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting())));
