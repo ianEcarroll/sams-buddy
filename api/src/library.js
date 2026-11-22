@@ -192,14 +192,182 @@ LIBRARY.push(
   ]),
 );
 
+// ---- More Think: work and clubs, and travelling.
+LIBRARY.push(
+  think('work', 'Think: surprises at work or a club', ['work', 'clubs'], [
+    sit('The manager is not there', 'You arrive for your work experience and the person you usually report to is not there.', 'my manager is not there', ['ask someone else who works there', 'wait a few minutes, then ask at the desk', 'call or message my parent or my school contact'], 'someone there will know what I should do', 'ask my parent or teacher to call the workplace', ['go home without telling anyone', 'start jobs I was not asked to do']),
+    sit('Kit left at home', 'You get to your club and realise you left your kit at home.', 'I do not have my kit', ['tell the leader or coach', 'ask if there is spare kit', 'call or message a parent'], 'the leader can help me join in safely', 'ask if I can watch today and join in next time', ['borrow someone else’s things without asking', 'leave without telling anyone']),
+    sit('Not sure what to do', 'Your supervisor gives you a job, but you are not sure what to do.', 'I do not understand the job', ['ask the supervisor to say it again', 'ask what I should do first', 'ask a co-worker who knows'], 'it is better to ask than to do it wrong', 'ask another person on the team', ['pretend I understand', 'do something and hope it is right']),
+    sit('The machine stops', 'The machine you are using suddenly stops and makes a strange noise.', 'the machine has stopped working', ['stop and step away', 'tell my supervisor straight away', 'not touch it'], 'a broken machine can be dangerous', 'ask another adult nearby to come and look', ['try to fix it myself', 'keep pressing buttons']),
+  ]),
+  think('travel', 'Think: surprises when travelling', ['travel', 'out and about'], [
+    sit('The train is cancelled', 'You are at the station and the board says your train is cancelled.', 'my train is cancelled', ['ask a member of staff', 'look at the board for the next train', 'call or message a parent'], 'staff know which train I can take instead', 'go to the information desk', ['accept a lift from someone I do not know', 'walk off on my own']),
+    sit('The wrong stop', 'You get off the bus and realise you are at the wrong stop.', 'I am at the wrong stop', ['stay somewhere safe and check my map', 'call or message a parent', 'ask a bus driver or someone who works nearby'], 'a parent or a driver can tell me the way', 'go into a shop and ask a member of staff', ['walk down a road I do not know', 'get into a car with someone I do not know']),
+    sit('The phone battery dies', 'You are out and about and your phone battery has run out.', 'my phone has no battery', ['ask someone who works nearby to help me call a parent', 'go to an information desk', 'stay in a safe place with other people'], 'I need to tell my family where I am', 'ask a member of staff to phone for me', ['go off to find a charger on my own', 'tell my details to someone I do not know']),
+    sit('A lost ticket', 'You are about to get on a train and you cannot find your ticket.', 'I cannot find my ticket', ['look carefully in my bag and pockets', 'ask a member of staff', 'ask the adult I am with'], 'staff can tell me what to do', 'call a parent', ['sneak on without a ticket', 'run through the gate']),
+  ]),
+);
+
+// ---- More Talk: family and pets, and my day.
+LIBRARY.push(
+  talk('family', 'Talk: family and pets', ['family', 'pets'], [
+    top('family meals', 'Family meals can be fun. Do you have a favourite meal to eat with your family?', 'I like having pizza with my family.', 'What is your favourite family meal?'),
+    top('pets', 'I do not have a pet, because I live in a forest. Do you have a pet, or would you like one?', 'I would like a dog.', 'What animal would you like as a pet?'),
+    top('helping at home', 'Some people help at home by tidying or cooking. How do you help at home?', 'I help by setting the table.', 'What jobs do you do at home?'),
+    top('family trips', 'A trip with your family can be special. Where have you been with your family?', 'We went to the seaside.', 'Where did you go?'),
+  ]),
+  talk('my-day', 'Talk: my day', ['daily life'], [
+    top('today', 'I would love to hear about your day. What was the best part of today?', 'The best part was lunch.', 'What was the best part of your day?'),
+    top('something funny', 'Funny moments are great to share. Did anything make you laugh this week?', 'My friend told a funny joke.', 'What made you laugh?'),
+    top('looking forward', 'It is nice to look forward to things. What are you looking forward to?', 'I am looking forward to the weekend.', 'What are you looking forward to?'),
+    top('something new', 'Learning something new is exciting. Have you learned anything new lately?', 'I learned a new song.', 'What did you learn?'),
+  ]),
+);
+
+// ---- Explain: "Tell me how you…". Each item has Foxy's question and the parts of a clear answer.
+const explain = (id, title, tags, items) => ({
+  id: `explain-${id}`, mode: 'explain', title,
+  goal: 'Explain how I do something clearly and completely',
+  plan_goal: 'other', level: null, tags, age: '10–20', source: LIBRARY_SOURCE,
+  content: { items },
+});
+const pt = (text, question, starter, model) => ({ text, question, starter, model });
+
+LIBRARY.push(
+  explain('routines', 'Explain: everyday routines', ['daily living'], [
+    { title: 'Making a hot chocolate', question: 'Tell me how you make a hot chocolate.', points: [
+      pt('put the hot chocolate powder in a mug', 'What goes in the mug first?', 'First I put ___ in a mug.', 'First I put the hot chocolate powder in a mug.'),
+      pt('heat the milk or boil the water, with an adult if needed', 'What do you heat?', 'Then I heat ___.', 'Then I heat the milk.'),
+      pt('pour it into the mug and stir', 'What do you do with the hot milk?', 'Then I ___.', 'Then I pour it into the mug and stir.'),
+      pt('let it cool a little before drinking', 'What do you do before you drink it?', 'Before I drink it I ___.', 'Before I drink it I let it cool down.'),
+    ] },
+    { title: 'Crossing the road safely', question: 'Tell me how you cross the road safely.', points: [
+      pt('go to a crossing or a safe place to cross', 'Where do you cross?', 'First I go to ___.', 'First I go to the crossing.'),
+      pt('stop at the kerb and look both ways', 'What do you do at the kerb?', 'Then I stop and ___.', 'Then I stop and look both ways.'),
+      pt('wait until the cars have stopped or the green man shows', 'When do you start to cross?', 'I wait until ___.', 'I wait until the cars have stopped.'),
+      pt('walk across, do not run, and keep looking', 'How do you cross?', 'I ___ across.', 'I walk across and keep looking.'),
+    ] },
+    { title: 'Getting ready for bed', question: 'Tell me how you get ready for bed.', points: [
+      pt('put on pyjamas', 'What do you put on?', 'First I put on ___.', 'First I put on my pyjamas.'),
+      pt('brush my teeth', 'What do you do in the bathroom?', 'Then I ___.', 'Then I brush my teeth.'),
+      pt('put my phone on charge and set an alarm', 'What do you do with your phone?', 'I ___ my phone.', 'I put my phone on charge.'),
+      pt('get into bed and turn off the light', 'What do you do last?', 'Last I ___.', 'Last I get into bed and turn off the light.'),
+    ] },
+  ]),
+  explain('out', 'Explain: out and about', ['out and about'], [
+    { title: 'Taking the bus', question: 'Tell me how you take the bus.', points: [
+      pt('find the right bus stop and check the bus number', 'What do you check at the stop?', 'First I check ___.', 'First I check the bus number.'),
+      pt('wait, then put my hand out when the bus comes', 'What do you do when the bus comes?', 'When it comes I ___.', 'When it comes I put my hand out.'),
+      pt('tap my card or pay the driver', 'How do you pay?', 'I pay by ___.', 'I pay by tapping my card.'),
+      pt('sit down or hold on, and press the bell before my stop', 'What do you do before your stop?', 'Before my stop I ___.', 'Before my stop I press the bell.'),
+    ] },
+    { title: 'Buying something in a shop', question: 'Tell me how you buy something in a shop.', points: [
+      pt('choose what I want and pick it up', 'What do you do first?', 'First I ___.', 'First I choose what I want.'),
+      pt('take it to the till and say hello', 'Where do you take it?', 'Then I take it to ___.', 'Then I take it to the till.'),
+      pt('pay and take my change', 'What do you do at the till?', 'I ___.', 'I pay and take my change.'),
+      pt('say thank you', 'What do you say at the end?', 'At the end I say ___.', 'At the end I say thank you.'),
+    ] },
+    { title: 'Asking for help in a shop', question: 'Tell me how you ask for help in a shop.', points: [
+      pt('look for someone who works there, like a person with a name badge or uniform', 'Who do you look for?', 'First I look for ___.', 'First I look for someone with a name badge.'),
+      pt('go up to them and say excuse me', 'What do you say first?', 'I say ___.', 'I say excuse me.'),
+      pt('say clearly what I need help with', 'What do you tell them?', 'Then I say ___.', 'Then I say I cannot find the milk.'),
+      pt('say thank you', 'What do you do at the end?', 'At the end I ___.', 'At the end I say thank you.'),
+    ] },
+  ]),
+  explain('things', 'Explain: looking after my things', ['home', 'school'], [
+    { title: 'Packing my school bag', question: 'Tell me how you pack your school bag.', points: [
+      pt('look at the timetable to see what I need', 'What do you look at first?', 'First I look at ___.', 'First I look at my timetable.'),
+      pt('put in the books and equipment for each lesson', 'What goes in the bag?', 'Then I put in ___.', 'Then I put in my books and pencil case.'),
+      pt('add my lunch and a water bottle', 'What else do you add?', 'I also add ___.', 'I also add my lunch and my water bottle.'),
+      pt('check I have my phone and keys, then zip the bag', 'What do you check at the end?', 'Last I check ___.', 'Last I check I have my phone and keys.'),
+    ] },
+    { title: 'Using the washing machine', question: 'Tell me how you put the washing on.', points: [
+      pt('put the dirty clothes in the machine', 'What goes in the machine?', 'First I put ___ in the machine.', 'First I put the dirty clothes in the machine.'),
+      pt('add washing powder or a tablet', 'What do you add?', 'Then I add ___.', 'Then I add a washing tablet.'),
+      pt('choose the programme and press start', 'What do you press?', 'Then I ___.', 'Then I choose the programme and press start.'),
+      pt('when it has finished, take the clothes out and hang them up to dry', 'What do you do when it finishes?', 'When it finishes I ___.', 'When it finishes I take the clothes out and hang them up.'),
+    ] },
+    { title: 'Tidying my room', question: 'Tell me how you tidy your room.', points: [
+      pt('pick up things from the floor', 'What do you do first?', 'First I ___.', 'First I pick up things from the floor.'),
+      pt('put dirty clothes in the basket and clean clothes away', 'What do you do with clothes?', 'I put ___.', 'I put dirty clothes in the basket.'),
+      pt('put books and games back where they belong', 'Where do your things go?', 'I put my things ___.', 'I put my things back on the shelf.'),
+      pt('make the bed', 'What is the last thing you do?', 'Last I ___.', 'Last I make the bed.'),
+    ] },
+  ]),
+);
+
+// ---- Memory: name things in a group, or add a word to a list. Any real member of the group is also accepted.
+const VEG = ['carrot', 'potato', 'broccoli', 'peas', 'onion', 'tomato', 'cucumber', 'lettuce', 'cabbage', 'spinach', 'sweetcorn', 'pepper', 'cauliflower', 'mushroom', 'celery', 'beans', 'leek', 'parsnip'];
+const DRINKS = ['water', 'milk', 'juice', 'orange juice', 'apple juice', 'tea', 'coffee', 'hot chocolate', 'lemonade', 'cola', 'squash', 'smoothie', 'milkshake', 'fizzy drink'];
+const VEHICLES = ['car', 'bus', 'train', 'bike', 'bicycle', 'lorry', 'truck', 'van', 'taxi', 'motorbike', 'tram', 'plane', 'aeroplane', 'helicopter', 'boat', 'ship', 'ferry', 'scooter', 'tractor', 'ambulance'];
+const SPORTS = ['football', 'basketball', 'tennis', 'swimming', 'running', 'cricket', 'rugby', 'golf', 'baseball', 'hockey', 'gymnastics', 'cycling', 'boxing', 'badminton', 'volleyball', 'skiing', 'netball', 'athletics', 'table tennis', 'martial arts'];
+const INSTRUMENTS = ['guitar', 'piano', 'drums', 'violin', 'flute', 'trumpet', 'saxophone', 'clarinet', 'cello', 'trombone', 'keyboard', 'harp', 'tuba', 'ukulele', 'recorder', 'triangle', 'bass', 'banjo'];
+const CLOTHES = ['t-shirt', 'shirt', 'jumper', 'jacket', 'coat', 'trousers', 'jeans', 'shorts', 'skirt', 'dress', 'socks', 'shoes', 'trainers', 'hat', 'scarf', 'gloves', 'pants', 'pyjamas', 'hoodie'];
+const KITCHEN = ['kettle', 'toaster', 'fridge', 'oven', 'microwave', 'cooker', 'sink', 'saucepan', 'frying pan', 'plate', 'bowl', 'cup', 'mug', 'knife', 'fork', 'spoon', 'dishwasher', 'freezer', 'blender'];
+const FURNITURE = ['chair', 'table', 'sofa', 'bed', 'wardrobe', 'desk', 'shelf', 'bookcase', 'cupboard', 'stool', 'drawers', 'armchair', 'bench', 'cabinet'];
+const SCHOOL = ['pen', 'pencil', 'ruler', 'rubber', 'eraser', 'book', 'bag', 'calculator', 'scissors', 'glue', 'notebook', 'folder', 'sharpener', 'pencil case', 'laptop'];
+
+const category = (id, title, tags, items) => ({
+  id: `memory-${id}`, mode: 'category', title,
+  goal: items[0].kind === 'add' ? 'Listen to a list of words and add one that fits' : 'Name things that belong in a group',
+  plan_goal: 'other', level: null, tags, age: '10–20', source: LIBRARY_SOURCE,
+  content: { items },
+});
+const nm = (group, accepted, target = 3) => ({ kind: 'name', group, target, accepted });
+const ad = (group, given, accepted) => ({ kind: 'add', group, given, accepted });
+
+LIBRARY.push(
+  category('food-name', 'Memory test: food and drink', ['groups', 'food'], [nm('vegetables', VEG), nm('drinks', DRINKS), nm('things in a kitchen', KITCHEN)]),
+  category('move-name', 'Memory test: things that move and play', ['groups'], [nm('vehicles', VEHICLES), nm('sports', SPORTS), nm('musical instruments', INSTRUMENTS)]),
+  category('home-name', 'Memory test: at home and school', ['groups', 'home', 'school'], [nm('clothes', CLOTHES), nm('furniture', FURNITURE), nm('things for school', SCHOOL)]),
+  category('food-add', 'Memory test: add a word (food and drink)', ['groups', 'food'], [ad('vegetables', ['carrot', 'potato', 'peas'], VEG), ad('drinks', ['water', 'milk', 'juice'], DRINKS), ad('things in a kitchen', ['kettle', 'toaster', 'fridge'], KITCHEN)]),
+  category('everyday-add', 'Memory test: add a word (everyday things)', ['groups'], [ad('vehicles', ['car', 'bus', 'train'], VEHICLES), ad('musical instruments', ['guitar', 'piano', 'drums'], INSTRUMENTS), ad('things for school', ['pen', 'ruler', 'book'], SCHOOL)]),
+);
+
+// ---- Memory: listen to a short story, then answer questions about it.
+const story = (id, title, tags, text, questions) => ({
+  id: `story-${id}`, mode: 'listen', title,
+  goal: 'Listen to a story and answer questions about it',
+  plan_goal: 'other', level: null, tags, age: '10–20', source: LIBRARY_SOURCE,
+  content: { items: [{ title, story: text, questions }] },
+});
+const qn = (question, answers, clue) => ({ question, answers, clue });
+
+LIBRARY.push(
+  story('drum-solo', 'Story: Ayo’s drum solo', ['music', 'school'],
+    'Ayo had been practising the drums for weeks. On Friday evening the school held its music night in the big hall. Ayo felt nervous, so his teacher, Mr Patel, told him to take three slow breaths. When it was his turn, Ayo walked on stage and sat behind the drum kit. He counted to four and began to play. At first his hands shook, but soon the beat felt easy. When he finished, everyone clapped, and his sister cheered the loudest. Afterwards, Mr Patel gave Ayo a thumbs up and said he was proud of him.',
+    [qn('Where was the music night?', ['hall', 'big hall', 'school hall'], 'It was a big room at his school.'),
+     qn('What instrument does Ayo play?', ['drums', 'drum', 'drum kit'], 'You hit it with sticks.'),
+     qn('What did Mr Patel tell Ayo to do when he felt nervous?', ['breathe', 'breaths', 'three slow breaths', 'take three slow breaths', 'slow breaths'], 'It is something you do with your lungs, slowly, three times.'),
+     qn('Who cheered the loudest?', ['his sister', 'sister'], 'She is part of his family.'),
+     qn('What did Mr Patel do at the end?', ['thumbs up', 'gave a thumbs up', 'said he was proud', 'proud'], 'He showed Ayo with his hand and said something kind.')]),
+  story('wrong-platform', 'Story: the wrong platform', ['travel', 'out and about'],
+    'Nina was taking the train to see her cousin in the next town. She checked her ticket and saw that the train left from platform 4. At the station, she followed the signs up the stairs. But when she reached the platform, a worker in a yellow jacket told her the train had been moved to platform 2. Nina said thank you and hurried back down the stairs. She got on the train just before the doors closed. She found a seat by the window and sent her cousin a message to say she was on her way.',
+    [qn('Who was Nina going to see?', ['cousin', 'her cousin'], 'It is someone in her family, in the next town.'),
+     qn('Which platform did her ticket say?', ['4', 'four', 'platform 4', 'platform four'], 'It is a number after three.'),
+     qn('Who told her about the change?', ['worker', 'a worker', 'station worker', 'man in a yellow jacket', 'person in a yellow jacket'], 'This person wore a yellow jacket.'),
+     qn('What colour was the jacket?', ['yellow'], 'It is the colour of a banana.'),
+     qn('What did Nina do when she sat down?', ['sent a message', 'message', 'messaged her cousin', 'texted her cousin', 'text'], 'She told someone she was on her way.')]),
+  story('market', 'Story: Sunday at the market', ['weekend', 'out and about'],
+    'On Sunday morning, Tom and his dad went to the market. It was sunny, and the stalls were full of colour. First they bought a bag of red apples from a lady in a blue hat. Then Tom saw a stall that sold old records and spent ten minutes looking at them. He chose one with a picture of a lion on the cover. His dad paid for it. On the way home it started to rain, so they ran to the bus stop and waited under the shelter.',
+    [qn('What day did they go to the market?', ['sunday'], 'It is the last day of the weekend.'),
+     qn('What did they buy first?', ['apples', 'red apples', 'a bag of apples', 'bag of apples'], 'They were red, and they came in a bag.'),
+     qn('What was the lady at the stall wearing?', ['blue hat', 'a blue hat', 'hat'], 'It was on her head, and it was blue.'),
+     qn('What animal was on the cover of the record?', ['lion', 'a lion'], 'It is a big cat with a mane.'),
+     qn('Why did they run to the bus stop?', ['rain', 'it rained', 'it started to rain', 'raining'], 'The weather changed on the way home.')]),
+);
+
 export const libraryById = (id) => LIBRARY.find((x) => x.id === id) || null;
 
 // What the Library page shows for each item: no questions or answers, just enough to choose.
-const UNITS = { steps: 'steps', think: 'situations', conversation: 'topics' };
+const UNITS = { steps: 'steps', think: 'situations', conversation: 'topics', explain: 'explanations', category: 'groups', listen: 'questions' };
 export function libraryLines(item) {
   const items = item.content.items;
   if (item.mode === 'steps') return items[0].steps.map((x) => x.text);
   if (item.mode === 'think') return items.map((x) => `${x.title}: ${x.scenario}`);
+  if (item.mode === 'explain') return items.map((x) => `${x.title}: ${x.question}`);
+  if (item.mode === 'category') return items.map((x) => (x.kind === 'add' ? `Add a word to: ${x.given.join(', ')} (${x.group})` : `Name ${x.target} ${x.group}`));
+  if (item.mode === 'listen') return items[0].questions.map((x) => x.question);
   return items.map((x) => `${x.topic}: ${x.opener}`);
 }
 export function libraryCard(item, added = null) {
@@ -210,6 +378,36 @@ export function libraryCard(item, added = null) {
     images: item.mode === 'steps' ? item.content.items[0].steps.map((x) => x.image_id) : [],
     added, // { id, status } of the learner's copy, or null
   };
+}
+
+// The full activity for the read-only "View" panel: everything a therapist or parent would want to check before adding it
+// (what Foxy says, the questions, the answers that are accepted, the examples). Nothing here can be edited; once an
+// item is added to a learner's activities, the copy is theirs to change.
+const SKILL_LABEL = { understanding: 'Question', reasoning: 'Why question', independence: 'What-if question', memory: 'Memory question', expressive: 'Say it question' };
+export function libraryDetail(item) {
+  const list = item.content.items;
+  let parts;
+  if (item.mode === 'steps') {
+    parts = list[0].steps.map((x, i) => ({ heading: `Step ${i + 1}`, image: x.image_id, rows: [['Foxy says', x.text], ...Object.entries(x.q).flatMap(([k, v]) => [[SKILL_LABEL[k] || 'Question', v.question], ['Accepted answer', v.answer]])] }));
+  } else if (item.mode === 'think') {
+    parts = list.map((x) => ({ heading: x.title, rows: [['Situation', x.scenario], ['What is unexpected', x.problem], ['Safe things to do', x.good_actions], ['Example reason', x.reason_example], ['Example plan B', x.backup_example], ['Not safe (flagged for the team if said)', x.unsafe]] }));
+  } else if (item.mode === 'conversation') {
+    parts = list.map((x) => ({ heading: x.topic.charAt(0).toUpperCase() + x.topic.slice(1), rows: [['Foxy opens', x.opener], ['Example comment', x.example_comment], ['Example question', x.example_question]] }));
+  } else if (item.mode === 'explain') {
+    parts = list.map((x) => ({ heading: x.title, rows: [['Foxy asks', x.question], ...x.points.flatMap((p, i) => [[`Part ${i + 1} of a clear answer`, p.text], ['Question if needed', p.question], ['Sentence starter', p.starter], ['Model answer', p.model]])] }));
+  } else if (item.mode === 'category') {
+    parts = list.map((x) => ({ heading: x.group.charAt(0).toUpperCase() + x.group.slice(1), rows: [
+      x.kind === 'add' ? ['Foxy says', x.given.join(', ')] : ['The task', `Name ${x.target} things that belong in this group`],
+      ...(x.kind === 'add' ? [['The learner', 'adds a word that fits']] : []),
+      ['Example words that are accepted (any real member of the group is also accepted)', x.accepted]] }));
+  } else if (item.mode === 'listen') {
+    const it = list[0];
+    parts = [{ heading: 'The story', rows: [['Foxy reads', it.story]] }, ...it.questions.map((x, i) => ({ heading: `Question ${i + 1}`, rows: [['Question', x.question], ['Accepted answers', x.answers], ['Clue if needed', x.clue]] }))];
+  } else {
+    parts = [];
+  }
+  const card = libraryCard(item);
+  return { id: item.id, mode: item.mode, title: item.title, goal: item.goal, level: item.level, tags: item.tags, age: item.age, source: item.source, count: card.count, unit: card.unit, parts };
 }
 
 // The activity row a family gets. Always a draft, linked back to the library item.
@@ -254,6 +452,30 @@ export function libraryProblems(symbolSlugs, items = LIBRARY) {
         for (const k of ['topic', 'opener', 'example_comment', 'example_question']) if (!text(x[k])) out.push(`${where}: no ${k}`);
         if (/^you could/i.test(x.example_comment || '')) out.push(`${where}: the example comment should be what the learner would say`);
       });
+    } else if (it.mode === 'explain') {
+      if (list.length < 2 || list.length > 5) out.push(`${it.id}: ${list.length} explanations (want 2 to 5)`);
+      list.forEach((x, i) => {
+        const where = `${it.id} explanation ${i + 1}`;
+        if (!text(x.title) || !text(x.question)) out.push(`${where}: no title or question`);
+        if ((x.points || []).length < 3) out.push(`${where}: needs at least three parts`);
+        (x.points || []).forEach((p, j) => { for (const k of ['text', 'question', 'starter', 'model']) if (!text(p[k])) out.push(`${where} part ${j + 1}: no ${k}`); });
+      });
+    } else if (it.mode === 'category') {
+      if (list.length < 2 || list.length > 6) out.push(`${it.id}: ${list.length} groups (want 2 to 6)`);
+      list.forEach((x, i) => {
+        const where = `${it.id} group ${i + 1}`;
+        if (!text(x.group)) out.push(`${where}: no group name`);
+        if ((x.accepted || []).filter(text).length < 8) out.push(`${where}: needs at least eight accepted words`);
+        if (x.kind === 'add') { if ((x.given || []).filter(text).length < 2) out.push(`${where}: needs at least two given words`); }
+        else if (!(Number.isInteger(x.target) && x.target >= 1 && x.target <= 8)) out.push(`${where}: target must be 1 to 8`);
+      });
+    } else if (it.mode === 'listen') {
+      const x = list[0] || {};
+      if (!text(x.story)) out.push(`${it.id}: no story`);
+      const words = (x.story || '').split(/\s+/).length;
+      if (words < 40 || words > 160) out.push(`${it.id}: story is ${words} words (want 40 to 160)`);
+      if ((x.questions || []).length < 3) out.push(`${it.id}: needs at least three questions`);
+      (x.questions || []).forEach((qq, j) => { if (!text(qq.question) || !(qq.answers || []).filter(text).length || !text(qq.clue)) out.push(`${it.id} question ${j + 1}: needs a question, an accepted answer and a clue`); });
     } else {
       out.push(`${it.id}: unknown mode ${it.mode}`);
     }

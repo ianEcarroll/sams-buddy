@@ -601,4 +601,24 @@ details.layer > summary small, details.fine-tune > summary small { font-weight: 
 .lib-tags { display: flex; flex-wrap: wrap; gap: 4px; margin: 0; }
 .lib-card details { font-size: .9rem; }
 .lib-card ol { margin: 6px 0 0; padding-left: 1.2rem; }
+.lib-peek { margin: 0; padding-left: 1.1rem; font-size: .9rem; }
+.lib-peek li { margin: 2px 0; }
+/* Read-only view of one library activity */
+body.lib-open { overflow: hidden; }
+.lib-view { position: fixed; inset: 0; z-index: 90; background: rgba(14, 26, 44, .55); display: flex; justify-content: center; align-items: center; padding: 16px 10px; }
+.lib-view-panel { background: var(--paper); color: var(--ink); border: 1px solid var(--line); border-radius: 18px; width: min(760px, 100%); max-height: calc(100vh - 32px); max-height: calc(100dvh - 32px); overflow-y: auto; padding: 18px 20px 0; display: grid; gap: 12px; align-content: start; }
+.lib-view-head { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; }
+.lib-view-head h2 { margin: 0 0 2px; font-size: 1.35rem; }
+.lib-view-head p { margin: 0; font-size: .9rem; }
+.lib-readonly { margin: 0; padding: 10px 12px; border-radius: 12px; background: var(--notyet-soft); border: 1px solid var(--line); font-size: .92rem; }
+.lib-part { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 10px 14px; }
+.lib-part h3 { margin: 0 0 6px; font-size: 1rem; }
+.lib-part-pic { width: 56px; height: 56px; object-fit: contain; background: #fff; border-radius: 10px; border: 1px solid var(--line); padding: 4px; margin: 0 0 6px; display: block; }
+.lib-part dl { display: grid; grid-template-columns: minmax(120px, 190px) 1fr; gap: 4px 12px; margin: 0; font-size: .92rem; }
+.lib-part dt { color: var(--ink-soft); font-weight: 600; }
+.lib-part dd { margin: 0; overflow-wrap: anywhere; }
+.lib-part dd ul { margin: 0; padding-left: 1.1rem; }
+.lib-view-foot { display: flex; flex-wrap: wrap; gap: 8px; justify-content: space-between; align-items: center; position: sticky; bottom: 0; background: var(--paper); padding: 10px 0 14px; border-top: 1px solid var(--line); }
+.lib-card .row-actions { align-items: center; }
+@media (max-width: 560px) { .lib-part dl { grid-template-columns: 1fr; } .lib-part dt { margin-top: 6px; } }
 .review-filters input[type="search"] { border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; background: var(--surface); min-height: 42px; min-width: 220px; }

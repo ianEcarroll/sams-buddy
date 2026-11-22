@@ -2,13 +2,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { LIBRARY, libraryById, libraryCard, activityFromLibrary, libraryProblems } from '../src/library.js';
+import { LIBRARY, libraryById, libraryCard, libraryDetail, activityFromLibrary, libraryProblems } from '../src/library.js';
 
 const slugs = new Set(JSON.parse(readFileSync(new URL('../../web/public/symbols/index.json', import.meta.url), 'utf8')).map(([slug]) => slug));
 
 test('every library item is complete and every picture exists', () => {
-  assert.ok(LIBRARY.length >= 20);
-  for (const mode of ['steps', 'think', 'conversation']) assert.ok(LIBRARY.some((i) => i.mode === mode), `no ${mode} items`);
+  assert.ok(LIBRARY.length >= 30);
+  for (const mode of ['steps', 'think', 'conversation', 'explain', 'category', 'listen']) assert.ok(LIBRARY.some((i) => i.mode === mode), `no ${mode} items`);
   assert.deepEqual(libraryProblems(slugs), []);
 });
 
@@ -74,4 +74,53 @@ test('Think and Talk cards list their situations and topics, with no level', () 
   assert.match(t.lines[0], /^The wifi stops: /);
   const c = libraryCard(libraryById('talk-hobbies'));
   assert.equal(c.unit, 'topics'); assert.match(c.lines[0], /^video games: /);
+});
+
+test('the read-only view shows the full activity, including questions and accepted answers', () => {
+  for (const it of LIBRARY) {
+    const d = libraryDetail(it);
+    assert.ok(d.parts.length > 0, `${it.id}: nothing to view`);
+    for (const p of d.parts) {
+      assert.ok(p.heading && p.rows.length, `${it.id}: empty part`);
+      for (const [label, value] of p.rows) assert.ok(label && (Array.isArray(value) ? value.length : String(value).trim()), `${it.id}: empty row ${label}`);
+    }
+  }
+  const steps = JSON.stringify(libraryDetail(libraryById('task-wash-hands')));
+  assert.match(steps, /Accepted answer/);
+  assert.match(steps, /the tap/);
+  const story = libraryDetail(libraryById('story-market'));
+  assert.equal(story.parts.length, 6);
+  assert.match(JSON.stringify(story), /Accepted answers/);
+});
+
+test('viewing never changes a library item', () => {
+  const before = JSON.stringify(LIBRARY);
+  for (const it of LIBRARY) { libraryDetail(it); libraryCard(it); activityFromLibrary(it); }
+  assert.equal(JSON.stringify(LIBRARY), before);
+});
+
+test('every item copies into a draft linked back to the library', () => {
+  for (const it of LIBRARY) {
+    const a = activityFromLibrary(it);
+    assert.equal(a.status, 'draft');
+    assert.ok(a.content.items.length > 0);
+    assert.equal(a.content.library_id, it.id);
+  }
+});
+
+test('the checker catches incomplete Explain, Memory and Story items', () => {
+  const bad = [
+    { id: 'e', mode: 'explain', title: 'E', tags: ['a'], content: { items: [{ title: 'x', question: 'q', points: [{ text: 't' }] }, { title: 'y', question: 'q', points: [] }] } },
+    { id: 'c', mode: 'category', title: 'C', tags: ['a'], content: { items: [{ kind: 'name', group: 'animals', target: 20, accepted: ['dog'] }, { kind: 'add', group: 'fruit', given: ['apple'], accepted: ['apple'] }] } },
+    { id: 's', mode: 'listen', title: 'S', tags: ['a'], content: { items: [{ story: 'Too short.', questions: [{ question: 'Who?', answers: [], clue: '' }] }] } },
+  ];
+  const p = libraryProblems(slugs, bad).join(' | ');
+  assert.match(p, /needs at least three parts/);
+  assert.match(p, /part 1: no question/);
+  assert.match(p, /at least eight accepted words/);
+  assert.match(p, /target must be 1 to 8/);
+  assert.match(p, /at least two given words/);
+  assert.match(p, /story is 2 words/);
+  assert.match(p, /at least three questions/);
+  assert.match(p, /needs a question, an accepted answer and a clue/);
 });

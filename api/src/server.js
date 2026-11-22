@@ -15,7 +15,7 @@ import { emailEnabled, sendEmail, recipientsFor, practiceEmail, resetEmail } fro
 import { isPlatformAdmin, newInviteToken, INVITE_DAYS, estimateCost, ratesFor, validateFamily, ageFrom, cleanInterests } from './families.js';
 import { pushEnabled, pushPublicKey, sendPush, reminderDue, reminderMessage } from './push.js';
 import { cleanSignup, corsHeaders, notifyList, notificationEmail } from './waitlist.js';
-import { LIBRARY, libraryById, libraryCard, activityFromLibrary, LIBRARY_PICTURE_CREDIT } from './library.js';
+import { LIBRARY, libraryById, libraryCard, libraryDetail, activityFromLibrary, LIBRARY_PICTURE_CREDIT } from './library.js';
 
 const app = express();
 app.set('trust proxy', true);
@@ -469,6 +469,13 @@ async function libraryCopies(learnerId) {
 adult.get('/library', wrap(async (req, res) => {
   const copies = await libraryCopies(req.learnerId);
   res.json({ items: LIBRARY.map((it) => libraryCard(it, copies.get(it.id) || null)), pictureCredit: LIBRARY_PICTURE_CREDIT });
+}));
+// Read-only view of one library activity. There is deliberately no way to change a library item: a family edits their own copy after adding it.
+adult.get('/library/:id', wrap(async (req, res) => {
+  const item = libraryById(req.params.id);
+  if (!item) return res.status(404).json({ error: 'That library activity was not found.' });
+  const have = (await libraryCopies(req.learnerId)).get(item.id) || null;
+  res.json({ ...libraryDetail(item), added: have });
 }));
 adult.post('/library/:id/add', wrap(async (req, res) => {
   const item = libraryById(req.params.id);
