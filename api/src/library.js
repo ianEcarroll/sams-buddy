@@ -357,10 +357,46 @@ LIBRARY.push(
      qn('Why did they run to the bus stop?', ['rain', 'it rained', 'it started to rain', 'raining'], 'The weather changed on the way home.')]),
 );
 
+// ---- Memory: "Remember my day". Foxy asks about something the learner really did. Any real memory counts. A family can add
+// the things he did, with clues and a photo, once the copy is in their activities; the library only holds the prompts.
+const NUM_WORDS = ['zero', 'one', 'two', 'three', 'four', 'five'];
+const remember = (id, title, tags, items) => ({
+  id: `remember-${id}`, mode: 'recall', title,
+  goal: 'Remember real things I did, with as few clues as possible',
+  plan_goal: 'narrative', level: null, tags, age: '10–20', source: LIBRARY_SOURCE,
+  content: { items },
+});
+const day = (title, when, target = 3) => ({ title, when, target });
+
+LIBRARY.push(
+  remember('school-day', 'Remember my day: at school', ['school', 'daily life'], [
+    day('This morning', 'this morning'),
+    day('Lunchtime', 'at lunchtime', 2),
+    day('This afternoon', 'this afternoon'),
+    day('After school', 'after school', 2),
+  ]),
+  remember('weekend', 'Remember my day: the weekend', ['weekend', 'daily life'], [
+    day('On Saturday', 'on Saturday'),
+    day('On Sunday', 'on Sunday'),
+    day('At the weekend', 'at the weekend', 4),
+  ]),
+  remember('out', 'Remember my day: trips and special days', ['out and about', 'holidays'], [
+    day('A trip out', 'on our last trip out'),
+    day('A special day', 'on a special day, like a birthday or a party', 3),
+    day('In the holidays', 'in the holidays', 4),
+  ]),
+  remember('week', 'Remember my day: this week', ['daily life'], [
+    day('Yesterday', 'yesterday'),
+    day('Earlier this week', 'earlier this week', 4),
+    day('Something new', 'this week that was new for you', 2),
+  ]),
+);
+
 export const libraryById = (id) => LIBRARY.find((x) => x.id === id) || null;
 
 // What the Library page shows for each item: no questions or answers, just enough to choose.
-const UNITS = { steps: 'steps', think: 'situations', conversation: 'topics', explain: 'explanations', category: 'groups', listen: 'questions' };
+const recallPrompt = (x) => `Tell me ${NUM_WORDS[x.target] || x.target} thing${x.target === 1 ? '' : 's'} you did ${x.when}.`;
+const UNITS = { steps: 'steps', think: 'situations', conversation: 'topics', explain: 'explanations', category: 'groups', listen: 'questions', recall: 'prompts' };
 export function libraryLines(item) {
   const items = item.content.items;
   if (item.mode === 'steps') return items[0].steps.map((x) => x.text);
@@ -368,6 +404,7 @@ export function libraryLines(item) {
   if (item.mode === 'explain') return items.map((x) => `${x.title}: ${x.question}`);
   if (item.mode === 'category') return items.map((x) => (x.kind === 'add' ? `Add a word to: ${x.given.join(', ')} (${x.group})` : `Name ${x.target} ${x.group}`));
   if (item.mode === 'listen') return items[0].questions.map((x) => x.question);
+  if (item.mode === 'recall') return items.map((x) => recallPrompt(x));
   return items.map((x) => `${x.topic}: ${x.opener}`);
 }
 export function libraryCard(item, added = null) {
@@ -400,6 +437,8 @@ export function libraryDetail(item) {
       x.kind === 'add' ? ['Foxy says', x.given.join(', ')] : ['The task', `Name ${x.target} things that belong in this group`],
       ...(x.kind === 'add' ? [['The learner', 'adds a word that fits']] : []),
       ['Example words that are accepted (any real member of the group is also accepted)', x.accepted]] }));
+  } else if (item.mode === 'recall') {
+    parts = list.map((x) => ({ heading: x.title, rows: [['Foxy asks', recallPrompt(x)], ['How many things to remember', String(x.target)], ['Clues', 'Add the things he really did, with a broad clue, a specific clue and a photo, in your own copy. Until then, any real thing he remembers counts.']] }));
   } else if (item.mode === 'listen') {
     const it = list[0];
     parts = [{ heading: 'The story', rows: [['Foxy reads', it.story]] }, ...it.questions.map((x, i) => ({ heading: `Question ${i + 1}`, rows: [['Question', x.question], ['Accepted answers', x.answers], ['Clue if needed', x.clue]] }))];
@@ -468,6 +507,13 @@ export function libraryProblems(symbolSlugs, items = LIBRARY) {
         if ((x.accepted || []).filter(text).length < 8) out.push(`${where}: needs at least eight accepted words`);
         if (x.kind === 'add') { if ((x.given || []).filter(text).length < 2) out.push(`${where}: needs at least two given words`); }
         else if (!(Number.isInteger(x.target) && x.target >= 1 && x.target <= 8)) out.push(`${where}: target must be 1 to 8`);
+      });
+    } else if (it.mode === 'recall') {
+      if (list.length < 2 || list.length > 6) out.push(`${it.id}: ${list.length} prompts (want 2 to 6)`);
+      list.forEach((x, i) => {
+        const where = `${it.id} prompt ${i + 1}`;
+        if (!text(x.title) || !text(x.when)) out.push(`${where}: needs a title and when it happened`);
+        if (!(Number.isInteger(x.target) && x.target >= 1 && x.target <= 5)) out.push(`${where}: target must be 1 to 5`);
       });
     } else if (it.mode === 'listen') {
       const x = list[0] || {};
