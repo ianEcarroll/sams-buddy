@@ -8,7 +8,7 @@ const slugs = new Set(JSON.parse(readFileSync(new URL('../../web/public/symbols/
 
 test('every library item is complete and every picture exists', () => {
   assert.ok(LIBRARY.length >= 30);
-  for (const mode of ['steps', 'think', 'conversation', 'explain', 'category', 'listen']) assert.ok(LIBRARY.some((i) => i.mode === mode), `no ${mode} items`);
+  for (const mode of ['steps', 'think', 'conversation', 'explain', 'category', 'listen', 'recall']) assert.ok(LIBRARY.some((i) => i.mode === mode), `no ${mode} items`);
   assert.deepEqual(libraryProblems(slugs), []);
 });
 
@@ -123,4 +123,17 @@ test('the checker catches incomplete Explain, Memory and Story items', () => {
   assert.match(p, /story is 2 words/);
   assert.match(p, /at least three questions/);
   assert.match(p, /needs a question, an accepted answer and a clue/);
+});
+
+test('Remember my day prompts read naturally and stay within what the activity editor allows', () => {
+  const r = LIBRARY.filter((i) => i.mode === 'recall');
+  assert.ok(r.length >= 4);
+  for (const it of r) for (const x of it.content.items) { assert.ok(x.target >= 1 && x.target <= 5); assert.ok(x.when.trim()); }
+  const d = JSON.stringify(libraryDetail(libraryById('remember-weekend')));
+  assert.match(d, /Tell me four things you did at the weekend\./);
+  assert.match(d, /Tell me three things you did on Saturday\./);
+  const bad = [{ id: 'r', mode: 'recall', title: 'R', tags: ['a'], content: { items: [{ title: 'x', when: '', target: 9 }, { title: 'y', when: 'today', target: 3 }] } }];
+  const p = libraryProblems(slugs, bad).join(' | ');
+  assert.match(p, /needs a title and when it happened/);
+  assert.match(p, /target must be 1 to 5/);
 });
