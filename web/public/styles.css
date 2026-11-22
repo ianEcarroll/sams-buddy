@@ -620,6 +620,8 @@ body.lib-open { overflow: hidden; }
 .lib-readonly { margin: 0; padding: 10px 12px; border-radius: 12px; background: var(--notyet-soft); border: 1px solid var(--line); font-size: .92rem; }
 .lib-part { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 10px 14px; }
 .lib-part h3 { margin: 0 0 6px; font-size: 1rem; }
+.lib-part-pics { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 6px; }
+.lib-part-pics .lib-part-pic { margin: 0; }
 .lib-part-pic { width: 56px; height: 56px; object-fit: contain; background: #fff; border-radius: 10px; border: 1px solid var(--line); padding: 4px; margin: 0 0 6px; display: block; }
 .lib-part dl { display: grid; grid-template-columns: minmax(120px, 190px) 1fr; gap: 4px 12px; margin: 0; font-size: .92rem; }
 .lib-part dt { color: var(--ink-soft); font-weight: 600; }

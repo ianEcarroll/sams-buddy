@@ -8,7 +8,7 @@ const slugs = new Set(JSON.parse(readFileSync(new URL('../../web/public/symbols/
 
 test('every library item is complete and every picture exists', () => {
   assert.ok(LIBRARY.length >= 30);
-  for (const mode of ['steps', 'think', 'conversation', 'explain', 'category', 'listen', 'recall']) assert.ok(LIBRARY.some((i) => i.mode === mode), `no ${mode} items`);
+  for (const mode of ['steps', 'think', 'conversation', 'explain', 'category', 'listen', 'recall', 'story']) assert.ok(LIBRARY.some((i) => i.mode === mode), `no ${mode} items`);
   assert.deepEqual(libraryProblems(slugs), []);
 });
 
@@ -136,4 +136,24 @@ test('Remember my day prompts read naturally and stay within what the activity e
   const p = libraryProblems(slugs, bad).join(' | ');
   assert.match(p, /needs a title and when it happened/);
   assert.match(p, /target must be 1 to 5/);
+});
+
+test('Tell a story sets have one picture per event, real pictures, and show them on the card and in the view', () => {
+  const sets = LIBRARY.filter((i) => i.mode === 'story');
+  assert.ok(sets.length >= 3);
+  for (const s of sets) for (const x of s.content.items) assert.equal(x.image_ids.length, x.events.length);
+  const c = libraryCard(libraryById('tell-easy'));
+  assert.equal(c.images.length, 3);
+  assert.equal(c.unit, 'stories');
+  const d = libraryDetail(libraryById('tell-out'));
+  assert.equal(d.parts.length, 4);
+  assert.equal(d.parts[0].images.length, 4);
+  assert.match(JSON.stringify(d), /What happens, in order/);
+  const bad = [{ id: 's', mode: 'story', title: 'S', tags: ['a'], content: { items: [{ title: 'x', who: 'Al', setting: 'park', events: ['one', 'two'], image_ids: ['sym:no-such-picture'], outcome: '' }, { title: 'y', who: '', setting: 's', events: ['a', 'b', 'c'], image_ids: ['sym:tap', 'sym:tap', 'sym:tap'], outcome: 'o' }] } }];
+  const p = libraryProblems(slugs, bad).join(' | ');
+  assert.match(p, /2 events/);
+  assert.match(p, /one picture for each event/);
+  assert.match(p, /no-such-picture not found/);
+  assert.match(p, /no outcome/);
+  assert.match(p, /no who/);
 });
