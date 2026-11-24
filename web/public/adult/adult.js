@@ -272,9 +272,12 @@ function renderShell() {
 
 // ------------------------------------------------------------ activity library
 // Ready-made activities. "Add" copies one into this learner's activities as a draft; the original never changes.
-const lib = { type: '', level: '', q: '' };
+const lib = { mod: '', type: '', level: '', q: '' };
 async function renderLibrary(root) {
-  const { items, pictureCredit } = await api('/adult/library');
+  const all = await api('/adult/library');
+  const { pictureCredit } = all;
+  // Only the modules the learner sees: activities for a module that is switched off are left out.
+  const items = all.items.filter((i) => !HIDDEN_MODULES.includes(moduleOf(i.mode)));
   const name = me.learner.name;
   const modeLabel = (m) => modes[m]?.label || m;
   const search = h('input', { type: 'search', placeholder: 'Search every activity, e.g. brush teeth', 'aria-label': 'Search the library', value: lib.q, style: 'width:min(100%, 380px)' });
@@ -313,7 +316,8 @@ async function renderLibrary(root) {
     document.addEventListener('keydown', onKey);
     overlay.querySelector('.lib-view-head button').focus();
   }
-  // Step 1: pick a type of activity. Step 2: see only that type. Typing in the search box looks across every type.
+  // Step 1: the modules the learner sees, in the same order. Step 2: what is available in that module. Typing in the
+  // search box looks across every module.
   const TYPES = [
     ['steps', 'Step by Step', 'Everyday jobs, one picture step at a time'],
     ['think', 'Solve a Problem', 'What to do when something unexpected happens'],
@@ -339,33 +343,43 @@ async function renderLibrary(root) {
       it.added
         ? [h('span', { class: 'tag supported' }, it.added.status === 'draft' ? 'Added · draft' : 'Added'), h('button', { class: 'btn btn-quiet', onclick: () => { tab = 'activities'; renderShell(); } }, 'Open Activities')]
         : h('button', { class: 'btn btn-primary', onclick: add(it) }, `Add to ${name}’s activities`)));
+  const back = () => { lib.mod = ''; lib.type = ''; lib.level = ''; draw(); };
   function draw() {
     const needle = lib.q.trim().toLowerCase();
-    if (!needle && !lib.type) {
-      body.replaceChildren(h('div', { class: 'lib-tiles' }, TYPES.map(([key, title, blurb]) => {
-        const of = items.filter((i) => i.mode === key);
+    if (!needle && !lib.mod) {
+      body.replaceChildren(h('div', { class: 'lib-tiles' }, Object.entries(MODULES).filter(([mod]) => !HIDDEN_MODULES.includes(mod)).map(([mod, M]) => {
+        const of = items.filter((i) => moduleOf(i.mode) === mod);
         const added = of.filter((i) => i.added).length;
-        return h('button', { class: 'lib-tile', onclick: () => { lib.type = key; lib.level = ''; draw(); window.scrollTo?.({ top: 0 }); }, 'aria-label': `${title}, ${of.length} activities` },
-          h('strong', {}, title), h('span', {}, blurb),
+        return h('button', { class: 'lib-tile', onclick: () => { lib.mod = mod; lib.type = ''; lib.level = ''; draw(); window.scrollTo?.({ top: 0 }); }, 'aria-label': `${M.label}, ${of.length} activities` },
+          moduleIcon(mod),
+          h('strong', {}, M.label), h('span', {}, M.tagline),
           h('small', { class: 'muted' }, `${of.length} ${of.length === 1 ? 'activity' : 'activities'}${added ? ` · ${added} added` : ''}`));
       })));
       return;
     }
-    const pool = needle ? items : items.filter((i) => i.mode === lib.type);
+    const inModule = needle ? items : items.filter((i) => moduleOf(i.mode) === lib.mod);
+    const kinds = needle ? [] : [...new Set(inModule.map((i) => i.mode))];
+    if (!kinds.includes(lib.type)) lib.type = '';
+    const pool = lib.type ? inModule.filter((i) => i.mode === lib.type) : inModule;
     const levels = [...new Set(pool.map((i) => i.level).filter(Boolean))];
     if (!levels.includes(lib.level)) lib.level = '';
     const shown = pool.filter((i) => (needle || !lib.level || i.level === lib.level)
       && (!needle || `${i.title} ${i.tags.join(' ')} ${i.lines.join(' ')} ${typeTitle(i.mode)}`.toLowerCase().includes(needle)));
+    const kindSel = kinds.length > 1
+      ? h('select', { 'aria-label': 'Kind of activity' }, h('option', { value: '' }, 'All kinds'), kinds.map((k) => h('option', { value: k, selected: lib.type === k }, typeTitle(k))))
+      : null;
+    kindSel?.addEventListener('change', () => { lib.type = kindSel.value; lib.level = ''; draw(); });
     const lvlSel = !needle && levels.length > 1
       ? h('select', { 'aria-label': 'Level' }, h('option', { value: '' }, 'Any level'), levels.map((l) => h('option', { value: l, selected: lib.level === l }, l)))
       : null;
     lvlSel?.addEventListener('change', () => { lib.level = lvlSel.value; draw(); });
     body.replaceChildren(
       h('div', { class: 'lib-head' },
-        needle ? null : h('button', { class: 'btn btn-quiet', onclick: () => { lib.type = ''; lib.level = ''; draw(); } }, '← All types'),
-        h('h3', {}, needle ? `Results for “${lib.q.trim()}”` : typeTitle(lib.type)),
+        needle ? null : h('button', { class: 'btn btn-quiet', onclick: back }, '← All modules'),
+        h('h3', {}, needle ? `Results for “${lib.q.trim()}”` : MODULES[lib.mod].label),
         h('span', { class: 'muted' }, `${shown.length} ${shown.length === 1 ? 'activity' : 'activities'}`),
-        lvlSel),
+        kindSel, lvlSel),
+      needle ? null : h('p', { class: 'muted lib-tagline' }, MODULES[lib.mod].tagline),
       h('div', { class: 'lib-grid' }, shown.length ? shown.map(card) : [h('p', { class: 'panel' }, needle ? 'Nothing matches that search.' : 'Nothing here yet.')]));
   }
   search.addEventListener('input', () => { lib.q = search.value; draw(); });
