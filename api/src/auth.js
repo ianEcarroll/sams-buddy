@@ -57,10 +57,10 @@ export async function requireAdult(req, res, next) {
   // this person was added to; there they are never the owner.
   const want = String(req.headers['x-learner-id'] || '');
   if (want && want !== adult.learner_id) {
-    const link = await one('select l.disabled_at from adult_learners al join learners l on l.id=al.learner_id where al.adult_id=$1 and al.learner_id=$2', [adult.id, want]);
+    const link = await one('select l.disabled_at, al.is_owner from adult_learners al join learners l on l.id=al.learner_id where al.adult_id=$1 and al.learner_id=$2', [adult.id, want]);
     if (!link) return res.status(403).json({ error: 'You do not have access to that student.', notLinked: true });
     adult.learner_id = want;
-    adult.is_owner = false;
+    adult.is_owner = !!link.is_owner;
     adult.linked = true;
     adult.disabled_at = link.disabled_at;
   }

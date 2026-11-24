@@ -185,7 +185,8 @@ function renderSetup() {
 
 // ------------------------------------------------------------ joining by invite (a new family)
 async function renderInvite(inviteToken) {
-  const { valid } = await api(`/invite/${encodeURIComponent(inviteToken)}`);
+  const { valid, kind } = await api(`/invite/${encodeURIComponent(inviteToken)}`);
+  const school = kind === 'school';
   const toSignIn = () => { history.replaceState(null, '', '/adult/'); boot(); };
   if (!valid) {
     return $app.replaceChildren(brand(), h('h1', {}, 'This invite has expired'),
@@ -195,19 +196,21 @@ async function renderInvite(inviteToken) {
   const f = {
     learnerName: h('input', { autocomplete: 'off' }), birthYear: h('input', { type: 'number', inputmode: 'numeric', min: '1990', max: String(new Date().getFullYear()), placeholder: 'e.g. 2011' }),
     ownerName: h('input', { autocomplete: 'name' }), email: h('input', { type: 'email', autocomplete: 'email' }), password: h('input', { type: 'password', autocomplete: 'new-password' }),
+    role: h('select', {}, h('option', { value: 'therapist' }, 'Speech therapist'), h('option', { value: 'teacher' }, 'Teacher'), h('option', { value: 'job_coach' }, 'Job coach')),
   };
   $app.replaceChildren(
     brand(), h('h1', {}, 'Welcome to TALVO'),
-    h('p', { class: 'muted', style: 'max-width:60ch' }, 'Set up TALVO for your child. You\u2019ll have the main account, and can add their speech therapist, teachers and job coach afterwards.'),
+    h('p', { class: 'muted', style: 'max-width:60ch' }, school ? 'Set up TALVO for your students. You\u2019ll have the main account. Add your first student now, then add the rest from My students.' : 'Set up TALVO for your child. You\u2019ll have the main account, and can add their speech therapist, teachers and job coach afterwards.'),
     h('div', { class: 'panel', style: 'max-width:460px;display:grid;gap:18px' },
-      field('Your child\u2019s first name', f.learnerName, 'Foxy uses it in the app, e.g. \u201cWelcome back, Alex!\u201d'),
+      field(school ? 'First student\u2019s first name' : 'Your child\u2019s first name', f.learnerName, 'Foxy uses it in the app, e.g. \u201cWelcome back, Alex!\u201d'),
+      school ? field('Your role', f.role) : null,
       field('Year of birth (optional)', f.birthYear, 'Helps Foxy talk at the right level for their age.'),
       field('Your name', f.ownerName), field('Your email', f.email), field('Password (10+ characters)', f.password),
       h('button', { class: 'btn btn-primary', onclick: run(async () => {
         const r = await api(`/invite/${encodeURIComponent(inviteToken)}`, { method: 'POST', body: Object.fromEntries(Object.entries(f).map(([k, v]) => [k, v.value])) });
         saveToken(r.token, false);
-        history.replaceState(null, '', '/adult/'); tab = 'team'; boot();
-      }) }, 'Create our account')),
+        history.replaceState(null, '', '/adult/'); tab = school ? 'caseload' : 'team'; boot();
+      }) }, school ? 'Create my account' : 'Create our account')),
     h('button', { class: 'btn btn-quiet', onclick: toSignIn }, 'I already have an account'));
 }
 
@@ -261,7 +264,7 @@ addEventListener('hashchange', () => { if (/^#reset=/.test(location.hash)) boot(
 
 // ------------------------------------------------------------ shell
 const TABS = [['activities', 'Activities'], ['library', 'Library'], ['plan', 'Practice plan'], ['review', 'Review practice'], ['notes', 'Observations'], ['team', 'Team & privacy']];
-const tabsFor = () => [...(me.students?.length > 1 ? [['caseload', 'My students']] : []), ...TABS, ...(me.admin ? [['families', 'Families']] : [])];
+const tabsFor = () => [...(me.students?.length > 1 || me.canAddStudents ? [['caseload', 'My students']] : []), ...TABS, ...(me.admin ? [['families', 'Families']] : [])];
 // Several students: a list in the header to switch between them.
 function studentPicker() {
   if (!(me.students?.length > 1)) return null;
@@ -273,6 +276,16 @@ function studentPicker() {
 async function renderCaseload(root) {
   const list = await api('/adult/caseload');
   const open = (x, to) => { chooseStudent(x.home ? '' : x.id); tab = to; boot(); };
+  const nm = h('input', { autocomplete: 'off', maxlength: 40 });
+  const by = h('input', { type: 'number', inputmode: 'numeric', placeholder: 'e.g. 2011' });
+  const addForm = me.canAddStudents ? h('div', { class: 'panel', style: 'display:grid;gap:12px;max-width:520px;margin-top:18px' },
+    h('h3', { style: 'margin:0' }, 'Add a student'),
+    field('First name', nm), field('Year of birth (optional)', by, 'Helps Foxy talk at the right level.'),
+    h('button', { class: 'btn btn-primary', onclick: run(async () => {
+      const r = await api('/adult/students', { method: 'POST', body: { name: nm.value, birthYear: by.value } });
+      toast(`${r.name} added. Open them, then connect their iPad under Team & privacy.`);
+      chooseStudent(r.id); tab = 'team'; boot();
+    }) }, 'Add student')) : null;
   root.append(
     h('p', { class: 'muted', style: 'max-width:70ch' }, 'Each student’s practice, only as far as their privacy choices let you see it. Open a student to see their results, add activities or write an observation.'),
     h('div', { class: 'lib-tiles' }, list.map((x) => h('article', { class: 'lib-tile', style: 'cursor:default' },
@@ -283,11 +296,12 @@ async function renderCaseload(root) {
         : h('span', { class: 'muted' }, `${x.name} has not shared practice with ${ROLE[me.adult.role] ? ROLE[me.adult.role].toLowerCase() + 's' : 'your role'} yet.`),
       h('div', { class: 'row-actions' },
         h('button', { class: 'btn btn-primary', onclick: () => open(x, 'review') }, 'See results'),
-        h('button', { class: 'btn btn-quiet', onclick: () => open(x, 'activities') }, 'Activities'))))));
+        h('button', { class: 'btn btn-quiet', onclick: () => open(x, 'activities') }, 'Activities'))))),
+    addForm);
 }
 
 function renderShell() {
-  if (tab === 'caseload' && !(me.students?.length > 1)) tab = 'activities';
+  if (tab === 'caseload' && !(me.students?.length > 1 || me.canAddStudents)) tab = 'activities';
   const body = h('div', { class: 'team-content' });
   // Sections that don't apply (e.g. owner-only panels) come through as null: skip them rather than print "null".
   body.append = (...kids) => HTMLElement.prototype.append.apply(body, kids.filter((k) => k != null && k !== false));
@@ -1716,17 +1730,19 @@ async function renderFamilies(root) {
   const [families, invites] = await Promise.all([api('/adult/admin/families'), api('/adult/admin/invites')]);
   const note = h('input', { placeholder: 'e.g. Maya\u2019s family, via her therapist' });
   const out = h('div', {});
+  const kindSel = h('select', {}, h('option', { value: 'family' }, 'A family (parent and child)'), h('option', { value: 'school' }, 'A therapist or school'));
   const now = Date.now();
   const inviteStatus = (i) => (i.used_at ? `Used ${day(i.used_at)}${i.learner_name ? ` · ${i.learner_name}` : ''}` : new Date(i.expires_at) < now ? 'Expired' : `Open until ${day(i.expires_at)}`);
   root.append(
     h('h2', {}, 'Invite a family'),
     h('div', { class: 'panel', style: 'display:grid;gap:14px' },
       field('Note (only you see this)', note),
+      field('Who is it for?', kindSel),
       h('div', { class: 'row-actions' }, h('button', { class: 'btn btn-primary', onclick: run(async () => {
-        const r = await api('/adult/admin/invites', { method: 'POST', body: { note: note.value } });
+        const r = await api('/adult/admin/invites', { method: 'POST', body: { note: note.value, kind: kindSel.value } });
         const link = h('input', { value: r.url, readonly: true, 'aria-label': 'Invite link', style: 'flex:1 1 320px' });
         out.replaceChildren(h('div', { class: 'row-actions' }, link, h('button', { class: 'btn', onclick: run(async () => { await navigator.clipboard.writeText(r.url); toast('Link copied.'); }) }, 'Copy link')),
-          h('p', { class: 'muted', style: 'margin:6px 0 0' }, `Send this to the parent. It works once, for ${r.expiresInDays} days.`));
+          h('p', { class: 'muted', style: 'margin:6px 0 0' }, `Send this to them. It works once, for ${r.expiresInDays} days.`));
         note.value = '';
       }) }, 'Create invite link')),
       out),

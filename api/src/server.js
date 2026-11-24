@@ -107,7 +107,7 @@ app.post('/api/adult/login', rateLimit(10), wrap(async (req, res) => {
 
 // ------------------------------------------------------------------ joining by invite (new families)
 
-const inviteByToken = (token) => one(`select id, note from invites where token_hash=$1 and used_at is null and expires_at > now()`, [hmac(String(token || ''))]);
+const inviteByToken = (token) => one(`select id, note, kind from invites where token_hash=$1 and used_at is null and expires_at > now()`, [hmac(String(token || ''))]);
 // ------------------------------------------------------------------ forgot password
 // The same reply whether or not the email belongs to someone, so the form can't be used to find accounts.
 const RESET_MINUTES = 60;
@@ -160,11 +160,14 @@ app.post('/api/waitlist', rateLimit(10), wrap(async (req, res) => {
 
 app.get('/api/invite/:token', rateLimit(30), wrap(async (req, res) => {
   const inv = await inviteByToken(req.params.token);
-  res.json({ valid: !!inv });
+  res.json({ valid: !!inv, kind: inv?.kind || 'family' });
 }));
 app.post('/api/invite/:token', rateLimit(10), wrap(async (req, res) => {
   const { error, value: f } = validateFamily(req.body || {});
   if (error) return res.status(400).json({ error });
+  const pre = await inviteByToken(req.params.token);
+  const school = pre?.kind === 'school';
+  const role = school ? (['therapist', 'teacher', 'job_coach'].includes(req.body?.role) ? req.body.role : 'therapist') : 'parent';
   const client = await pool.connect();
   try {
     await client.query('begin');
@@ -174,7 +177,7 @@ app.post('/api/invite/:token', rateLimit(10), wrap(async (req, res) => {
     if ((await client.query('select 1 from adults where email=$1', [f.email])).rowCount) { await client.query('rollback'); return res.status(409).json({ error: 'That email already has a TALVO account. Sign in instead, or use another email.' }); }
     const l = (await client.query('insert into learners(name, birth_year, settings) values ($1,$2,$3) returning id', [f.learnerName, f.birthYear, {}])).rows[0];
     await client.query('insert into consent(learner_id) values ($1)', [l.id]);
-    const a = (await client.query("insert into adults(learner_id, name, email, role, is_owner, pass_hash) values ($1,$2,$3,'parent',true,$4) returning id", [l.id, f.ownerName, f.email, hashPassword(f.password)])).rows[0];
+    const a = (await client.query("insert into adults(learner_id, name, email, role, is_owner, pass_hash) values ($1,$2,$3,$4,true,$5) returning id", [l.id, f.ownerName, f.email, role, hashPassword(f.password)])).rows[0];
     await client.query('update invites set learner_id=$1 where id=$2', [l.id, inv.id]);
     await client.query('commit');
     res.json({ token: sign({ kind: 'adult', sub: a.id }, 12 * 3600) });
@@ -189,12 +192,32 @@ app.post('/api/invite/:token', rateLimit(10), wrap(async (req, res) => {
 const adult = express.Router();
 adult.use(wrap(requireAdult));
 
+// A therapist or teacher who runs their own account (main account, not a parent) can create students.
+const MAX_STUDENTS = 60;
+async function canAddStudents(adultId) {
+  return !!(await one("select 1 from adults where id=$1 and is_owner and role <> 'parent'", [adultId]));
+}
 adult.get('/me', wrap(async (req, res) => {
   const learner = await one('select id, name, birth_year, settings, current_activity_id from learners where id=$1', [req.learnerId]);
   const consent = await one('select agreed_at, can_view, save_audio from consent where learner_id=$1', [req.learnerId]);
   const students = await many(`select id, name, true as home from learners where id=(select learner_id from adults where id=$1)
     union all select l.id, l.name, false from adult_learners al join learners l on l.id=al.learner_id where al.adult_id=$1 and l.disabled_at is null order by home desc, name`, [req.adult.id]);
-  res.json({ adult: req.adult, learner: { ...learner, settings: settingsOf(learner) }, consent, students: students.length > 1 ? students : [], voice: voiceEnabled(), email: emailEnabled(), admin: isPlatformAdmin(req.adult.email) });
+  res.json({ adult: req.adult, learner: { ...learner, settings: settingsOf(learner) }, consent, students: students.length > 1 ? students : [], canAddStudents: await canAddStudents(req.adult.id), voice: voiceEnabled(), email: emailEnabled(), admin: isPlatformAdmin(req.adult.email) });
+}));
+
+// Add a student: a new learner this person is the main contact for. The student sets their own privacy choices on their device.
+adult.post('/students', wrap(async (req, res) => {
+  if (!(await canAddStudents(req.adult.id))) return res.status(403).json({ error: 'Only a therapist or school account can add students.' });
+  const name = String(req.body?.name || '').trim();
+  if (!name || name.length > 40) return res.status(400).json({ error: "Add the student's first name." });
+  let by = null;
+  if (req.body?.birthYear) { by = Number(req.body.birthYear); const y = new Date().getUTCFullYear(); if (!Number.isInteger(by) || by < y - 30 || by > y - 4) return res.status(400).json({ error: 'Check the year of birth.' }); }
+  const { n } = await one('select count(*)::int n from adult_learners where adult_id=$1 and is_owner', [req.adult.id]);
+  if (n >= MAX_STUDENTS) return res.status(400).json({ error: `You can have up to ${MAX_STUDENTS} students on one account. Contact TALVO support for more.` });
+  const l = await one('insert into learners(name, birth_year, settings) values ($1,$2,$3) returning id', [name, by, {}]);
+  await q('insert into consent(learner_id) values ($1)', [l.id]);
+  await q('insert into adult_learners(adult_id, learner_id, added_by, is_owner) values ($1,$2,$1,true)', [req.adult.id, l.id]);
+  res.json({ id: l.id, name });
 }));
 
 // The students this person looks after, with how practice is going. Only what each student's privacy choices let this role see.
@@ -280,12 +303,12 @@ adult.get('/admin/waitlist.csv', requirePlatformAdmin, wrap(async (req, res) => 
     .send(toCsv(['Email', 'Role', 'Source', 'Joined (UTC)'], rows.map((r) => [r.email, r.role || '', r.source, r.joined])));
 }));
 adult.get('/admin/invites', requirePlatformAdmin, wrap(async (req, res) => {
-  res.json(await many(`select i.id, i.note, i.created_at, i.expires_at, i.used_at, l.name as learner_name
+  res.json(await many(`select i.id, i.note, i.kind, i.created_at, i.expires_at, i.used_at, l.name as learner_name
     from invites i left join learners l on l.id=i.learner_id order by i.created_at desc limit 100`));
 }));
 adult.post('/admin/invites', requirePlatformAdmin, wrap(async (req, res) => {
   const token = newInviteToken();
-  await q(`insert into invites(token_hash, note, created_by, expires_at) values ($1,$2,$3, now() + make_interval(days => $4))`, [hmac(token), String(req.body?.note || '').slice(0, 80), req.adult.id, INVITE_DAYS]);
+  await q(`insert into invites(token_hash, note, created_by, expires_at, kind) values ($1,$2,$3, now() + make_interval(days => $4), $5)`, [hmac(token), String(req.body?.note || '').slice(0, 80), req.adult.id, INVITE_DAYS, req.body?.kind === 'school' ? 'school' : 'family']);
   const base = (process.env.APP_URL || `${req.protocol}://${req.get('host')}`).replace(/\/$/, '');
   res.json({ url: `${base}/adult/?invite=${token}`, expiresInDays: INVITE_DAYS });
 }));
