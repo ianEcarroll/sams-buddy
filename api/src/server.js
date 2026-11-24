@@ -192,7 +192,28 @@ adult.use(wrap(requireAdult));
 adult.get('/me', wrap(async (req, res) => {
   const learner = await one('select id, name, birth_year, settings, current_activity_id from learners where id=$1', [req.learnerId]);
   const consent = await one('select agreed_at, can_view, save_audio from consent where learner_id=$1', [req.learnerId]);
-  res.json({ adult: req.adult, learner: { ...learner, settings: settingsOf(learner) }, consent, voice: voiceEnabled(), email: emailEnabled(), admin: isPlatformAdmin(req.adult.email) });
+  const students = await many(`select id, name, true as home from learners where id=(select learner_id from adults where id=$1)
+    union all select l.id, l.name, false from adult_learners al join learners l on l.id=al.learner_id where al.adult_id=$1 and l.disabled_at is null order by home desc, name`, [req.adult.id]);
+  res.json({ adult: req.adult, learner: { ...learner, settings: settingsOf(learner) }, consent, students: students.length > 1 ? students : [], voice: voiceEnabled(), email: emailEnabled(), admin: isPlatformAdmin(req.adult.email) });
+}));
+
+// The students this person looks after, with how practice is going. Only what each student's privacy choices let this role see.
+adult.get('/caseload', wrap(async (req, res) => {
+  const ids = await many(`select id, name, true as home from learners where id=(select learner_id from adults where id=$1)
+    union all select l.id, l.name, false from adult_learners al join learners l on l.id=al.learner_id where al.adult_id=$1 and l.disabled_at is null order by home desc, name`, [req.adult.id]);
+  const out = [];
+  for (const l of ids) {
+    const c = await one('select agreed_at, can_view from consent where learner_id=$1', [l.id]);
+    const shared = !!(c?.agreed_at && c.can_view?.[req.adult.role]);
+    const row = { id: l.id, name: l.name, home: l.home, shared };
+    if (shared) {
+      const p = await one(`select max(started_at) as last, count(*) filter (where started_at > now() - interval '7 days')::int as week from practice_sessions where learner_id=$1`, [l.id]);
+      const a = await one('select a.title, a.mode from learners l left join activities a on a.id=l.current_activity_id where l.id=$1', [l.id]);
+      Object.assign(row, { last_practice: p?.last || null, practices_7d: p?.week || 0, current: a?.title ? { title: a.title, mode: a.mode } : null });
+    }
+    out.push(row);
+  }
+  res.json(out);
 }));
 
 // Each team member chooses for themselves whether to get an email after every practice.
@@ -202,19 +223,30 @@ adult.put('/me/notifications', wrap(async (req, res) => {
 }));
 
 adult.get('/team', wrap(async (req, res) => {
-  res.json(await many('select id, name, email, role, is_owner, created_at from adults where learner_id=$1 order by created_at', [req.learnerId]));
+  res.json(await many(`select id, name, email, role, is_owner, created_at, false as linked from adults where learner_id=$1
+    union all select a.id, a.name, a.email, a.role, false, al.created_at, true from adult_learners al join adults a on a.id=al.adult_id where al.learner_id=$1
+    order by created_at`, [req.learnerId]));
 }));
 adult.post('/team', requireOwner, wrap(async (req, res) => {
   const { name, role, password } = req.body || {};
   // Accept a pasted contact like "Ian Carroll <ian@example.com>" by keeping just the address.
   const email = (String(req.body?.email || '').match(/[^\s<>"]+@[^\s<>"]+\.[^\s<>"]+/) || [''])[0];
-  if (!name || !email || !ROLES.includes(role) || !password || password.length < 10) return res.status(400).json({ error: 'Add a name, a valid email address, a role and a temporary password of at least 10 characters.' });
-  const a = await one('insert into adults(learner_id, name, email, role, pass_hash) values ($1,$2,lower($3),$4,$5) on conflict (email) do nothing returning id', [req.learnerId, name, email, role, hashPassword(password)]);
-  if (!a) return res.status(409).json({ error: 'That email already has an account.' });
+  if (!name || !email || !ROLES.includes(role)) return res.status(400).json({ error: 'Add a name, a valid email address and a role.' });
+  // Someone who already has a TALVO account (a therapist with other students, say) is added to this student's team
+  // instead: they keep their own sign-in and see this student in their list.
+  const existing = await one('select id, learner_id from adults where email=lower($1)', [email]);
+  if (existing) {
+    if (existing.learner_id === req.learnerId) return res.status(409).json({ error: 'That person is already on the team.' });
+    await q('insert into adult_learners(adult_id, learner_id, added_by) values ($1,$2,$3) on conflict do nothing', [existing.id, req.learnerId, req.adult.id]);
+    return res.json({ id: existing.id, linked: true });
+  }
+  if (!password || password.length < 10) return res.status(400).json({ error: 'Add a temporary password of at least 10 characters.' });
+  const a = await one('insert into adults(learner_id, name, email, role, pass_hash) values ($1,$2,lower($3),$4,$5) returning id', [req.learnerId, name, email, role, hashPassword(password)]);
   res.json({ id: a.id });
 }));
 adult.delete('/team/:id', requireOwner, wrap(async (req, res) => {
   await q('delete from adults where id=$1 and learner_id=$2 and is_owner=false', [req.params.id, req.learnerId]);
+  await q('delete from adult_learners where adult_id=$1 and learner_id=$2', [req.params.id, req.learnerId]);
   res.json({ ok: true });
 }));
 // ------------------------------------------------------------------ platform admin (Ian): families and invites
