@@ -178,7 +178,7 @@ function renderSetup() {
       field('Setup code', f.setupToken, 'The SETUP_TOKEN value from the server settings.'),
       field("Learner's first name", f.learnerName), field('Your name', f.ownerName), field('Your email', f.email), field('Password (10+ characters)', f.password),
       h('button', { class: 'btn btn-primary', onclick: run(async () => {
-        const r = await api('/setup', { method: 'POST', body: Object.fromEntries(Object.entries(f).map(([k, v]) => [k, v.value])) });
+        const r = await api('/setup', { method: 'POST', body: Object.fromEntries(Object.entries(f).map(([k, v]) => [k, v.type === 'checkbox' ? v.checked : v.value])) });
         saveToken(r.token, false); boot();
       }) }, 'Create account')));
 }
@@ -196,6 +196,7 @@ async function renderInvite(inviteToken) {
   const f = {
     learnerName: h('input', { autocomplete: 'off' }), birthYear: h('input', { type: 'number', inputmode: 'numeric', min: '1990', max: String(new Date().getFullYear()), placeholder: 'e.g. 2011' }),
     ownerName: h('input', { autocomplete: 'name' }), email: h('input', { type: 'email', autocomplete: 'email' }), password: h('input', { type: 'password', autocomplete: 'new-password' }),
+    permission: h('input', { type: 'checkbox', checked: true }),
     role: h('select', {}, h('option', { value: 'therapist' }, 'Speech therapist'), h('option', { value: 'teacher' }, 'Teacher'), h('option', { value: 'job_coach' }, 'Job coach')),
   };
   $app.replaceChildren(
@@ -204,6 +205,7 @@ async function renderInvite(inviteToken) {
     h('div', { class: 'panel', style: 'max-width:460px;display:grid;gap:18px' },
       field(school ? 'First student\u2019s first name' : 'Your child\u2019s first name', f.learnerName, 'Foxy uses it in the app, e.g. \u201cWelcome back, Alex!\u201d'),
       school ? field('Your role', f.role) : null,
+      school ? h('label', { class: 'switch' }, f.permission, h('span', {}, 'I have permission to see this student\u2019s practice results', h('br'), h('small', { class: 'muted' }, 'From their family, or covered by your school\u2019s agreement. The student can change it any time on their device.'))) : null,
       field('Year of birth (optional)', f.birthYear, 'Helps Foxy talk at the right level for their age.'),
       field('Your name', f.ownerName), field('Your email', f.email), field('Password (10+ characters)', f.password),
       h('button', { class: 'btn btn-primary', onclick: run(async () => {
@@ -278,11 +280,13 @@ async function renderCaseload(root) {
   const open = (x, to) => { chooseStudent(x.home ? '' : x.id); tab = to; boot(); };
   const nm = h('input', { autocomplete: 'off', maxlength: 40 });
   const by = h('input', { type: 'number', inputmode: 'numeric', placeholder: 'e.g. 2011' });
+  const perm = h('input', { type: 'checkbox', checked: true });
   const addForm = me.canAddStudents ? h('div', { class: 'panel', style: 'display:grid;gap:12px;max-width:520px;margin-top:18px' },
     h('h3', { style: 'margin:0' }, 'Add a student'),
     field('First name', nm), field('Year of birth (optional)', by, 'Helps Foxy talk at the right level.'),
+    h('label', { class: 'switch' }, perm, h('span', {}, 'I have permission to see this student\u2019s practice results', h('br'), h('small', { class: 'muted' }, 'From their family, or covered by your school\u2019s agreement. This lets you and the support team see results straight away. The student can change it any time in My settings on their device. If you leave it unticked, the student chooses on their own device first.'))),
     h('button', { class: 'btn btn-primary', onclick: run(async () => {
-      const r = await api('/adult/students', { method: 'POST', body: { name: nm.value, birthYear: by.value } });
+      const r = await api('/adult/students', { method: 'POST', body: { name: nm.value, birthYear: by.value, permission: perm.checked } });
       toast(`${r.name} added. Open them, then connect their iPad under Team & privacy.`);
       chooseStudent(r.id); tab = 'team'; boot();
     }) }, 'Add student')) : null;
@@ -1863,7 +1867,7 @@ async function renderTeam(root) {
     h('h2', {}, `${me.learner.name}'s privacy choices`),
     h('div', { class: 'panel' },
       c?.agreed_at ? h('div', {},
-        h('p', { style: 'margin-top:0' }, `${me.learner.name} chose who can see their practice records. Only they can change this, in My settings on their iPad or phone.`),
+        h('p', { style: 'margin-top:0' }, me.consent?.set_by_school ? `Practice results are shared with the support team, set up by the school or therapist when ${me.learner.name} was added. ${me.learner.name} can change this in My settings on their iPad or phone.` : `${me.learner.name} chose who can see their practice records. Only they can change this, in My settings on their iPad or phone.`),
         h('ul', {}, Object.entries(ROLE).map(([k, l]) => h('li', {}, `${l}: ${c.can_view?.[k] ? 'can see records' : 'cannot see records'}`))),
         h('p', {}, `Voice recordings: ${c.save_audio ? 'saved' : 'not saved'}.`))
         : h('p', { style: 'margin:0' }, `${me.learner.name} has not made their privacy choices yet. They will be asked the first time they open the app.`)),

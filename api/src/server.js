@@ -179,6 +179,7 @@ app.post('/api/invite/:token', rateLimit(10), wrap(async (req, res) => {
     await client.query('insert into consent(learner_id) values ($1)', [l.id]);
     const a = (await client.query("insert into adults(learner_id, name, email, role, is_owner, pass_hash) values ($1,$2,$3,$4,true,$5) returning id", [l.id, f.ownerName, f.email, role, hashPassword(f.password)])).rows[0];
     await client.query('update invites set learner_id=$1 where id=$2', [l.id, inv.id]);
+    if (school && req.body?.permission === true) await client.query(`update consent set agreed_at=now(), can_view='{"parent":true,"therapist":true,"teacher":true,"job_coach":true}'::jsonb, save_audio=false, set_by=$2, updated_at=now() where learner_id=$1`, [l.id, a.id]);
     await client.query('commit');
     res.json({ token: sign({ kind: 'adult', sub: a.id }, 12 * 3600) });
   } catch (e) {
@@ -194,12 +195,17 @@ adult.use(wrap(requireAdult));
 
 // A therapist or teacher who runs their own account (main account, not a parent) can create students.
 const MAX_STUDENTS = 60;
+// A school or therapist who has permission can set up a student's privacy choices when adding them, so results show
+// straight away. The student can still change them in My settings on their own device.
+async function setSchoolConsent(learnerId, adultId) {
+  await q(`update consent set agreed_at=now(), can_view='{"parent":true,"therapist":true,"teacher":true,"job_coach":true}'::jsonb, save_audio=false, set_by=$2, updated_at=now() where learner_id=$1`, [learnerId, adultId]);
+}
 async function canAddStudents(adultId) {
   return !!(await one("select 1 from adults where id=$1 and is_owner and role <> 'parent'", [adultId]));
 }
 adult.get('/me', wrap(async (req, res) => {
   const learner = await one('select id, name, birth_year, settings, current_activity_id from learners where id=$1', [req.learnerId]);
-  const consent = await one('select agreed_at, can_view, save_audio from consent where learner_id=$1', [req.learnerId]);
+  const consent = await one('select agreed_at, can_view, save_audio, set_by is not null as set_by_school from consent where learner_id=$1', [req.learnerId]);
   const students = await many(`select id, name, true as home from learners where id=(select learner_id from adults where id=$1)
     union all select l.id, l.name, false from adult_learners al join learners l on l.id=al.learner_id where al.adult_id=$1 and l.disabled_at is null order by home desc, name`, [req.adult.id]);
   res.json({ adult: req.adult, learner: { ...learner, settings: settingsOf(learner) }, consent, students: students.length > 1 ? students : [], canAddStudents: await canAddStudents(req.adult.id), voice: voiceEnabled(), email: emailEnabled(), admin: isPlatformAdmin(req.adult.email) });
@@ -217,7 +223,8 @@ adult.post('/students', wrap(async (req, res) => {
   const l = await one('insert into learners(name, birth_year, settings) values ($1,$2,$3) returning id', [name, by, {}]);
   await q('insert into consent(learner_id) values ($1)', [l.id]);
   await q('insert into adult_learners(adult_id, learner_id, added_by, is_owner) values ($1,$2,$1,true)', [req.adult.id, l.id]);
-  res.json({ id: l.id, name });
+  if (req.body?.permission === true) await setSchoolConsent(l.id, req.adult.id);
+  res.json({ id: l.id, name, consentSet: req.body?.permission === true });
 }));
 
 // Results across all this person's students for one period: per student, per goal and per activity.
@@ -864,7 +871,7 @@ device.put('/settings', wrap(async (req, res) => {
 device.put('/consent', wrap(async (req, res) => {
   const { can_view = {}, save_audio = false } = req.body || {};
   const cv = Object.fromEntries(ROLES.map((r) => [r, !!can_view[r]]));
-  await q('update consent set agreed_at=coalesce(agreed_at, now()), can_view=$1, save_audio=$2, updated_at=now() where learner_id=$3', [cv, !!save_audio, req.learnerId]);
+  await q('update consent set agreed_at=coalesce(agreed_at, now()), can_view=$1, save_audio=$2, set_by=null, updated_at=now() where learner_id=$3', [cv, !!save_audio, req.learnerId]);
   if (!save_audio) await q('update practice_events e set audio=null from practice_sessions s where s.id=e.session_id and s.learner_id=$1', [req.learnerId]);
   res.json({ ok: true });
 }));
