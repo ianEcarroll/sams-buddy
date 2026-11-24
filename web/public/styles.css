@@ -605,6 +605,9 @@ details.layer > summary small, details.fine-tune > summary small { font-weight: 
 .lib-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 12px; margin: 14px 0; }
 .lib-tile { text-align: left; font: inherit; color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; min-height: 120px; display: grid; gap: 6px; align-content: start; cursor: pointer; }
 .lib-tile strong { font-size: 1.1rem; }
+.lib-tile .card-icon img { width: 100%; height: 100%; object-fit: contain; }
+.lib-tagline { margin: 4px 0 0; }
+.lib-head select + select { margin-left: 0; }
 .lib-tile:hover, .lib-tile:focus-visible { border-color: var(--met); outline: 2px solid var(--met); outline-offset: 1px; }
 .lib-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin: 14px 0 0; }
 .lib-head h3 { margin: 0; font-size: 1.2rem; }
