@@ -335,6 +335,27 @@ async function renderLibrary(root) {
     toast(r.already ? `${it.title} is already in ${name}’s activities.` : `Added to ${name}’s activities as a draft. Check it, then make it ready.`);
     renderShell();
   });
+  // Several students: choose who gets a copy. Returns the chosen ids, or null if cancelled.
+  const pickStudents = (title) => new Promise((resolve) => {
+    const boxes = me.students.map((x) => h('input', { type: 'checkbox', value: x.id, checked: x.id === me.learner.id }));
+    const dlg = h('dialog', { class: 'panel', style: 'max-width:420px;width:92vw' },
+      h('h3', { style: 'margin-top:0' }, `Add \u201c${title}\u201d to…`),
+      h('div', { style: 'display:grid;gap:8px;margin:12px 0' }, me.students.map((x, i) => h('label', { class: 'switch' }, boxes[i], h('span', {}, x.name)))),
+      h('div', { class: 'row-actions' },
+        h('button', { class: 'btn btn-quiet', type: 'button', onclick: () => { dlg.close(); resolve(null); } }, 'Cancel'),
+        h('button', { class: 'btn btn-quiet', type: 'button', onclick: () => boxes.forEach((b) => { b.checked = true; }) }, 'Select all'),
+        h('button', { class: 'btn btn-primary', type: 'button', onclick: () => { const ids = boxes.filter((b) => b.checked).map((b) => b.value); if (!ids.length) return toast('Choose at least one student.'); dlg.close(); resolve(ids); } }, 'Add')));
+    dlg.addEventListener('close', () => { dlg.remove(); resolve(null); });
+    document.body.append(dlg); dlg.showModal();
+  });
+  const addToMany = (it) => run(async () => {
+    const ids = await pickStudents(it.title);
+    if (!ids) return;
+    const r = await api(`/adult/library/${it.id}/add`, { method: 'POST', body: { learnerIds: ids } });
+    const fresh = r.results.filter((x) => !x.already).map((x) => x.name), had = r.results.filter((x) => x.already).map((x) => x.name);
+    toast(`${fresh.length ? `Added to ${fresh.join(', ')} as a draft.` : ''}${had.length ? ` Already had it: ${had.join(', ')}.` : ''}`.trim());
+    renderShell();
+  });
   // Read-only view of the whole activity. Nothing in here can be edited: the library never changes, and the
   // learner's own copy (made with "Add") is where the team changes wording, answers and pictures.
   async function viewItem(it) {
@@ -391,7 +412,8 @@ async function renderLibrary(root) {
       h('button', { class: 'btn btn-quiet', onclick: () => viewItem(it) }, 'View'),
       it.added
         ? [h('span', { class: 'tag supported' }, it.added.status === 'draft' ? 'Added · draft' : 'Added'), h('button', { class: 'btn btn-quiet', onclick: () => { tab = 'activities'; renderShell(); } }, 'Open Activities')]
-        : h('button', { class: 'btn btn-primary', onclick: add(it) }, `Add to ${name}’s activities`)));
+        : h('button', { class: 'btn btn-primary', onclick: add(it) }, `Add to ${name}’s activities`),
+      me.students?.length > 1 ? h('button', { class: 'btn btn-quiet', onclick: addToMany(it) }, 'Add to several students…') : null));
   const back = () => { lib.mod = ''; lib.type = ''; lib.level = ''; draw(); };
   function draw() {
     const needle = lib.q.trim().toLowerCase();
