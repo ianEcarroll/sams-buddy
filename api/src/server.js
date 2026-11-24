@@ -532,18 +532,35 @@ adult.get('/library/:id', wrap(async (req, res) => {
   const have = (await libraryCopies(req.learnerId)).get(item.id) || null;
   res.json({ ...libraryDetail(item), added: have });
 }));
+// Copy a library activity into one learner's activities (and switch its module on for them).
+async function addLibraryTo(learnerId, item, adultId) {
+  const have = (await libraryCopies(learnerId)).get(item.id);
+  if (have) return { id: have.id, already: true };
+  const a = activityFromLibrary(item);
+  const row = await one('insert into activities(learner_id, mode, title, goal, plan_goal, status, content, created_by) values ($1,$2,$3,$4,$5,$6,$7,$8) returning id', [learnerId, a.mode, a.title, a.goal, a.plan_goal, a.status, a.content, adultId]);
+  // Make sure the learner's home can show the module this activity belongs to.
+  const l = await one('select settings from learners where id=$1', [learnerId]);
+  const modes = settingsOf(l).enabled_modes;
+  if (!modes.includes(a.mode)) await q('update learners set settings = settings || $1::jsonb where id=$2', [{ enabled_modes: [...modes, a.mode] }, learnerId]);
+  return { id: row.id, already: false };
+}
+// Students this adult can open: their own plus the ones they were added to.
+const accessibleLearnerIds = async (adultId) => new Set((await many(`select learner_id as id from adults where id=$1
+  union select learner_id from adult_learners where adult_id=$1`, [adultId])).map((r) => r.id));
 adult.post('/library/:id/add', wrap(async (req, res) => {
   const item = libraryById(req.params.id);
   if (!item) return res.status(404).json({ error: 'That library activity was not found.' });
-  const have = (await libraryCopies(req.learnerId)).get(item.id);
-  if (have) return res.json({ id: have.id, already: true });
-  const a = activityFromLibrary(item);
-  const row = await one('insert into activities(learner_id, mode, title, goal, plan_goal, status, content, created_by) values ($1,$2,$3,$4,$5,$6,$7,$8) returning id', [req.learnerId, a.mode, a.title, a.goal, a.plan_goal, a.status, a.content, req.adult.id]);
-  // Make sure the learner's home can show the module this activity belongs to.
-  const l = await one('select settings from learners where id=$1', [req.learnerId]);
-  const modes = settingsOf(l).enabled_modes;
-  if (!modes.includes(a.mode)) await q('update learners set settings = settings || $1::jsonb where id=$2', [{ enabled_modes: [...modes, a.mode] }, req.learnerId]);
-  res.json({ id: row.id, already: false });
+  const wanted = Array.isArray(req.body?.learnerIds) ? [...new Set(req.body.learnerIds.map(String))] : null;
+  if (!wanted) return res.json(await addLibraryTo(req.learnerId, item, req.adult.id));
+  // Several students at once: every one must be a student this person can open.
+  const ok = await accessibleLearnerIds(req.adult.id);
+  if (!wanted.length || wanted.length > 60 || wanted.some((id) => !ok.has(id))) return res.status(403).json({ error: 'You do not have access to one of those students.' });
+  const results = [];
+  for (const id of wanted) {
+    const l = await one('select name from learners where id=$1 and disabled_at is null', [id]);
+    if (l) results.push({ learnerId: id, name: l.name, ...(await addLibraryTo(id, item, req.adult.id)) });
+  }
+  res.json({ results });
 }));
 adult.post('/activities', wrap(async (req, res) => {
   const err = validateActivity(req.body || {});
