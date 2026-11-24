@@ -297,7 +297,46 @@ async function renderCaseload(root) {
       h('div', { class: 'row-actions' },
         h('button', { class: 'btn btn-primary', onclick: () => open(x, 'review') }, 'See results'),
         h('button', { class: 'btn btn-quiet', onclick: () => open(x, 'activities') }, 'Activities'))))),
+    list.length > 1 ? h('div', { id: 'group-report' }) : null,
     addForm);
+  if (list.length > 1) groupReportView(root.querySelector('#group-report'), list).catch((e) => toast(e.message));
+}
+
+// Results for every student side by side, for one period. Pick "All goals" or one activity.
+const reportUi = { days: '30', by: 'goal' };
+async function groupReportView(box, list) {
+  const periodSel = h('select', { 'aria-label': 'Period' }, [['7', 'Last 7 days'], ['30', 'Last 30 days'], ['90', 'Last 90 days'], ['all', 'All practice']].map(([v, l]) => h('option', { value: v, selected: reportUi.days === v }, l)));
+  const bySel = h('select', { 'aria-label': 'Show' });
+  const table = h('div', { style: 'overflow-x:auto' });
+  let rep;
+  const cell = (r) => (!r || !r.opportunities) ? h('td', { class: 'muted' }, r?.items ? `${r.items} done` : '–')
+    : h('td', {}, h('strong', {}, `${r.successes}`), ` of ${r.opportunities}`, h('br'), h('small', { class: 'muted' }, ['I', 'M', 'P', 'F'].filter((k) => r[k]).map((k) => `${k}${r[k]}`).join(' ')));
+  function draw() {
+    const shared = rep.students.filter((x) => x.shared);
+    const keys = reportUi.by === 'goal'
+      ? Object.entries(goals.goals).filter(([k]) => k !== 'other' && shared.some((x) => x.goals.some((g) => g.key === k))).map(([k, g]) => [k, g.n < 5 ? `${g.n}. ${g.label}` : g.label])
+      : [...new Set(shared.flatMap((x) => x.activities.map((a) => a.key)))].sort().map((k) => [k, k]);
+    const rowsOf = (x) => (reportUi.by === 'goal' ? x.goals : x.activities);
+    table.replaceChildren(!keys.length
+      ? h('p', { class: 'panel' }, shared.length ? 'No practice in this period yet.' : 'No student has shared practice with you yet. They choose this on their own device the first time they open TALVO.')
+      : h('table', { class: 'report-table' },
+        h('thead', {}, h('tr', {}, h('th', {}, 'Student'), keys.map(([, l]) => h('th', {}, l)))),
+        h('tbody', {}, rep.students.map((x) => h('tr', {}, h('th', { scope: 'row' }, x.name),
+          x.shared ? keys.map(([k]) => cell(rowsOf(x).find((r) => r.key === k))) : h('td', { class: 'muted', colspan: String(keys.length) }, 'Not shared'))))));
+  }
+  async function load() {
+    rep = await api(`/adult/report?days=${reportUi.days}&tz=${encodeURIComponent(TZ)}`);
+    bySel.replaceChildren(h('option', { value: 'goal', selected: reportUi.by === 'goal' }, 'By goal'), h('option', { value: 'activity', selected: reportUi.by === 'activity' }, 'By activity'));
+    draw();
+  }
+  periodSel.addEventListener('change', () => { reportUi.days = periodSel.value; load().catch((e) => toast(e.message)); });
+  bySel.addEventListener('change', () => { reportUi.by = bySel.value; draw(); });
+  box.append(h('h2', {}, 'Results across students'),
+    h('p', { class: 'muted', style: 'max-width:70ch;margin-top:0' }, 'Each cell shows how many tries met the target, with how much help was needed: I independent, M model, P prompt, F full help.'),
+    h('div', { class: 'row-actions' }, periodSel, bySel,
+      h('button', { class: 'btn btn-quiet', onclick: run(() => download(`/adult/report.csv?days=${reportUi.days}`, 'talvo-students-report.csv')) }, 'Download (CSV)')),
+    table);
+  await load();
 }
 
 function renderShell() {
@@ -1682,7 +1721,7 @@ async function showTranscript(root, sessionId) {
 
 async function download(path, name) {
   const sep = path.includes('?') ? '&' : '?';
-  const r = await fetch(`/api${path}${sep}tz=${encodeURIComponent(TZ)}`, { headers: { authorization: `Bearer ${token}` } });
+  const r = await fetch(`/api${path}${sep}tz=${encodeURIComponent(TZ)}`, { headers: { authorization: `Bearer ${token}`, ...(student ? { 'x-learner-id': student } : {}) } });
   if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || 'Download failed.');
   const a = h('a', { href: URL.createObjectURL(await r.blob()), download: name });
   document.body.append(a); a.click(); a.remove();

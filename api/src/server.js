@@ -220,6 +220,39 @@ adult.post('/students', wrap(async (req, res) => {
   res.json({ id: l.id, name });
 }));
 
+// Results across all this person's students for one period: per student, per goal and per activity.
+// Only students who agreed to share with this role are included; the rest are listed as not shared.
+async function groupReport(adult, days, tz) {
+  const students = await many(`select id, name, true as home from learners where id=(select learner_id from adults where id=$1)
+    union all select l.id, l.name, false from adult_learners al join learners l on l.id=al.learner_id where al.adult_id=$1 and l.disabled_at is null order by home desc, name`, [adult.id]);
+  const out = [];
+  for (const l of students) {
+    const c = await one('select agreed_at, can_view from consent where learner_id=$1', [l.id]);
+    if (!(c?.agreed_at && c.can_view?.[adult.role])) { out.push({ id: l.id, name: l.name, shared: false }); continue; }
+    const rec = (by) => many(`select ${by} as key, count(*)::int items, count(success)::int opportunities, count(*) filter (where success)::int successes,
+        count(*) filter (where support_code='I')::int "I", count(*) filter (where support_code='M')::int "M",
+        count(*) filter (where support_code='P')::int "P", count(*) filter (where support_code='F')::int "F"
+      from practice_records where learner_id=$1 and ($2::int is null or created_at > now() - make_interval(days => $2)) group by 1 order by 1`, [l.id, days]);
+    const [goals, activities, last] = await Promise.all([rec('plan_goal'), rec('activity_title'),
+      one('select max(created_at) as last from practice_records where learner_id=$1', [l.id])]);
+    out.push({ id: l.id, name: l.name, shared: true, last_practice: last?.last || null, goals, activities });
+  }
+  return out;
+}
+const reportDays = (req) => (req.query.days === 'all' ? null : Math.min(365, Math.max(1, Number(req.query.days) || 30)));
+adult.get('/report', wrap(async (req, res) => res.json({ days: reportDays(req), students: await groupReport(req.adult, reportDays(req), tzOf(req)) })));
+adult.get('/report.csv', wrap(async (req, res) => {
+  const rep = await groupReport(req.adult, reportDays(req), tzOf(req));
+  const rows = [];
+  for (const st of rep) {
+    if (!st.shared) { rows.push([st.name, 'Not shared', '', '', '', '', '', '', '']); continue; }
+    for (const a of st.activities) rows.push([st.name, 'Activity', a.key, a.items, a.opportunities, a.successes, ...['I', 'M', 'P', 'F'].map((k) => a[k])]);
+    for (const g of st.goals) rows.push([st.name, 'Goal', goalLabel(g.key), g.items, g.opportunities, g.successes, ...['I', 'M', 'P', 'F'].map((k) => g[k])]);
+  }
+  res.set({ 'content-type': 'text/csv; charset=utf-8', 'content-disposition': 'attachment; filename="talvo-students-report.csv"' })
+    .send(toCsv(['Student', 'Kind', 'Name', 'Items', 'Opportunities', 'Met target', 'Independent (I)', 'Model (M)', 'Prompt (P)', 'Full help (F)'], rows));
+}));
+
 // The students this person looks after, with how practice is going. Only what each student's privacy choices let this role see.
 adult.get('/caseload', wrap(async (req, res) => {
   const ids = await many(`select id, name, true as home from learners where id=(select learner_id from adults where id=$1)
