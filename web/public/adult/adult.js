@@ -1618,16 +1618,55 @@ async function download(path, name) {
 }
 
 // ------------------------------------------------------------ observations
+// A "Speak it" button for a text box: records, turns the speech into text on the server and adds it to the box, where it
+// can be read and corrected before saving. Hidden where the browser cannot record.
+function speakButton(box) {
+  if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') return null;
+  const status = h('span', { class: 'muted', role: 'status' });
+  const btn = h('button', { type: 'button', class: 'btn' }, 'Speak it instead');
+  let rec = null;
+  const mimeOf = () => ['audio/mp4', 'audio/webm;codecs=opus', 'audio/webm'].find((m) => MediaRecorder.isTypeSupported?.(m)) || '';
+  btn.addEventListener('click', async () => {
+    if (rec) { rec.recorder.stop(); return; }
+    let stream;
+    try { stream = await navigator.mediaDevices.getUserMedia({ audio: true }); } catch { toast('This page cannot use the microphone. Check that it is allowed, or type it.'); return; }
+    const chunks = [];
+    const recorder = new MediaRecorder(stream, mimeOf() ? { mimeType: mimeOf() } : undefined);
+    rec = { recorder };
+    recorder.ondataavailable = (e) => { if (e.data?.size) chunks.push(e.data); };
+    recorder.onstop = async () => {
+      stream.getTracks().forEach((t) => t.stop());
+      rec = null;
+      btn.disabled = true; btn.textContent = 'Speak it instead';
+      status.textContent = 'Writing it down…';
+      try {
+        const blob = new Blob(chunks, { type: recorder.mimeType || 'audio/webm' });
+        const form = new FormData();
+        form.append('audio', blob, blob.type.includes('mp4') ? 'note.mp4' : 'note.webm');
+        const r = await Promise.race([api('/adult/transcribe', { method: 'POST', form }), new Promise((_, no) => setTimeout(() => no(new Error('That took too long. Please try again or type it.')), 60000))]);
+        if (r.text) { box.value = `${box.value.trim()}${box.value.trim() ? ' ' : ''}${r.text}`; box.dispatchEvent(new Event('input', { bubbles: true })); status.textContent = 'Added. Check it, change anything, then save.'; }
+        else status.textContent = 'I could not hear anything. Try again, or type it.';
+      } catch (e) { status.textContent = ''; toast(e.message); }
+      btn.disabled = false;
+    };
+    recorder.start();
+    btn.textContent = 'Stop and write it down';
+    status.textContent = 'Listening… speak now, then press Stop.';
+  });
+  return h('div', { class: 'row-actions' }, btn, status);
+}
+
 async function renderNotes(root) {
   const obs = await api('/adult/observations');
   const setting = h('select', {}, ['home', 'school', 'work', 'therapy', 'other'].map((s) => h('option', { value: s }, s[0].toUpperCase() + s.slice(1))));
   const skill = h('input', { placeholder: 'e.g. Asking for clarification' });
   const note = h('textarea', { rows: 3, placeholder: 'What did you notice?' });
+  const speak = speakButton(note);
   root.append(
     h('h2', {}, 'Add an observation'),
     h('div', { class: 'panel', style: 'display:grid;gap:10px' },
       h('p', { class: 'muted', style: 'margin:0' }, 'How did the skill show up in everyday life? Practice in the app is rehearsal; these notes show what carried over.'),
-      h('div', { class: 'grid2' }, field('Where', setting), field('Skill', skill)), field('Note', note),
+      h('div', { class: 'grid2' }, field('Where', setting), field('Skill', skill)), field('Note', note), speak,
       h('button', { class: 'btn btn-primary', onclick: run(async () => { await api('/adult/observations', { method: 'POST', body: { setting: setting.value, skill: skill.value, note: note.value } }); toast('Observation saved.'); renderShell(); }) }, 'Save observation')),
     h('h2', {}, 'Observations'),
     obs.length ? h('ul', { class: 'list panel' }, obs.map((o) => h('li', {}, h('div', {}, h('strong', {}, `${o.setting}${o.skill ? ` · ${o.skill}` : ''}`), h('br'), o.note), h('span', { class: 'muted' }, `${o.adult_name || ''}, ${fmt(o.created_at)}`)))) : h('p', { class: 'muted' }, 'No observations yet.'),

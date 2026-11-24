@@ -611,6 +611,20 @@ adult.get('/events/:id/audio', wrap(requireRecordAccess), wrap(async (req, res) 
   if (!e?.audio) return res.status(404).end();
   res.set('content-type', e.audio_mime || 'audio/webm').send(e.audio);
 }));
+// Speak an observation instead of typing it: the recording is turned into text and sent back for the adult to check and
+// edit. The audio is not kept.
+adult.post('/transcribe', upload.single('audio'), wrap(async (req, res) => {
+  if (!voiceEnabled()) return res.status(503).json({ error: 'Voice is not set up yet. Please type it instead.' });
+  if (!req.file || req.file.size < 1500) return res.json({ text: '' });
+  try {
+    const { text } = await transcribe(req.file.buffer, req.file.mimetype);
+    if (!text) console.log(`[stt] adult note: nothing recognised in ${req.file.size} bytes, ${req.file.mimetype}`);
+    res.json({ text });
+  } catch (err) {
+    console.error('[stt] adult note:', err.message);
+    res.status(502).json({ error: "Sorry, I couldn't turn that into text. Please try again or type it." });
+  }
+}));
 adult.get('/observations', wrap(async (req, res) => {
   res.json(await many('select o.*, a.name as adult_name, a.role from observations o left join adults a on a.id=o.adult_id where o.learner_id=$1 order by o.created_at desc limit 200', [req.learnerId]));
 }));
