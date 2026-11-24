@@ -53,6 +53,17 @@ export async function requireAdult(req, res, next) {
   if (!adult) return res.status(401).json({ error: 'This account no longer exists.' });
   if (signedInBeforePasswordChange(p, adult.password_changed_at)) return res.status(401).json({ error: 'Your password was changed. Please sign in again.' });
   delete adult.password_changed_at;
+  // A therapist or teacher with several students picks one with the X-Learner-Id header. It only works for a student
+  // this person was added to; there they are never the owner.
+  const want = String(req.headers['x-learner-id'] || '');
+  if (want && want !== adult.learner_id) {
+    const link = await one('select l.disabled_at from adult_learners al join learners l on l.id=al.learner_id where al.adult_id=$1 and al.learner_id=$2', [adult.id, want]);
+    if (!link) return res.status(403).json({ error: 'You do not have access to that student.', notLinked: true });
+    adult.learner_id = want;
+    adult.is_owner = false;
+    adult.linked = true;
+    adult.disabled_at = link.disabled_at;
+  }
   if (adult.disabled_at && !isPlatformAdmin(adult.email)) return res.status(403).json({ error: 'This TALVO account is paused. Contact TALVO support to turn it back on.', paused: true });
   delete adult.disabled_at;
   req.adult = adult;

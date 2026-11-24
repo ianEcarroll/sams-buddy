@@ -18,6 +18,13 @@ function signOut() {
   boot();
 }
 let token = readToken();
+// A therapist or teacher with several students: which one is open. Sent with every request; empty means their own.
+const STUDENT_KEY = 'talvo.student';
+let student = store('local')?.getItem(STUDENT_KEY) || '';
+function chooseStudent(id) {
+  student = id || '';
+  if (student) store('local')?.setItem(STUDENT_KEY, student); else store('local')?.removeItem(STUDENT_KEY);
+}
 let me = null;
 let modes = null;
 let goals = null;   // { goals: {key: {n,label,short,target,cue,allowed}}, codes: {I,M,P,F} }
@@ -72,7 +79,7 @@ const ROLE = { parent: 'Parent', therapist: 'Speech therapist', teacher: 'Teache
 async function api(path, { method = 'GET', body, form } = {}) {
   const res = await fetch(`/api${path}`, {
     method,
-    headers: { ...(token ? { authorization: `Bearer ${token}` } : {}), ...(body ? { 'content-type': 'application/json' } : {}) },
+    headers: { ...(token ? { authorization: `Bearer ${token}` } : {}), ...(student && path.startsWith('/adult/') ? { 'x-learner-id': student } : {}), ...(body ? { 'content-type': 'application/json' } : {}) },
     body: form || (body ? JSON.stringify(body) : undefined),
   });
   const data = res.headers.get('content-type')?.includes('json') ? await res.json() : null;
@@ -96,6 +103,8 @@ async function boot() {
   try {
     me = await api('/adult/me');
   } catch (e) {
+    // The student that was open is no longer available to this person: go back to their own.
+    if (student) { chooseStudent(''); return boot(); }
     return $app.replaceChildren(brand(), h('h1', {}, 'TALVO'), h('p', { class: 'panel' }, e.message),
       h('button', { class: 'btn btn-quiet', onclick: signOut }, 'Sign out'));
   }
@@ -252,14 +261,40 @@ addEventListener('hashchange', () => { if (/^#reset=/.test(location.hash)) boot(
 
 // ------------------------------------------------------------ shell
 const TABS = [['activities', 'Activities'], ['library', 'Library'], ['plan', 'Practice plan'], ['review', 'Review practice'], ['notes', 'Observations'], ['team', 'Team & privacy']];
-const tabsFor = () => (me.admin ? [...TABS, ['families', 'Families']] : TABS);
+const tabsFor = () => [...(me.students?.length > 1 ? [['caseload', 'My students']] : []), ...TABS, ...(me.admin ? [['families', 'Families']] : [])];
+// Several students: a list in the header to switch between them.
+function studentPicker() {
+  if (!(me.students?.length > 1)) return null;
+  const sel = h('select', { 'aria-label': 'Student' }, me.students.map((x) => h('option', { value: x.id, selected: x.id === me.learner.id }, x.name)));
+  sel.addEventListener('change', () => { const x = me.students.find((y) => y.id === sel.value); chooseStudent(x?.home ? '' : sel.value); boot(); });
+  return h('label', { class: 'student-pick' }, h('span', { class: 'muted' }, 'Student '), sel);
+}
+// The students this person looks after, and how practice is going for each.
+async function renderCaseload(root) {
+  const list = await api('/adult/caseload');
+  const open = (x, to) => { chooseStudent(x.home ? '' : x.id); tab = to; boot(); };
+  root.append(
+    h('p', { class: 'muted', style: 'max-width:70ch' }, 'Each student’s practice, only as far as their privacy choices let you see it. Open a student to see their results, add activities or write an observation.'),
+    h('div', { class: 'lib-tiles' }, list.map((x) => h('article', { class: 'lib-tile', style: 'cursor:default' },
+      h('strong', {}, x.name),
+      x.shared
+        ? [h('span', {}, x.current ? `Practising: ${x.current.title}` : 'No activity chosen yet'),
+          h('small', { class: 'muted' }, x.last_practice ? `Last practice ${whenUsed(x.last_practice)} · ${x.practices_7d} in the last 7 days` : 'No practice yet')]
+        : h('span', { class: 'muted' }, `${x.name} has not shared practice with ${ROLE[me.adult.role] ? ROLE[me.adult.role].toLowerCase() + 's' : 'your role'} yet.`),
+      h('div', { class: 'row-actions' },
+        h('button', { class: 'btn btn-primary', onclick: () => open(x, 'review') }, 'See results'),
+        h('button', { class: 'btn btn-quiet', onclick: () => open(x, 'activities') }, 'Activities'))))));
+}
+
 function renderShell() {
+  if (tab === 'caseload' && !(me.students?.length > 1)) tab = 'activities';
   const body = h('div', { class: 'team-content' });
   // Sections that don't apply (e.g. owner-only panels) come through as null: skip them rather than print "null".
   body.append = (...kids) => HTMLElement.prototype.append.apply(body, kids.filter((k) => k != null && k !== false));
   $app.replaceChildren(
     h('header', { class: 'adult-head' },
       h('div', {}, h('h1', {}, brand(me.learner.name)), h('span', { class: 'muted' }, `${me.adult.name} · ${ROLE[me.adult.role]}`)),
+      studentPicker(),
       h('button', { class: 'btn btn-quiet', onclick: signOut }, 'Sign out')),
     ...[installHelp()].filter(Boolean),
     h('div', { class: 'team-workspace' }, h('nav', { class: 'tabs', 'aria-label': 'Support team sections' }, tabsFor().map(([k, l]) => h('button', { 'aria-current': tab === k ? 'page' : null, onclick: () => { tab = k; renderShell(); } }, l))), body),
@@ -267,7 +302,7 @@ function renderShell() {
   );
   body.append(h('header', { class: 'team-page-title' }, h('h2', {}, tabsFor().find(([k]) => k === tab)[1]), h('p', { class: 'muted' }, `Support ${me.learner.name}’s practice, one step at a time.`)));
   if (!me.voice) body.append(h('p', { class: 'panel' }, `Voice is not connected yet. ${me.learner.name} can still practise by typing.`));
-  ({ plan: renderPlan, activities: renderActivities, library: renderLibrary, review: renderReview, notes: renderNotes, team: renderTeam, families: renderFamilies })[tab](body).catch((e) => toast(e.message));
+  ({ caseload: renderCaseload, plan: renderPlan, activities: renderActivities, library: renderLibrary, review: renderReview, notes: renderNotes, team: renderTeam, families: renderFamilies })[tab](body).catch((e) => toast(e.message));
 }
 
 // ------------------------------------------------------------ activity library
@@ -1771,7 +1806,8 @@ async function renderTeam(root) {
     h('ul', { class: 'list panel' }, team.map((t) => h('li', {}, h('span', {}, `${t.name} · ${ROLE[t.role]}${t.is_owner ? ' (main account)' : ''} · ${t.email}`),
       owner && !t.is_owner ? h('button', { class: 'btn btn-danger', onclick: run(async () => { if (confirm(`Remove ${t.name}?`)) { await api(`/adult/team/${t.id}`, { method: 'DELETE' }); renderShell(); } }) }, 'Remove') : null))),
     owner ? h('div', { class: 'panel' }, h('h3', { style: 'margin-top:0' }, 'Add a team member'),
-      h('div', { class: 'grid2' }, field('Name', add.name), field('Email', add.email), field('Role', add.role), field('Temporary password (10+ characters)', add.password)),
+      h('div', { class: 'grid2' }, field('Name', add.name), field('Email', add.email), field('Role', add.role), field('Temporary password (10+ characters, only for someone new)', add.password)),
+      h('p', { class: 'muted', style: 'margin:6px 0 0;max-width:70ch' }, 'Someone who already has a TALVO account, such as a therapist with other students, does not need a password. They keep their own sign-in and will see this student in their list.'),
       h('button', { class: 'btn', style: 'margin-top:10px', onclick: run(async () => { await api('/adult/team', { method: 'POST', body: Object.fromEntries(Object.entries(add).map(([k, v]) => [k, v.value])) }); toast('Team member added. Share the password with them privately.'); renderShell(); }) }, 'Add team member')) : null,
 
     h('h2', {}, 'My password'),

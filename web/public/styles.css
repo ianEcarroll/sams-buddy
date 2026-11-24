@@ -635,3 +635,6 @@ body.lib-open { overflow: hidden; }
 .lib-card .row-actions { align-items: center; }
 @media (max-width: 560px) { .lib-part dl { grid-template-columns: 1fr; } .lib-part dt { margin-top: 6px; } }
 .review-filters input[type="search"] { border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; background: var(--surface); min-height: 42px; min-width: 220px; }
+
+.student-pick { display: flex; align-items: center; gap: 6px; margin-left: auto; margin-right: 10px; }
+.student-pick select { max-width: 40vw; }
