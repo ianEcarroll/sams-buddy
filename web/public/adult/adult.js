@@ -277,20 +277,24 @@ function studentPicker() {
 async function renderCaseload(root) {
   const list = await api('/adult/caseload');
   const open = (x, to) => { chooseStudent(x.home ? '' : x.id); tab = to; boot(); };
-  const nm = h('input', { autocomplete: 'off', maxlength: 40 });
-  const by = h('input', { type: 'number', inputmode: 'numeric', placeholder: 'e.g. 2011' });
+  const names = h('textarea', { rows: 8, placeholder: 'Amy\nBen, 2012\nCara\nDev', autocomplete: 'off', style: 'width:100%;font:inherit' });
   const perm = h('input', { type: 'checkbox', checked: true });
-  const addForm = me.canAddStudents ? h('div', { class: 'panel', style: 'display:grid;gap:12px;max-width:520px;margin-top:18px' },
-    h('h3', { style: 'margin:0' }, 'Add a student'),
-    field('First name', nm), field('Year of birth (optional)', by, 'Helps Foxy talk at the right level.'),
-    h('label', { class: 'switch' }, perm, h('span', {}, 'I have permission to see this student\u2019s practice results', h('br'), h('small', { class: 'muted' }, 'From their family, or covered by your school\u2019s agreement. This lets you and the support team see results straight away. The student can change it any time in My settings on their device. If you leave it unticked, the student chooses on their own device first.'))),
+  // One student per line: a first name, then optionally a comma and the year of birth.
+  const parse = () => names.value.split(/\r?\n/).map((l) => l.trim()).filter(Boolean).map((l) => { const [name, year] = l.split(/[,;\t]/).map((x) => x.trim()); return { name, birthYear: year || '' }; });
+  const addForm = me.canAddStudents ? h('div', { class: 'panel', style: 'display:grid;gap:12px;max-width:560px;margin-top:18px' },
+    h('h3', { style: 'margin:0' }, list.length ? 'Add students' : 'Add your students'),
+    field('First names, one per line', names, 'Paste your class list. After a first name you can add a comma and the year of birth, for example \u201cBen, 2012\u201d. The year helps Foxy talk at the right level.'),
+    h('label', { class: 'switch' }, perm, h('span', {}, 'I have permission to see these students\u2019 practice results', h('br'), h('small', { class: 'muted' }, 'From their families, or covered by your school\u2019s agreement. This lets you and the support team see results straight away. A student can change it any time in My settings on their device. If you leave it unticked, each student chooses on their own device first.'))),
     h('button', { class: 'btn btn-primary', onclick: run(async () => {
-      const r = await api('/adult/students', { method: 'POST', body: { name: nm.value, birthYear: by.value, permission: perm.checked } });
-      toast(`${r.name} added. Open them, then connect their iPad under Team & privacy.`);
-      chooseStudent(r.id); tab = 'team'; boot();
-    }) }, 'Add student')) : null;
+      const students = parse();
+      if (!students.length) return toast('Add at least one first name.');
+      const r = await api('/adult/students', { method: 'POST', body: { students, permission: perm.checked } });
+      if (r.added.length === 1) { toast(`${r.name} added. Connect their iPad under Team & privacy.`); chooseStudent(r.id); tab = 'team'; }
+      else toast(`${r.added.length} students added. Next, connect each student\u2019s iPad, and add activities from the Library.`);
+      boot();
+    }) }, 'Add students')) : null;
   root.append(
-    !list.length ? h('p', { class: 'panel', style: 'max-width:70ch' }, 'You have no students yet. Add your first student below.') : null,
+    !list.length ? h('p', { class: 'panel', style: 'max-width:70ch' }, 'You have no students yet. Add your class below.') : null,
     h('p', { class: 'muted', style: 'max-width:70ch' }, 'Each student’s practice, only as far as their privacy choices let you see it. Open a student to see their results, add activities or write an observation.'),
     h('div', { class: 'lib-tiles' }, list.map((x) => h('article', { class: 'lib-tile', style: 'cursor:default' },
       h('strong', {}, x.name),

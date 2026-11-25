@@ -214,17 +214,38 @@ adult.get('/me', wrap(async (req, res) => {
 // Add a student: a new learner this person is the main contact for. The student sets their own privacy choices on their device.
 adult.post('/students', wrap(async (req, res) => {
   if (!(await canAddStudents(req.adult.id))) return res.status(403).json({ error: 'Only a therapist or school account can add students.' });
-  const name = String(req.body?.name || '').trim();
-  if (!name || name.length > 40) return res.status(400).json({ error: "Add the student's first name." });
-  let by = null;
-  if (req.body?.birthYear) { by = Number(req.body.birthYear); const y = new Date().getUTCFullYear(); if (!Number.isInteger(by) || by < y - 30 || by > y - 4) return res.status(400).json({ error: 'Check the year of birth.' }); }
+  // One student ({name, birthYear}) or a whole class ({students: [{name, birthYear}, …]}); all are checked before any is added.
+  const raw = Array.isArray(req.body?.students) ? req.body.students : [{ name: req.body?.name, birthYear: req.body?.birthYear }];
+  if (!raw.length) return res.status(400).json({ error: "Add the students' first names." });
+  const y = new Date().getUTCFullYear();
+  const list = [];
+  for (const [i, r] of raw.entries()) {
+    const name = String(r?.name || '').trim();
+    if (!name || name.length > 40) return res.status(400).json({ error: raw.length > 1 ? `Check the name on line ${i + 1}: first names only, up to 40 characters.` : "Add the student's first name." });
+    let by = null;
+    if (r?.birthYear !== undefined && r.birthYear !== null && String(r.birthYear).trim() !== '') {
+      by = Number(r.birthYear);
+      if (!Number.isInteger(by) || by < y - 30 || by > y - 4) return res.status(400).json({ error: raw.length > 1 ? `Check the year of birth for ${name}.` : 'Check the year of birth.' });
+    }
+    list.push({ name, by });
+  }
   const { n } = await one('select count(*)::int n from adult_learners where adult_id=$1 and is_owner', [req.adult.id]);
-  if (n >= MAX_STUDENTS) return res.status(400).json({ error: `You can have up to ${MAX_STUDENTS} students on one account. Contact TALVO support for more.` });
-  const l = await one('insert into learners(name, birth_year, settings) values ($1,$2,$3) returning id', [name, by, {}]);
-  await q('insert into consent(learner_id) values ($1)', [l.id]);
-  await q('insert into adult_learners(adult_id, learner_id, added_by, is_owner) values ($1,$2,$1,true)', [req.adult.id, l.id]);
-  if (req.body?.permission === true) await setSchoolConsent(l.id, req.adult.id);
-  res.json({ id: l.id, name, consentSet: req.body?.permission === true });
+  if (n + list.length > MAX_STUDENTS) return res.status(400).json({ error: `You can have up to ${MAX_STUDENTS} students on one account${n ? ` (you have ${n})` : ''}. Contact TALVO support for more.` });
+  const consent = req.body?.permission === true;
+  const client = await pool.connect();
+  const added = [];
+  try {
+    await client.query('begin');
+    for (const st of list) {
+      const l = (await client.query('insert into learners(name, birth_year, settings) values ($1,$2,$3) returning id', [st.name, st.by, {}])).rows[0];
+      await client.query('insert into consent(learner_id) values ($1)', [l.id]);
+      await client.query('insert into adult_learners(adult_id, learner_id, added_by, is_owner) values ($1,$2,$1,true)', [req.adult.id, l.id]);
+      if (consent) await client.query(`update consent set agreed_at=now(), can_view='{"parent":true,"therapist":true,"teacher":true,"job_coach":true}'::jsonb, save_audio=false, set_by=$2, updated_at=now() where learner_id=$1`, [l.id, req.adult.id]);
+      added.push({ id: l.id, name: st.name });
+    }
+    await client.query('commit');
+  } catch (e) { await client.query('rollback').catch(() => {}); throw e; } finally { client.release(); }
+  res.json({ added, id: added[0].id, name: added[0].name, consentSet: consent });
 }));
 
 // Results across all this person's students for one period: per student, per goal and per activity.
