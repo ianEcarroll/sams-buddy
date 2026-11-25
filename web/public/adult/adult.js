@@ -298,6 +298,7 @@ async function renderCaseload(root) {
     h('p', { class: 'muted', style: 'max-width:70ch' }, 'Each student’s practice, only as far as their privacy choices let you see it. Open a student to see their results, add activities or write an observation.'),
     h('div', { class: 'lib-tiles' }, list.map((x) => h('article', { class: 'lib-tile', style: 'cursor:default' },
       h('strong', {}, x.name),
+      h('small', { class: x.devices ? 'muted' : 'muted', style: x.devices ? '' : 'font-weight:700' }, x.devices ? 'iPad connected' : 'No iPad connected yet'),
       x.shared
         ? [h('span', {}, x.current ? `Practising: ${x.current.title}` : 'No activity chosen yet'),
           h('small', { class: 'muted' }, x.last_practice ? `Last practice ${whenUsed(x.last_practice)} · ${x.practices_7d} in the last 7 days` : 'No practice yet')]
@@ -306,6 +307,7 @@ async function renderCaseload(root) {
         h('button', { class: 'btn btn-primary', onclick: () => open(x, 'review') }, 'See results'),
         h('button', { class: 'btn btn-quiet', onclick: () => open(x, 'activities') }, 'Activities'))))),
     list.length > 1 ? h('div', { id: 'group-report' }) : null,
+    classPanel,
     addForm);
   if (list.length > 1) groupReportView(root.querySelector('#group-report'), list).catch((e) => toast(e.message));
 }
