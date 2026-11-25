@@ -163,10 +163,11 @@ app.get('/api/invite/:token', rateLimit(30), wrap(async (req, res) => {
   res.json({ valid: !!inv, kind: inv?.kind || 'family' });
 }));
 app.post('/api/invite/:token', rateLimit(10), wrap(async (req, res) => {
-  const { error, value: f } = validateFamily(req.body || {});
-  if (error) return res.status(400).json({ error });
   const pre = await inviteByToken(req.params.token);
   const school = pre?.kind === 'school';
+  // A school or therapist signs up without a student: they add their own students afterwards.
+  const { error, value: f } = validateFamily(school ? { ...req.body, learnerName: String(req.body?.ownerName || '').trim().slice(0, 40) || 'Workspace' } : (req.body || {}));
+  if (error) return res.status(400).json({ error });
   const role = school ? (['therapist', 'teacher', 'job_coach'].includes(req.body?.role) ? req.body.role : 'therapist') : 'parent';
   const client = await pool.connect();
   try {
@@ -175,11 +176,10 @@ app.post('/api/invite/:token', rateLimit(10), wrap(async (req, res) => {
     const inv = (await client.query('update invites set used_at=now() where token_hash=$1 and used_at is null and expires_at > now() returning id', [hmac(String(req.params.token || ''))])).rows[0];
     if (!inv) { await client.query('rollback'); return res.status(410).json({ error: 'This invite link has expired or was already used. Ask for a new one.' }); }
     if ((await client.query('select 1 from adults where email=$1', [f.email])).rowCount) { await client.query('rollback'); return res.status(409).json({ error: 'That email already has a TALVO account. Sign in instead, or use another email.' }); }
-    const l = (await client.query('insert into learners(name, birth_year, settings) values ($1,$2,$3) returning id', [f.learnerName, f.birthYear, {}])).rows[0];
+    const l = (await client.query('insert into learners(name, birth_year, settings, is_workspace) values ($1,$2,$3,$4) returning id', [f.learnerName, f.birthYear, {}, school])).rows[0];
     await client.query('insert into consent(learner_id) values ($1)', [l.id]);
     const a = (await client.query("insert into adults(learner_id, name, email, role, is_owner, pass_hash) values ($1,$2,$3,$4,true,$5) returning id", [l.id, f.ownerName, f.email, role, hashPassword(f.password)])).rows[0];
     await client.query('update invites set learner_id=$1 where id=$2', [l.id, inv.id]);
-    if (school && req.body?.permission === true) await client.query(`update consent set agreed_at=now(), can_view='{"parent":true,"therapist":true,"teacher":true,"job_coach":true}'::jsonb, save_audio=false, set_by=$2, updated_at=now() where learner_id=$1`, [l.id, a.id]);
     await client.query('commit');
     res.json({ token: sign({ kind: 'adult', sub: a.id }, 12 * 3600) });
   } catch (e) {
@@ -204,11 +204,11 @@ async function canAddStudents(adultId) {
   return !!(await one("select 1 from adults where id=$1 and is_owner and role <> 'parent'", [adultId]));
 }
 adult.get('/me', wrap(async (req, res) => {
-  const learner = await one('select id, name, birth_year, settings, current_activity_id from learners where id=$1', [req.learnerId]);
+  const learner = await one('select id, name, birth_year, settings, current_activity_id, is_workspace from learners where id=$1', [req.learnerId]);
   const consent = await one('select agreed_at, can_view, save_audio, set_by is not null as set_by_school from consent where learner_id=$1', [req.learnerId]);
-  const students = await many(`select id, name, true as home from learners where id=(select learner_id from adults where id=$1)
+  const students = await many(`select id, name, true as home from learners where id=(select learner_id from adults where id=$1) and not is_workspace
     union all select l.id, l.name, false from adult_learners al join learners l on l.id=al.learner_id where al.adult_id=$1 and l.disabled_at is null order by home desc, name`, [req.adult.id]);
-  res.json({ adult: req.adult, learner: { ...learner, settings: settingsOf(learner) }, consent, students: students.length > 1 ? students : [], canAddStudents: await canAddStudents(req.adult.id), voice: voiceEnabled(), email: emailEnabled(), admin: isPlatformAdmin(req.adult.email) });
+  res.json({ adult: req.adult, learner: { ...learner, settings: settingsOf(learner) }, consent, students: students.length > 1 || learner.is_workspace ? students : [], canAddStudents: await canAddStudents(req.adult.id), voice: voiceEnabled(), email: emailEnabled(), admin: isPlatformAdmin(req.adult.email) });
 }));
 
 // Add a student: a new learner this person is the main contact for. The student sets their own privacy choices on their device.
@@ -230,7 +230,7 @@ adult.post('/students', wrap(async (req, res) => {
 // Results across all this person's students for one period: per student, per goal and per activity.
 // Only students who agreed to share with this role are included; the rest are listed as not shared.
 async function groupReport(adult, days, tz) {
-  const students = await many(`select id, name, true as home from learners where id=(select learner_id from adults where id=$1)
+  const students = await many(`select id, name, true as home from learners where id=(select learner_id from adults where id=$1) and not is_workspace
     union all select l.id, l.name, false from adult_learners al join learners l on l.id=al.learner_id where al.adult_id=$1 and l.disabled_at is null order by home desc, name`, [adult.id]);
   const out = [];
   for (const l of students) {
@@ -262,7 +262,7 @@ adult.get('/report.csv', wrap(async (req, res) => {
 
 // The students this person looks after, with how practice is going. Only what each student's privacy choices let this role see.
 adult.get('/caseload', wrap(async (req, res) => {
-  const ids = await many(`select id, name, true as home from learners where id=(select learner_id from adults where id=$1)
+  const ids = await many(`select id, name, true as home from learners where id=(select learner_id from adults where id=$1) and not is_workspace
     union all select l.id, l.name, false from adult_learners al join learners l on l.id=al.learner_id where al.adult_id=$1 and l.disabled_at is null order by home desc, name`, [req.adult.id]);
   const out = [];
   for (const l of ids) {
@@ -585,7 +585,7 @@ async function addLibraryTo(learnerId, item, adultId) {
   return { id: row.id, already: false };
 }
 // Students this adult can open: their own plus the ones they were added to.
-const accessibleLearnerIds = async (adultId) => new Set((await many(`select learner_id as id from adults where id=$1
+const accessibleLearnerIds = async (adultId) => new Set((await many(`select a.learner_id as id from adults a join learners l on l.id=a.learner_id where a.id=$1 and not l.is_workspace
   union select learner_id from adult_learners where adult_id=$1`, [adultId])).map((r) => r.id));
 adult.post('/library/:id/add', wrap(async (req, res) => {
   const item = libraryById(req.params.id);

@@ -201,11 +201,10 @@ async function renderInvite(inviteToken) {
   };
   $app.replaceChildren(
     brand(), h('h1', {}, 'Welcome to TALVO'),
-    h('p', { class: 'muted', style: 'max-width:60ch' }, school ? 'Set up TALVO for your students. You\u2019ll have the main account. Add your first student now, then add the rest from My students.' : 'Set up TALVO for your child. You\u2019ll have the main account, and can add their speech therapist, teachers and job coach afterwards.'),
+    h('p', { class: 'muted', style: 'max-width:60ch' }, school ? 'Set up your TALVO account. You\u2019ll add your own students next, from My students.' : 'Set up TALVO for your child. You\u2019ll have the main account, and can add their speech therapist, teachers and job coach afterwards.'),
     h('div', { class: 'panel', style: 'max-width:460px;display:grid;gap:18px' },
-      field(school ? 'First student\u2019s first name' : 'Your child\u2019s first name', f.learnerName, 'Foxy uses it in the app, e.g. \u201cWelcome back, Alex!\u201d'),
+      school ? null : field('Your child\u2019s first name', f.learnerName, 'Foxy uses it in the app, e.g. \u201cWelcome back, Alex!\u201d'),
       school ? field('Your role', f.role) : null,
-      school ? h('label', { class: 'switch' }, f.permission, h('span', {}, 'I have permission to see this student\u2019s practice results', h('br'), h('small', { class: 'muted' }, 'From their family, or covered by your school\u2019s agreement. The student can change it any time on their device.'))) : null,
       field('Year of birth (optional)', f.birthYear, 'Helps Foxy talk at the right level for their age.'),
       field('Your name', f.ownerName), field('Your email', f.email), field('Password (10+ characters)', f.password),
       h('button', { class: 'btn btn-primary', onclick: run(async () => {
@@ -266,7 +265,7 @@ addEventListener('hashchange', () => { if (/^#reset=/.test(location.hash)) boot(
 
 // ------------------------------------------------------------ shell
 const TABS = [['activities', 'Activities'], ['library', 'Library'], ['plan', 'Practice plan'], ['review', 'Review practice'], ['notes', 'Observations'], ['team', 'Team & privacy']];
-const tabsFor = () => [...(me.students?.length > 1 || me.canAddStudents ? [['caseload', 'My students']] : []), ...TABS, ...(me.admin ? [['families', 'Families']] : [])];
+const tabsFor = () => me.learner.is_workspace ? [['caseload', 'My students']] : [...(me.students?.length > 1 || me.canAddStudents ? [['caseload', 'My students']] : []), ...TABS, ...(me.admin ? [['families', 'Families']] : [])];
 // Several students: a list in the header to switch between them.
 function studentPicker() {
   if (!(me.students?.length > 1)) return null;
@@ -291,6 +290,7 @@ async function renderCaseload(root) {
       chooseStudent(r.id); tab = 'team'; boot();
     }) }, 'Add student')) : null;
   root.append(
+    !list.length ? h('p', { class: 'panel', style: 'max-width:70ch' }, 'You have no students yet. Add your first student below.') : null,
     h('p', { class: 'muted', style: 'max-width:70ch' }, 'Each student’s practice, only as far as their privacy choices let you see it. Open a student to see their results, add activities or write an observation.'),
     h('div', { class: 'lib-tiles' }, list.map((x) => h('article', { class: 'lib-tile', style: 'cursor:default' },
       h('strong', {}, x.name),
@@ -344,21 +344,22 @@ async function groupReportView(box, list) {
 }
 
 function renderShell() {
+  if (me.learner.is_workspace) tab = 'caseload';
   if (tab === 'caseload' && !(me.students?.length > 1 || me.canAddStudents)) tab = 'activities';
   const body = h('div', { class: 'team-content' });
   // Sections that don't apply (e.g. owner-only panels) come through as null: skip them rather than print "null".
   body.append = (...kids) => HTMLElement.prototype.append.apply(body, kids.filter((k) => k != null && k !== false));
   $app.replaceChildren(
     h('header', { class: 'adult-head' },
-      h('div', {}, h('h1', {}, brand(me.learner.name)), h('span', { class: 'muted' }, `${me.adult.name} · ${ROLE[me.adult.role]}`)),
+      h('div', {}, h('h1', {}, brand(me.learner.is_workspace ? '' : me.learner.name)), h('span', { class: 'muted' }, `${me.adult.name} · ${ROLE[me.adult.role]}`)),
       studentPicker(),
       h('button', { class: 'btn btn-quiet', onclick: signOut }, 'Sign out')),
     ...[installHelp()].filter(Boolean),
     h('div', { class: 'team-workspace' }, h('nav', { class: 'tabs', 'aria-label': 'Support team sections' }, tabsFor().map(([k, l]) => h('button', { 'aria-current': tab === k ? 'page' : null, onclick: () => { tab = k; renderShell(); } }, l))), body),
     h('p', { class: 'muted credits' }, SYMBOL_CREDIT, ' \u00B7 ', h('a', { href: 'https://creativecommons.org/licenses/by-sa/4.0/', target: '_blank', rel: 'noopener' }, 'Licence'), ' \u00B7 ', h('a', { href: '/about/' }, 'About Foxy')),
   );
-  body.append(h('header', { class: 'team-page-title' }, h('h2', {}, tabsFor().find(([k]) => k === tab)[1]), h('p', { class: 'muted' }, `Support ${me.learner.name}’s practice, one step at a time.`)));
-  if (!me.voice) body.append(h('p', { class: 'panel' }, `Voice is not connected yet. ${me.learner.name} can still practise by typing.`));
+  body.append(h('header', { class: 'team-page-title' }, h('h2', {}, tabsFor().find(([k]) => k === tab)[1]), h('p', { class: 'muted' }, me.learner.is_workspace ? 'Add your students, then open one to set up their practice.' : `Support ${me.learner.name}’s practice, one step at a time.`)));
+  if (!me.voice && !me.learner.is_workspace) body.append(h('p', { class: 'panel' }, `Voice is not connected yet. ${me.learner.name} can still practise by typing.`));
   ({ caseload: renderCaseload, plan: renderPlan, activities: renderActivities, library: renderLibrary, review: renderReview, notes: renderNotes, team: renderTeam, families: renderFamilies })[tab](body).catch((e) => toast(e.message));
 }
 
