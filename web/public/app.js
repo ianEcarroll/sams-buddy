@@ -140,11 +140,38 @@ function renderPair(message) {
         const res = await fetch('/api/device/pair', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ code: input.value, label: deviceLabel() }) });
         const d = await res.json();
         if (!res.ok) throw new Error(d.error);
+        if (d.class) return renderClassPick(input.value, d.students);
         token = d.token; localStorage.setItem(TOKEN_KEY, token);
         boot();
       } catch (e) { toast(e.message); }
     } }, 'Connect'),
     installHelp(),
+  );
+}
+
+// A class code: the student taps their own name, then confirms it.
+function renderClassPick(code, students) {
+  const pick = (st) => mount(
+    brand(),
+    h('h1', { class: 'hello' }, `Are you ${st.name}?`),
+    h('div', { class: 'row-actions' },
+      h('button', { class: 'btn btn-primary', onclick: async () => {
+        try {
+          const res = await fetch('/api/device/pair', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ code, learnerId: st.id, label: deviceLabel() }) });
+          const d = await res.json();
+          if (!res.ok) throw new Error(d.error);
+          token = d.token; localStorage.setItem(TOKEN_KEY, token);
+          boot();
+        } catch (e) { toast(e.message); renderPair(); }
+      } }, `Yes, I'm ${st.name}`),
+      h('button', { class: 'btn btn-quiet', onclick: () => renderClassPick(code, students) }, 'No, go back')),
+  );
+  mount(
+    brand(),
+    h('h1', { class: 'hello' }, 'Who are you?'),
+    h('p', { class: 'hello-sub' }, students.length ? 'Tap your name.' : 'All the names have been taken. Ask your teacher.'),
+    h('div', { class: 'pick-grid' }, students.map((st) => h('button', { class: 'btn btn-primary pick-name', onclick: () => pick(st) }, st.name))),
+    h('button', { class: 'btn btn-quiet', onclick: () => renderPair() }, 'Back'),
   );
 }
 
