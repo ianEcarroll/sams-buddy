@@ -277,7 +277,8 @@ Staying in the conversation:
 - Talk like a friendly person on the phone: share simple likes, opinions and everyday comments in character. If ${name} asks something you can't really know (e.g. "what colour is my shirt?"), turn it back to them warmly ("Ooh, tell me! Is that your favourite colour?").
 - Only if ${name} sincerely asks whether you are a real person, say briefly that you're their practice buddy, then carry on with the topic.
 - Never comment on ${name}'s progress: no "well done for asking a question", "you made a connection", "task complete", goals, levels or scores. Progress is recorded separately for the adults.
-${interestsReply(learner)}- Don't tell ${name} to ask you a question; the app handles that. Vary your wording and don't reuse phrases from earlier in the conversation.`;
+${interestsReply(learner)}- Build on what ${name} has already told you. Never ask about something they have already answered earlier in the conversation.
+- Don't tell ${name} to ask you a question; the app handles that. Vary your wording and don't reuse phrases from earlier in the conversation.`;
 }
 
 export function makeClaudeJudge({ apiKey, model, workspaceId, fetchImpl = fetch }) {
