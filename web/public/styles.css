@@ -669,9 +669,14 @@ body.lib-open { overflow: hidden; }
 .report-table th, .report-table td { border: 1px solid var(--line); padding: 8px 10px; text-align: left; vertical-align: top; }
 .report-table thead th { background: var(--panel, #f6f6f6); font-size: .9rem; }
 
-.pick-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; margin: 18px 0; }
-.pick-name { font-size: 1.3rem; padding: 18px 10px; }
-.class-code { font-size: 2.4rem; letter-spacing: .18em; font-weight: 800; margin: 8px 0; }
+.code-table { border-collapse: collapse; width: 100%; margin: 10px 0; }
+.code-table th, .code-table td { border: 1px dashed var(--line); padding: 12px 14px; text-align: left; }
+.code-table .code { font-size: 1.6rem; letter-spacing: .14em; font-weight: 800; font-family: ui-monospace, monospace; }
+@media print {
+  body.printing-sheet * { visibility: hidden; }
+  body.printing-sheet .code-sheet, body.printing-sheet .code-sheet * { visibility: visible; }
+  body.printing-sheet .code-sheet { position: absolute; left: 0; top: 0; width: 100%; }
+}
 
 /* Caseload: a student with no recent practice stands out. */
 .lib-tile.attn { border-left: 6px solid var(--sun); }

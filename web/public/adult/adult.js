@@ -293,6 +293,21 @@ async function renderCaseload(root) {
   const perm = h('input', { type: 'checkbox', checked: true });
   // One student per line: a first name, then optionally a comma and the year of birth.
   const parse = () => names.value.split(/\r?\n/).map((l) => l.trim()).filter(Boolean).map((l) => { const [name, year] = l.split(/[,;\t]/).map((x) => x.trim()); return { name, birthYear: year || '' }; });
+  // One personal code per student on a printed sheet: each student types only their own code and never sees a classmate's name.
+  const sheetBox = h('div', {});
+  const classPanel = me.canAddStudents && list.length > 1 ? h('div', { class: 'panel', style: 'display:grid;gap:10px;max-width:560px;margin-top:18px' },
+    h('h3', { style: 'margin:0' }, 'Connect every student\u2019s iPad'),
+    h('p', { class: 'muted', style: 'margin:0' }, 'Makes one personal code per student. Print the sheet, cut it up and give each student only their own. Each code works once, for a week, and shows only that student\u2019s own name.'),
+    h('button', { class: 'btn', onclick: run(async () => {
+      if (!confirm('Make a new set of codes? Codes from an earlier sheet that are still unused will keep working until they are used or run out.')) return;
+      const r = await api('/adult/student-codes', { method: 'POST' });
+      sheetBox.replaceChildren(h('div', { class: 'code-sheet' },
+        h('h2', {}, 'TALVO connection codes'),
+        h('p', {}, `Open TALVO on the iPad, add it to the home screen, then type your own code. Each code works once and runs out after ${r.validDays} days.`),
+        h('table', { class: 'code-table' }, r.codes.map((c) => h('tr', {}, h('th', {}, c.name), h('td', { class: 'code' }, c.code))))),
+        h('button', { class: 'btn btn-primary', style: 'margin-top:10px', onclick: () => { document.body.classList.add('printing-sheet'); window.addEventListener('afterprint', () => document.body.classList.remove('printing-sheet'), { once: true }); window.print(); } }, 'Print the sheet'));
+    }) }, 'Make code sheet'),
+    sheetBox) : null;
   const addForm = me.canAddStudents ? h('div', { class: 'panel', style: 'display:grid;gap:12px;max-width:560px;margin-top:18px' },
     h('h3', { style: 'margin:0' }, list.length ? 'Add students' : 'Add your students'),
     field('First names, one per line', names, 'Paste your class list. After a first name you can add a comma and the year of birth, for example \u201cBen, 2012\u201d. The year helps Foxy talk at the right level.'),
