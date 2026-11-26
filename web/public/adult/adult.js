@@ -364,9 +364,31 @@ function renderShell() {
     h('div', { class: 'team-workspace' }, h('nav', { class: 'tabs', 'aria-label': 'Support team sections' }, tabsFor().map(([k, l]) => h('button', { 'aria-current': tab === k ? 'page' : null, onclick: () => { tab = k; renderShell(); } }, l))), body),
     h('p', { class: 'muted credits' }, SYMBOL_CREDIT, ' \u00B7 ', h('a', { href: 'https://creativecommons.org/licenses/by-sa/4.0/', target: '_blank', rel: 'noopener' }, 'Licence'), ' \u00B7 ', h('a', { href: '/about/' }, 'About Foxy')),
   );
-  body.append(h('header', { class: 'team-page-title' }, h('h2', {}, tabsFor().find(([k]) => k === tab)[1]), h('p', { class: 'muted' }, me.learner.is_workspace ? 'Add your students, then open one to set up their practice.' : `Support ${me.learner.name}’s practice, one step at a time.`)));
+  // One line that says what this page is for (it used to repeat the same sentence on every page).
+  const n = me.learner.name;
+  const SUBTITLE = {
+    caseload: me.learner.is_workspace ? 'Add your students, then open one to set up their practice.' : 'Your students at a glance.',
+    activities: `What ${n} can practise.`, library: 'Ready-made activities to add.', plan: `What happens when ${n} starts practising.`,
+    review: `How ${n}’s practice is going.`, notes: 'What you see outside the app.', team: `Who can see results, and ${n}’s devices.`, families: 'Every family using TALVO.',
+  };
+  body.append(h('header', { class: 'team-page-title' }, h('h2', {}, tabsFor().find(([k]) => k === tab)[1]), h('p', { class: 'muted' }, SUBTITLE[tab] || '')));
   if (!me.voice && !me.learner.is_workspace) body.append(h('p', { class: 'panel' }, `Voice is not connected yet. ${me.learner.name} can still practise by typing.`));
-  ({ caseload: renderCaseload, plan: renderPlan, activities: renderActivities, library: renderLibrary, review: renderReview, notes: renderNotes, team: renderTeam, families: renderFamilies })[tab](body).catch((e) => toast(e.message));
+  // On a phone the tabs wrap over three rows; keep the current one in view in the single scrolling row.
+  $app.querySelector('.tabs [aria-current="page"]')?.scrollIntoView({ inline: 'center', block: 'nearest' });
+  // Each page loads its data before it draws anything, so say "Loading…" if that takes a moment, not a blank page.
+  const loading = h('p', { class: 'muted', role: 'status' }, 'Loading…');
+  const slow = setTimeout(() => body.append(loading), 250);
+  ({ caseload: renderCaseload, plan: renderPlan, activities: renderActivities, library: renderLibrary, review: renderReview, notes: renderNotes, team: renderTeam, families: renderFamilies })[tab](body)
+    .catch((e) => toast(e.message)).finally(() => { clearTimeout(slow); loading.remove(); });
+}
+
+// A student's Start My Practice button stays switched off until someone picks an activity: say so, with a way to fix it.
+async function startNote() {
+  if (me.learner.is_workspace) return null;
+  const { current_activity_id } = await api('/adult/settings');
+  if (current_activity_id) return null;
+  return h('p', { class: 'panel', role: 'status' }, `${me.learner.name}’s Start My Practice button is switched off until an activity is chosen. `,
+    h('button', { class: 'btn btn-quiet', onclick: () => { tab = 'plan'; renderShell(); } }, 'Choose one in Practice plan'));
 }
 
 // ------------------------------------------------------------ activity library
@@ -700,6 +722,7 @@ function addActivity(root, M) {
 
 async function renderActivities(root) {
   const acts = await api('/adult/activities');
+  root.append(await startNote());
   const name = me.learner.name;
   const enabled = me.learner.settings?.enabled_modes || Object.keys(modes);
   const cards = Object.entries(MODULES).filter(([mod]) => !HIDDEN_MODULES.includes(mod)).map(([mod, M]) => {
@@ -1631,7 +1654,7 @@ async function renderReview(root) {
     const recent = days.filter((d) => d.opportunities).slice(0, 4);
     return h('button', { class: 'goal-card', 'aria-pressed': String(review.goal === k), onclick: () => { review.goal = review.goal === k ? '' : k; draw(); syncCards(); } },
       h('div', { class: 'gc-head' }, goalPill(k), h('span', { class: 'muted' }, 'Last 7 days')),
-      h('div', { class: 'gc-big' }, opp ? h('span', {}, h('strong', {}, String(met)), ` of ${opp}`) : h('span', { class: 'muted' }, 'No practice yet')),
+      h('div', { class: 'gc-big' }, opp ? h('span', {}, h('strong', {}, String(met)), ` of ${opp}`) : h('span', { class: 'muted' }, recent.length ? 'None in the last 7 days' : 'No practice yet')),
       opp ? h('div', { class: 'gc-sub' }, 'met the target') : null,
       total ? h('div', { class: 'code-bar', 'aria-label': codes.map(([c, v]) => `${c}: ${v}`).join(', ') },
         codes.filter(([, v]) => v).map(([c, v]) => h('span', { class: `c-${c}`, style: `flex:${v}` }, `${c} ${v}`))) : null,

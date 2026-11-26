@@ -375,7 +375,11 @@ function drawPractice() {
 
   // Show the last two things Buddy said this turn, so feedback stays visible under the cue that follows it.
   // A step's words are left out of the captions when a question about it follows (Task Buddy), so they can't be read off.
-  const said = P.shown.filter((l) => !l.noCaption);
+  // Think: the situation stays on screen above Foxy's latest words, so Sam does not have to hold it in his head
+  // while he answers (after a hint, only the hint used to be left). It follows the "Show Foxy's words" setting.
+  const pinned = P.mode === 'think' && P.scenario;
+  const said = P.shown.filter((l) => !l.noCaption && !(pinned && l.kind === 'instruction'));
+  const scenarioCard = pinned && captionsOn() ? h('div', { class: 'scenario', role: 'note', 'aria-label': 'The situation' }, h('small', {}, 'The situation'), h('p', {}, P.scenario)) : null;
   const bubble = captionsOn() && said.length ? h('div', { style: 'display:grid;gap:10px' }, said.slice(-2).map((l) =>
     h('div', { class: 'bubble', 'data-kind': l.kind, 'data-scroll-key': `${l.kind}:${l.text}`, 'data-long': String(l.text.length > 180) }, l.kind === 'movie' ? icon('film') : null, h('span', {}, l.text)))) : null;
 
@@ -457,13 +461,14 @@ function drawPractice() {
   const stepList = shownSteps.length ? h('ol', { class: 'step-list', 'aria-label': 'The steps', 'data-walk': String(P.nowStep != null) }, shownSteps.map((x, i) =>
     h('li', { 'data-now': String(P.nowStep === i), 'data-past': String(P.nowStep != null && i < P.nowStep) }, x.image ? h('img', { src: x.image, alt: '' }) : null, h('span', {}, x.text)))) : null;
   mountKeep(
-    h('div', { class: 'p-top' }, h('p', { class: 'p-title' }, P.title), h('span', { class: 'p-btns' }, h('button', { class: 'btn', onclick: pausePractice }, icon('pause'), 'Pause'), h('button', { class: 'btn', onclick: finishPractice }, icon('stop'), 'Finish'))),
+    h('div', { class: 'p-top' }, h('p', { class: 'p-title' }, P.title), h('span', { class: 'p-btns' }, h('button', { class: 'btn', onclick: pausePractice }, icon('pause'), 'Pause'), h('button', { class: 'btn', onclick: askFinish }, icon('stop'), 'Finish'))),
     stepBar,
     // Task Buddy without a picture to show: no empty picture area, so the steps and Buddy's words sit higher up.
     stage ? h('div', { class: 'stage', 'data-visual': String(!!ui.step?.visual) }, stage) : null,
     stepCard,
     stepList,
     board,
+    scenarioCard,
     bubble,
     P.thinking ? h('p', { class: 'thinking' }, 'Thinking time. Press to talk whenever you are ready.') : null,
     cue,
@@ -471,6 +476,7 @@ function drawPractice() {
     talk,
     controls,
     P.help ? helpSheet() : null,
+    P.confirmFinish ? finishSheet() : null,
     P.paused ? h('div', { class: 'pause', role: 'dialog', 'aria-label': 'Paused' }, h('div', {}, h('p', {}, 'Take all the time you need.'), h('button', { class: 'btn btn-primary', onclick: resumePractice }, 'I\u2019m ready'))) : null,
     turn.ui.paused ? h('div', { class: 'pause' }, h('div', {}, h('p', {}, 'Take all the time you need.'), h('button', { class: 'btn btn-primary', onclick: () => sendControl('ready') }, 'I\u2019m ready'))) : null,
   );
@@ -481,7 +487,7 @@ function drawPractice() {
     if (now) now.scrollIntoView({ block: 'center', behavior: smooth() });
     else if (P.speaking || P.thinking || P.talk === 'idle') (talk || bubble)?.scrollIntoView({ block: 'nearest', behavior: smooth() });
   } else {
-    const key = JSON.stringify([said.at(-1)?.text, ui.images, ui.board, ui.heard, turn.expect]);
+    const key = JSON.stringify([said.at(-1)?.text, P.scenario, ui.images, ui.board, ui.heard, turn.expect]);
     if (P.scrollKey !== key && !P.help && !P.paused && !ui.paused) {
       P.scrollKey = key;
       const target = confirmBox || (turn.expect === 'board' ? board : null) || bubble?.lastElementChild || stage || talk;
@@ -522,6 +528,8 @@ async function playLines(lines) {
   for (const l of lines) {
     await holdWhilePaused(gen); // paused: hold Foxy's next words until the learner is ready
     if (gen !== playGen) return;
+    // Think: remember the situation until the next one starts (a lead-in such as "On to the next situation." clears it).
+    if (P.mode === 'think') { if (l.kind === 'instruction') P.scenario = l.text; else if (l.kind === 'intro') P.scenario = null; }
     P.shown.push(l); P.thinking = false; P.speaking = true;
     if (l.step != null) { P.nowStep = l.step; P.walkReveal = l.step; } else if (P.walkReveal != null && P.walkReveal >= 0) P.nowStep = null;
     drawPractice();
@@ -707,6 +715,20 @@ function resumePractice() {
   if ($voice.src && $voice.paused && !$voice.ended && $voice.currentTime > 0) $voice.play().catch(() => {});
 }
 
+// Finish sits next to Pause and ends the practice at once, so ask first. "Keep practising" is the default.
+function askFinish() {
+  if (!P) return;
+  P.confirmFinish = true; drawPractice();
+  requestAnimationFrame(() => $app.querySelector('.sheet .btn-primary')?.focus());
+}
+function finishSheet() {
+  const close = () => { P.confirmFinish = false; drawPractice(); };
+  return h('div', { class: 'sheet', onkeydown: (e) => { if (e.key === 'Escape') { e.preventDefault(); close(); } } },
+    h('div', { role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Finish this practice?' },
+      h('h2', {}, 'Finish this practice?'),
+      h('button', { class: 'btn btn-primary', onclick: close }, 'Keep practising'),
+      h('button', { class: 'btn', onclick: () => { P.confirmFinish = false; finishPractice(); } }, 'Yes, I’m finished')));
+}
 async function finishPractice() {
   stopVoice();
   if (rec) { rec.recorder.stop(); rec = null; }
