@@ -548,6 +548,13 @@ details.layer > summary small, details.fine-tune > summary small { font-weight: 
 
 .plan-section, .plan-section *, .plan-save { box-sizing: border-box; }
 .team-content { padding-bottom: 24px; }
+/* Home: getting-started checklist and the week at a glance. */
+.checklist { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; }
+.checklist li { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.check-box { width: 26px; height: 26px; border-radius: 50%; border: 2px solid var(--line); display: grid; place-items: center; flex: 0 0 auto; font-weight: 700; }
+.check-box.done { background: var(--met); border-color: var(--met); color: var(--paper); }
+.week-line { font-size: 1.1rem; line-height: 1.5; max-width: 70ch; }
+.quote { margin: 0; padding-left: 14px; border-left: 6px solid var(--met); font-size: 1.2rem; line-height: 1.5; }
 
 /* Readable prompts without enlarging long stories and explanations. */
 .practice .bubble { font-size: 1.375rem; scroll-margin-block: 16px; }

@@ -28,7 +28,7 @@ function chooseStudent(id) {
 let me = null;
 let modes = null;
 let goals = null;   // { goals: {key: {n,label,short,target,cue,allowed}}, codes: {I,M,P,F} }
-let tab = 'activities';
+let tab = null;        // set on first draw: Home, or My students for someone with several students
 
 function h(tag, attrs = {}, ...kids) {
   const el = document.createElement(tag);
@@ -264,8 +264,16 @@ watchForUpdates({ files: ['/adult/adult.js', '/adult/', '/styles.css'], busy: ()
 addEventListener('hashchange', () => { if (/^#reset=/.test(location.hash)) boot(); });
 
 // ------------------------------------------------------------ shell
-const TABS = [['activities', 'Activities'], ['library', 'Library'], ['plan', 'Practice plan'], ['review', 'Review practice'], ['notes', 'Observations'], ['team', 'Team & privacy']];
-const tabsFor = () => me.learner.is_workspace ? [['caseload', 'My students']] : [...(me.students?.length > 1 || me.canAddStudents ? [['caseload', 'My students']] : []), ...TABS, ...(me.admin ? [['families', 'Families']] : [])];
+const TABS = [['home', 'Home'], ['activities', 'Activities'], ['library', 'Library'], ['plan', 'Practice plan'], ['review', 'Review practice'], ['notes', 'Observations'], ['team', 'Team & privacy']];
+// A parent's first questions are "how is it going?" and "what did they say?", so Review and Observations come before
+// the tools for building practice. Everyone else keeps the building tabs first.
+const PARENT_ORDER = ['home', 'review', 'notes', 'activities', 'library', 'plan', 'team'];
+const hasCaseload = () => !!(me.students?.length > 1 || me.canAddStudents);
+const tabsFor = () => {
+  if (me.learner.is_workspace) return [['caseload', 'My students']];
+  const own = me.adult.role === 'parent' ? PARENT_ORDER.map((k) => TABS.find(([x]) => x === k)) : TABS;
+  return [...(hasCaseload() ? [['caseload', 'My students']] : []), ...own, ...(me.admin ? [['families', 'Families']] : [])];
+};
 // Several students: a list in the header to switch between them.
 function studentPicker() {
   if (!(me.students?.length > 1)) return null;
@@ -351,7 +359,8 @@ async function groupReportView(box, list) {
 
 function renderShell() {
   if (me.learner.is_workspace) tab = 'caseload';
-  if (tab === 'caseload' && !(me.students?.length > 1 || me.canAddStudents)) tab = 'activities';
+  if (!tab) tab = hasCaseload() ? 'caseload' : 'home';
+  if (tab === 'caseload' && !hasCaseload()) tab = 'home';
   const body = h('div', { class: 'team-content' });
   // Sections that don't apply (e.g. owner-only panels) come through as null: skip them rather than print "null".
   body.append = (...kids) => HTMLElement.prototype.append.apply(body, kids.filter((k) => k != null && k !== false));
@@ -368,7 +377,7 @@ function renderShell() {
   const n = me.learner.name;
   const SUBTITLE = {
     caseload: me.learner.is_workspace ? 'Add your students, then open one to set up their practice.' : 'Your students at a glance.',
-    activities: `What ${n} can practise.`, library: 'Ready-made activities to add.', plan: `What happens when ${n} starts practising.`,
+    home: `${n}’s week, and what to do next.`, activities: `What ${n} can practise.`, library: 'Ready-made activities to add.', plan: `What happens when ${n} starts practising.`,
     review: `How ${n}’s practice is going.`, notes: 'What you see outside the app.', team: `Who can see results, and ${n}’s devices.`, families: 'Every family using TALVO.',
   };
   body.append(h('header', { class: 'team-page-title' }, h('h2', {}, tabsFor().find(([k]) => k === tab)[1]), h('p', { class: 'muted' }, SUBTITLE[tab] || '')));
@@ -378,7 +387,7 @@ function renderShell() {
   // Each page loads its data before it draws anything, so say "Loading…" if that takes a moment, not a blank page.
   const loading = h('p', { class: 'muted', role: 'status' }, 'Loading…');
   const slow = setTimeout(() => body.append(loading), 250);
-  ({ caseload: renderCaseload, plan: renderPlan, activities: renderActivities, library: renderLibrary, review: renderReview, notes: renderNotes, team: renderTeam, families: renderFamilies })[tab](body)
+  ({ caseload: renderCaseload, home: renderHome, plan: renderPlan, activities: renderActivities, library: renderLibrary, review: renderReview, notes: renderNotes, team: renderTeam, families: renderFamilies })[tab](body)
     .catch((e) => toast(e.message)).finally(() => { clearTimeout(slow); loading.remove(); });
 }
 
@@ -389,6 +398,104 @@ async function startNote() {
   if (current_activity_id) return null;
   return h('p', { class: 'panel', role: 'status' }, `${me.learner.name}’s Start My Practice button is switched off until an activity is chosen. `,
     h('button', { class: 'btn btn-quiet', onclick: () => { tab = 'plan'; renderShell(); } }, 'Choose one in Practice plan'));
+}
+
+// ------------------------------------------------------------ home
+// What a parent wants first: is it set up, how has this week gone, and what to open for the next practice. Counts only,
+// no scores, and no comparison that reads as a grade.
+async function renderHome(root) {
+  const name = me.learner.name;
+  const owner = me.adult.is_owner;
+  const [sum, rec, st, acts, dev, team] = await Promise.allSettled([
+    api(`/adult/summary?tz=${encodeURIComponent(TZ)}`), api('/adult/records'), api('/adult/settings'), api('/adult/activities'), api('/adult/devices'),
+    owner ? api('/adult/team') : Promise.resolve(null)]);
+  const ok = (r) => (r.status === 'fulfilled' ? r.value : null);
+  const settings = ok(st), activities = ok(acts) || [], devices = ok(dev), members = ok(team);
+  const days = ok(sum)?.days, records = ok(rec);
+  const go = (to) => () => { tab = to; renderShell(); };
+
+  // ---- the "tomorrow's practice" chooser (also what the checklist points at)
+  const activeActs = activities.filter((a) => a.status === 'active');
+  const pick = h('select', { id: 'home-start', 'aria-label': `What ${name}’s Start My Practice opens` },
+    h('option', { value: '' }, '— none —'),
+    activeActs.map((a) => h('option', { value: a.id, selected: a.id === settings?.current_activity_id }, `${modeName(a.mode)} — ${a.title}`)));
+  const chooser = settings ? h('section', { class: 'panel', style: 'display:grid;gap:10px' },
+    h('h3', { style: 'margin:0' }, 'Tomorrow’s practice'),
+    h('p', { class: 'muted', style: 'margin:0;max-width:70ch' }, `${name}’s Start My Practice button opens this activity. One choice means fewer decisions for ${name}.`),
+    pick,
+    h('div', { class: 'row-actions' }, h('button', { class: 'btn btn-primary', onclick: run(async () => {
+      await api('/adult/settings', { method: 'PUT', body: { settings: settings.settings, current_activity_id: pick.value } });
+      toast(pick.value ? 'Saved. Start My Practice will open this activity.' : `Saved. ${name}’s Start button is switched off.`);
+      await boot();
+    }) }, 'Save'), h('button', { class: 'btn btn-quiet', onclick: go('activities') }, 'See all activities'))) : null;
+
+  // ---- getting started: only while something is still open
+  const steps = [
+    devices ? { done: devices.length > 0, text: `Connect ${name}’s iPad`, action: ['Show me how', go('team')] } : null,
+    settings ? { done: !!settings.current_activity_id, text: 'Choose what Start My Practice opens', action: ['Choose', () => { pick.scrollIntoView({ block: 'center' }); pick.focus(); }] } : null,
+    { done: !!me.consent?.agreed_at, text: `${name} makes their privacy choices`, note: `${name} is asked the first time they open TALVO.` },
+    members && owner ? { done: members.length > 1, text: 'Add your speech therapist or teacher', action: ['Add', go('team')] } : null,
+  ].filter(Boolean);
+  const left = steps.filter((x) => !x.done).length;
+  const checklist = left ? h('section', { class: 'panel', style: 'display:grid;gap:10px' },
+    h('h3', { style: 'margin:0' }, 'Getting started'),
+    h('p', { class: 'muted', style: 'margin:0' }, `${steps.length - left} of ${steps.length} done`),
+    h('ul', { class: 'checklist' }, steps.map((x) => h('li', {},
+      h('span', { class: `check-box ${x.done ? 'done' : ''}`, 'aria-hidden': 'true' }, x.done ? '✓' : ''),
+      h('span', { class: x.done ? 'muted' : '' }, x.done ? `${x.text} (done)` : x.text),
+      !x.done && x.action ? h('button', { class: 'btn btn-quiet', onclick: x.action[1] }, x.action[0]) : null,
+      !x.done && x.note ? h('small', { class: 'muted' }, x.note) : null)))) : null;
+
+  // ---- this week
+  let week;
+  if (!days || !records) {
+    week = h('section', { class: 'panel' }, h('h3', { style: 'margin:0 0 6px' }, 'This week'),
+      h('p', { style: 'margin:0' }, `${name} has not shared practice with you yet. They choose this on their own device.`));
+  } else {
+    const keys = Array.from({ length: 7 }, (_, i) => daysAgo(6 - i));
+    const prevKeys = Array.from({ length: 7 }, (_, i) => daysAgo(13 - i));
+    const sumOf = (ks, f) => days.filter((d) => ks.includes(d.day)).reduce((n, d) => n + f(d), 0);
+    const itemsOn = (k) => sumOf([k], (d) => d.items);
+    const practised = keys.filter((k) => itemsOn(k) > 0).length;
+    const own = sumOf(keys, (d) => d.I), help = sumOf(keys, (d) => d.M + d.P + d.F), answered = own + help;
+    const pOwn = sumOf(prevKeys, (d) => d.I), pAnswered = pOwn + sumOf(prevKeys, (d) => d.M + d.P + d.F);
+    const newest = [...records].sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at));
+    // One thing said without help: a recent answer of a few words, not an uncertain transcription.
+    const said = (() => {
+      const from = daysAgo(13);
+      for (const r of newest) {
+        if (dayKey(r.created_at) < from) break;
+        for (const a of String(r.sam_response || '').split(' / ')) {
+          if (!a || a.startsWith('[after support]')) continue;
+          // Drop the question label and a leading "Uh," so the quote reads as what was said.
+          let t = a.replace(/^Q\d+:\s*/, '').replace(/^((uh|um|er|oh|so)[,.]?\s+)+/i, '').trim();
+          t = t.charAt(0).toUpperCase() + t.slice(1);
+          if (t.length >= 20 && t.length <= 160 && t.split(/\s+/).length >= 4 && !/[\[\]]/.test(t)) return { t, r };
+        }
+      }
+      return null;
+    })();
+    const lastDay = newest.length ? dayKey(newest[0].created_at) : null;
+    // Only a goal this family has been practising (some practice in the last 30 days) can go quiet: never nag about one they do not use.
+    const month = Array.from({ length: 30 }, (_, i) => daysAgo(i));
+    const onGoal = (ks, k) => sumOf(ks, (d) => (d.plan_goal === k ? d.opportunities : 0));
+    const quiet = Object.entries(goals.goals).filter(([k]) => k !== 'other').find(([k]) => onGoal(month, k) > 0 && !onGoal(keys, k));
+    const nudge = lastDay && lastDay < daysAgo(1) ? `No practice since ${dayTitle(lastDay)}.`
+      : quiet && lastDay ? `${quiet[1].n < 5 ? `${quiet[1].n}. ${quiet[1].label}` : quiet[1].label} has had no practice in the last 7 days.` : null;
+    week = h('section', { class: 'panel', style: 'display:grid;gap:12px' },
+      h('h3', { style: 'margin:0' }, 'This week'),
+      h('p', { class: 'week-line', style: 'margin:0' }, h('strong', {}, `${name} practised on ${practised} of the last 7 days.`),
+        answered ? ` ${own} of ${answered} answers were without a cue.` : '',
+        pAnswered >= 3 ? h('span', { class: 'muted' }, ` The week before: ${pOwn} of ${pAnswered}.`) : ''),
+      h('div', { class: 'ch-cal', role: 'img', 'aria-label': `${name} practised on ${practised} of the last 7 days.` },
+        keys.map((k) => h('span', { class: 'ch-wd', 'aria-hidden': 'true' }, new Date(`${k}T12:00:00`).toLocaleDateString(undefined, { weekday: 'narrow' }))),
+        keys.map((k) => { const n = itemsOn(k); return h('span', { class: `ch-day ${n ? (n > 3 ? 'many' : 'some') : ''}`, title: `${dayShort(k)}: ${n ? `${n} item${n === 1 ? '' : 's'}` : 'no practice'}` }, String(Number(k.slice(8)))); })),
+      said ? h('div', {}, h('h4', { class: 'muted', style: 'margin:0 0 6px;font-size:.9rem' }, `Something ${name} said on their own`),
+        h('blockquote', { class: 'quote' }, `“${said.t}”`, h('small', { class: 'muted', style: 'display:block;margin-top:4px' }, `${said.r.activity_title} · ${dayShort(dayKey(said.r.created_at))}`))) : null,
+      nudge ? h('p', { class: 'muted', style: 'margin:0' }, nudge) : null,
+      h('div', { class: 'row-actions' }, h('button', { class: 'btn', onclick: go('review') }, 'See all practice'), h('button', { class: 'btn btn-quiet', onclick: go('notes') }, 'Add an observation')));
+  }
+  root.append(checklist, week, chooser);
 }
 
 // ------------------------------------------------------------ activity library
