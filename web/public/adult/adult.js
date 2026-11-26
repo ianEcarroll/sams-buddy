@@ -281,6 +281,10 @@ function studentPicker() {
   sel.addEventListener('change', () => { const x = me.students.find((y) => y.id === sel.value); chooseStudent(x?.home ? '' : sel.value); boot(); });
   return h('label', { class: 'student-pick' }, h('span', { class: 'muted' }, 'Student '), sel);
 }
+// Students who have shared their practice come first, the longest without practice at the top (never practised first);
+// students who have not shared go last. A student with no practice for 3 days is marked.
+const needsLook = (x) => (x.shared ? (x.last_practice ? Date.parse(x.last_practice) : 0) : Infinity);
+const isQuiet = (x) => x.shared && (!x.last_practice || Date.now() - Date.parse(x.last_practice) > 3 * 86400000);
 // The students this person looks after, and how practice is going for each.
 async function renderCaseload(root) {
   const list = await api('/adult/caseload');
@@ -304,7 +308,7 @@ async function renderCaseload(root) {
   root.append(
     !list.length ? h('p', { class: 'panel', style: 'max-width:70ch' }, 'You have no students yet. Add your class below.') : null,
     h('p', { class: 'muted', style: 'max-width:70ch' }, 'Each student’s practice, only as far as their privacy choices let you see it. Open a student to see their results, add activities or write an observation.'),
-    h('div', { class: 'lib-tiles' }, list.map((x) => h('article', { class: 'lib-tile', style: 'cursor:default' },
+    h('div', { class: 'lib-tiles' }, [...list].sort((a, b) => needsLook(a) - needsLook(b)).map((x) => h('article', { class: `lib-tile${isQuiet(x) ? ' attn' : ''}`, style: 'cursor:default' },
       h('strong', {}, x.name),
       h('small', { class: x.devices ? 'muted' : 'muted', style: x.devices ? '' : 'font-weight:700' }, x.devices ? 'iPad connected' : 'No iPad connected yet'),
       x.shared
@@ -368,6 +372,7 @@ function renderShell() {
     h('header', { class: 'adult-head' },
       h('div', {}, h('h1', {}, brand(me.learner.is_workspace ? '' : me.learner.name)), h('span', { class: 'muted' }, `${me.adult.name} · ${ROLE[me.adult.role]}`)),
       studentPicker(),
+      (me.students?.length > 1 || me.canAddStudents) && tab !== 'caseload' && !me.learner.is_workspace ? h('button', { class: 'btn btn-quiet', onclick: () => { tab = 'caseload'; renderShell(); } }, 'All students') : null,
       h('button', { class: 'btn btn-quiet', onclick: signOut }, 'Sign out')),
     ...[installHelp()].filter(Boolean),
     h('div', { class: 'team-workspace' }, h('nav', { class: 'tabs', 'aria-label': 'Support team sections' }, tabsFor().map(([k, l]) => h('button', { 'aria-current': tab === k ? 'page' : null, onclick: () => { tab = k; renderShell(); } }, l))), body),
@@ -644,7 +649,7 @@ async function renderLibrary(root) {
 // ------------------------------------------------------------ practice plan + settings
 async function renderPlan(root) {
   const [{ settings, current_activity_id }, acts] = await Promise.all([api('/adult/settings'), api('/adult/activities')]);
-  const current = h('select', {}, h('option', { value: '' }, '— none —'), acts.filter((a) => a.status === 'active').map((a) => h('option', { value: a.id, selected: a.id === current_activity_id }, `${modeName(a.mode)} \u2014 ${a.title}`)));
+  const current = h('select', {}, h('option', { value: '' }, '— none —'), startOptions(acts, current_activity_id));
   const num = (k, min, max, step = 1) => h('input', { type: 'number', min, max, step, value: settings[k] });
   const chk = (k) => h('input', { type: 'checkbox', checked: !!settings[k] });
   const f = {
@@ -773,6 +778,14 @@ const MODULES = {
 };
 // Modules switched off for now (their activities are kept, just not shown). Explain: not in use at the moment.
 const HIDDEN_MODULES = ['explain'];
+// Activities grouped under the tile names the student sees (Memory, Story, Think...), not "Listen: Practise a Task — ...".
+function startOptions(acts, selectedId) {
+  return Object.entries(MODULES).flatMap(([m, M]) => {
+    const list = acts.filter((a) => a.status === 'active' && M.modes.includes(a.mode));
+    return list.length ? [h('optgroup', { label: HIDDEN_MODULES.includes(m) ? `${M.label} (tile not shown to ${me.learner.name})` : M.label },
+      list.map((a) => h('option', { value: a.id, selected: a.id === selectedId }, a.title)))] : [];
+  });
+}
 const moduleOf = (mode) => Object.keys(MODULES).find((k) => MODULES[k].modes.includes(mode));
 const SV = (d) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
 const MODULE_ICONS = {
@@ -1582,7 +1595,7 @@ const review = { goal: '', period: '30', activity: '' };
 function resultBadge(r) {
   if (r.success === true) return h('span', { class: 'result met' }, 'Met target');
   if (r.success === false) return h('span', { class: 'result notyet' }, 'Not yet');
-  return h('span', { class: 'result none', title: r.plan_goal === 'other' ? 'Not linked to a plan goal' : 'Stopped before the end' }, r.plan_goal === 'other' ? 'Practice' : 'Not counted');
+  return h('span', { class: 'result none', title: r.plan_goal === 'other' ? 'Not linked to a plan goal' : 'Stopped before the end' }, r.plan_goal === 'other' ? 'Practice' : 'Stopped early');
 }
 function codeBadge(code) {
   if (!code) return null;
@@ -1990,6 +2003,19 @@ function emailPanel(c) {
     blocked ? h('p', { style: 'margin:8px 0 0' }, `${name} hasn't chosen to share their practice records with ${ROLE[me.adult.role].toLowerCase()}s, so no emails will be sent until they do.`) : null);
 }
 
+// Newest first, with "last used 3 days ago" instead of a date, and devices not used for 30 days folded away so the one
+// that matters (the iPad) is easy to find. Each is still a plain "Disconnect".
+function deviceList(devices) {
+  if (!devices.length) return null;
+  const seen = (d) => (d.last_seen_at ? Date.parse(d.last_seen_at) : 0);
+  const sorted = [...devices].sort((a, b) => seen(b) - seen(a));
+  const stale = (d) => !seen(d) || Date.now() - seen(d) > 30 * 86400000;
+  const row = (d) => h('li', {}, h('span', {}, `${d.label} · ${d.last_seen_at ? `last used ${whenUsed(d.last_seen_at)}` : 'never used'}`),
+    h('button', { class: 'btn btn-danger', onclick: run(async () => { if (confirm(`Disconnect ${d.label}?`)) { await api(`/adult/devices/${d.id}`, { method: 'DELETE' }); renderShell(); } }) }, 'Disconnect'));
+  const recent = sorted.filter((d) => !stale(d)), old = sorted.filter(stale);
+  return h('div', {}, recent.length ? h('ul', { class: 'list' }, recent.map(row)) : h('p', { class: 'muted' }, 'No device has been used in the last 30 days.'),
+    old.length ? h('details', { class: 'codes-key' }, h('summary', {}, `Older devices (${old.length})`), h('ul', { class: 'list' }, old.map(row))) : null);
+}
 async function renderTeam(root) {
   const [team, devices] = await Promise.all([api('/adult/team'), api('/adult/devices')]);
   const c = me.consent;
@@ -2014,8 +2040,7 @@ async function renderTeam(root) {
       h('p', { style: 'margin-top:0' }, `Open this site on ${me.learner.name}'s iPad (or a phone for testing), add it to the home screen, then enter a connection code. Each device needs its own code.`),
       h('button', { class: 'btn btn-primary', onclick: run(async () => { const r = await api('/adult/pairing-code', { method: 'POST' }); codeBox.replaceChildren(h('p', { class: 'code' }, r.code), h('p', { class: 'muted' }, `Works once, for ${r.expiresInMinutes} minutes.`)); }) }, 'Create a connection code'),
       codeBox,
-      devices.length ? h('ul', { class: 'list' }, devices.map((d) => h('li', {}, h('span', {}, `${d.label} · last used ${d.last_seen_at ? fmt(d.last_seen_at) : 'never'}`),
-        h('button', { class: 'btn btn-danger', onclick: run(async () => { if (confirm(`Disconnect ${d.label}?`)) { await api(`/adult/devices/${d.id}`, { method: 'DELETE' }); renderShell(); } }) }, 'Disconnect')))) : null),
+      deviceList(devices)),
 
     h('h2', {}, 'Practice emails'),
     emailPanel(c),
@@ -2034,7 +2059,7 @@ async function renderTeam(root) {
 
     owner ? h('div', {}, h('h2', {}, 'Delete practice records'),
       h('div', { class: 'panel' }, h('p', { style: 'margin-top:0' }, 'Deletes every practice session, transcript, recording and record. Activities and observations stay.'),
-        h('button', { class: 'btn btn-danger', onclick: run(async () => { if (confirm('Delete all practice records? This cannot be undone.')) { await api('/adult/records', { method: 'DELETE' }); toast('Practice records deleted.'); } }) }, 'Delete all practice records'))) : null,
+        h('button', { class: 'btn btn-danger', onclick: run(async () => { if ((prompt(`This deletes all of ${me.learner.name}\u2019s practice records and cannot be undone. Type DELETE to confirm.`) || '').trim().toUpperCase() === 'DELETE') { await api('/adult/records', { method: 'DELETE' }); toast('Practice records deleted.'); } }) }, 'Delete all practice records'))) : null,
   );
 }
 
