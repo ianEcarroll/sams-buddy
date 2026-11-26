@@ -148,6 +148,7 @@ function renderPair(message) {
     h('h1', { class: 'hello' }, 'Connect this device'),
     h('p', { class: 'hello-sub' }, message || 'Ask someone on your support team for a code to connect this device.'),
     h('div', { class: 'field' }, h('label', { for: 'code' }, 'Code'), input),
+    h('p', { class: 'muted', style: 'max-width:46ch' }, 'A code works once. Each web address, and each home-screen icon, needs its own code. If this used to work and now asks again, you may have opened a different link, so ask for a new code.'),
     h('button', { class: 'btn btn-primary', onclick: async () => {
       try {
         const res = await fetch('/api/device/pair', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ code: input.value, label: deviceLabel() }) });
