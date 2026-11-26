@@ -423,7 +423,7 @@ async function renderHome(root) {
   const activeActs = activities.filter((a) => a.status === 'active');
   const pick = h('select', { id: 'home-start', 'aria-label': `What ${name}’s Start My Practice opens` },
     h('option', { value: '' }, '— none —'),
-    activeActs.map((a) => h('option', { value: a.id, selected: a.id === settings?.current_activity_id }, `${modeName(a.mode)} — ${a.title}`)));
+    startOptions(activeActs, settings?.current_activity_id));
   const chooser = settings ? h('section', { class: 'panel', style: 'display:grid;gap:10px' },
     h('h3', { style: 'margin:0' }, 'Tomorrow’s practice'),
     h('p', { class: 'muted', style: 'margin:0;max-width:70ch' }, `${name}’s Start My Practice button opens this activity. One choice means fewer decisions for ${name}.`),
