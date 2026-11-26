@@ -203,6 +203,14 @@ async function setSchoolConsent(learnerId, adultId) {
 async function canAddStudents(adultId) {
   return !!(await one("select 1 from adults where id=$1 and is_owner and role <> 'parent'", [adultId]));
 }
+// The main grown-up confirms the privacy choices for the student (GDPR: a parent or the school agrees for a minor).
+adult.put('/consent', requireOwner, wrap(async (req, res) => {
+  const { can_view = {}, save_audio = false } = req.body || {};
+  const cv = Object.fromEntries(ROLES.map((r) => [r, !!can_view[r]]));
+  await q('update consent set agreed_at=coalesce(agreed_at, now()), can_view=$1, save_audio=$2, set_by=$3, updated_at=now() where learner_id=$4', [cv, !!save_audio, req.adult.id, req.learnerId]);
+  if (!save_audio) await q('update practice_events e set audio=null from practice_sessions s where s.id=e.session_id and s.learner_id=$1', [req.learnerId]);
+  res.json({ ok: true });
+}));
 adult.get('/me', wrap(async (req, res) => {
   const learner = await one('select id, name, birth_year, settings, current_activity_id, is_workspace from learners where id=$1', [req.learnerId]);
   const consent = await one('select agreed_at, can_view, save_audio, set_by is not null as set_by_school from consent where learner_id=$1', [req.learnerId]);
@@ -1002,7 +1010,7 @@ device.post('/practice/start', wrap(async (req, res) => {
   const id = req.body?.activityId || l.current_activity_id;
   const act = id && await one(`select id, mode, title, goal, plan_goal, content from activities where id=$1 and learner_id=$2 and (status='active' or $3)`, [id, req.learnerId, !!req.device.preview]);
   if (!act) return res.status(404).json({ error: 'Your team has not chosen a practice yet.' });
-  const { state, turn } = createSession({ activity: act, settings: settingsOf(l), learnerName: l.name, learnerAge: ageFrom(l.birth_year), learnerInterests: settingsOf(l).interests });
+  const { state, turn } = createSession({ activity: act, settings: settingsOf(l), learnerName: l.name, learnerAge: ageFrom(l.birth_year), learnerInterests: settingsOf(l).interests, quickStart: req.body?.quick === true });
   const s = await one('insert into practice_sessions(learner_id, activity_id, activity_snapshot, state, preview) values ($1,$2,$3,$4,$5) returning id', [req.learnerId, act.id, act, state, !!req.device.preview]);
   res.json({ title: act.title, mode: act.mode, ...(await deliver(s.id, state, turn)) });
 }));

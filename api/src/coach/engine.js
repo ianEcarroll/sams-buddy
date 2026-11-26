@@ -30,7 +30,7 @@ const cap = (s) => (s ? s[0].toUpperCase() + s.slice(1) : s);
 
 const learnerOf = (state) => ({ name: state.learnerName, age: state.learnerAge, interests: state.learnerInterests || [] });
 
-export function createSession({ activity, settings = {}, learnerName = '', learnerAge = null, learnerInterests = [], now = Date.now() }) {
+export function createSession({ activity, settings = {}, learnerName = '', learnerAge = null, learnerInterests = [], now = Date.now(), quickStart = false }) {
   const items = activity.content?.items || [];
   if (!items.length) throw new Error('This activity has no items yet.');
   const state = {
@@ -52,7 +52,8 @@ export function createSession({ activity, settings = {}, learnerName = '', learn
     learnerInterests,
   };
   // Welcome lines come first but stay out of lastLines, so Repeat replays the task, not the greeting.
-  const lines = [...welcomeLines(state), ...modeIntroLines(state), ...openItem(state)];
+  // Not the first practice of the day: no greeting, button explanation or "this is a ... practice" speech, straight to the task.
+  const lines = [...(quickStart ? [] : [...welcomeLines(state), ...modeIntroLines(state)]), ...openItem(state)];
   return { state, turn: state.mode === 'listen' ? listenTurn(state, lines) : state.mode === 'follow' ? followTurn(state, lines) : state.mode === 'steps' ? stepsTurn(state, lines) : makeTurn(state, lines) };
 }
 
