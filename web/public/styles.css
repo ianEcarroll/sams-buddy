@@ -376,6 +376,8 @@ details > summary { cursor: pointer; font-weight: 700; padding: 6px 0; }
   padding: 10px 16px; background: #fff3c4; color: #4a3b00; border-top: 2px solid #e0b400; font-size: 0.95rem; }
 body:has(#preview-bar) { padding-bottom: 64px; }
 .skip-intro { justify-self: center; min-height: 48px; padding-inline: 28px; }
+.problem { display: grid; gap: 10px; justify-items: center; text-align: center; padding: 14px 16px; border-radius: 16px; background: var(--sky-soft, #e8f1ff); border: 2px solid var(--line); }
+.problem p { margin: 0; }
 .start-tag { margin-left: 6px; background: var(--met-soft, var(--sky-soft)); color: var(--met, var(--ink)); font-weight: 600; }
 .edit-head { margin: 22px 0 4px; }
 
