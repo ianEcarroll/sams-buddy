@@ -330,7 +330,9 @@ async function process_(state, { text, displayText, confirmed }, judge) {
   const focus = nextMissing(state);
   // Think Buddy: "Why…?" and "What if that doesn't work?" are part of the activity, asked once as plain
   // follow-up questions before any cue. They are not counted as support.
-  const follow = m.followUp?.(focus, it);
+  let follow = m.followUp?.(focus, it);
+  // Name Sam's own answer, so "that" is clear even if other questions came in between.
+  if (follow && state.mode === 'think' && focus === 'reason' && it.attempts > 1 && it.met.action?.evidence) follow = `You said: "${it.met.action.evidence}". Why do you think that is a good idea?`;
   if (follow && !it.asked[focus]) {
     it.asked[focus] = true;
     it.focus = focus;
@@ -458,13 +460,28 @@ function fadeStart(state, el) {
 }
 
 // One cue, one element, one step stronger than last time.
+// Think: the same question as the cue ladder, but plain and tied to this situation, for "I don't understand".
+function thinkSimpler(state, item) {
+  const it = state.item;
+  const el = nextMissing(state);
+  const scene = String(item.scenario || '').trim();
+  if (el === 'problem') return `${scene ? `${scene} ` : ''}Is something not the way you expected?`;
+  if (el === 'reason' && it.met.action?.evidence) return `You said: "${it.met.action.evidence}". How would that help?`;
+  if (el === 'backup') return 'What could you do if that did not work?';
+  return MODES.think.simplePrompt(item);
+}
 function giveCue(state, el, by, forceLevel = null) {
   const it = state.item;
   const item = curItem(state);
   const level = forceLevel ?? (it.focus === el ? Math.min(3, it.focusLevel + 1) : fadeStart(state, el));
   it.focus = el;
   it.focusLevel = level;
-  const text = state.mode === 'recall' ? recallCue(state, level) : cueLadder(state.mode, state.activity, state.mode === 'category' ? categoryCueItem(state, item) : item, el)[level];
+  let text = state.mode === 'recall' ? recallCue(state, level) : cueLadder(state.mode, state.activity, state.mode === 'category' ? categoryCueItem(state, item) : item, el)[level];
+  if (state.mode === 'think' && level === 0) {
+    // Going back to an earlier step: link it to what Sam just said, and name his answer when asking "why".
+    if (el === 'problem' && it.met.action) text = `Good idea. Now let's look at the situation. ${text}`;
+    if (el === 'reason' && it.met.action?.evidence) text = `You said: "${it.met.action.evidence}". Why do you think that is a good idea?`;
+  }
   it.supportGiven.push({ el, level, text, by });
   it.anySupport = true;
   // Talk: the topic's picture is a hint for finding something to say, so it goes with a comment cue only. It is not shown
@@ -510,6 +527,8 @@ function handleHelp(state, kind, text, source) {
       return [line('Sure.', 'ack'), ...state.lastLines];
     case 'dont_understand':
     case 'other_clarification':
+      // Think: say the missing step in the words of this situation, not the generic "What could you do?" Sam may already have answered.
+      if (state.mode === 'think') return [line("That's okay. Let me say it another way.", 'ack'), line(thinkSimpler(state, item), 'prompt')];
       return [line('Thanks for telling me.', 'ack'), line(m.simplePrompt(item), 'prompt')];
     case 'check_with_coach':
       return [line('Checking with your job coach is a good idea. For this practice, I can give you a hint.', 'ack'), hintLine(state, 'buddy')];
