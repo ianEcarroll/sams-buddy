@@ -291,6 +291,8 @@ details > summary { cursor: pointer; font-weight: 700; padding: 6px 0; }
 @media (max-width: 560px) {
   .rec-card { padding: 12px 14px; }
   .review-filters select { flex: 1 1 140px; }
+  /* On a phone the filter row would stay stuck to the top and take a quarter of the screen. */
+  .review-filters { position: static; }
 }
 
 /* ---------- Adult: voice picker ---------- */
@@ -551,6 +553,13 @@ details.layer > summary small, details.fine-tune > summary small { font-weight: 
 
 .plan-section, .plan-section *, .plan-save { box-sizing: border-box; }
 .team-content { padding-bottom: 24px; }
+/* Home: getting-started checklist and the week at a glance. */
+.checklist { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; }
+.checklist li { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.check-box { width: 26px; height: 26px; border-radius: 50%; border: 2px solid var(--line); display: grid; place-items: center; flex: 0 0 auto; font-weight: 700; }
+.check-box.done { background: var(--met); border-color: var(--met); color: var(--paper); }
+.week-line { font-size: 1.1rem; line-height: 1.5; max-width: 70ch; }
+.quote { margin: 0; padding-left: 14px; border-left: 6px solid var(--met); font-size: 1.2rem; line-height: 1.5; }
 
 /* Readable prompts without enlarging long stories and explanations. */
 .practice .bubble { font-size: 1.375rem; scroll-margin-block: 16px; }
@@ -660,3 +669,14 @@ body.lib-open { overflow: hidden; }
 .pick-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; margin: 18px 0; }
 .pick-name { font-size: 1.3rem; padding: 18px 10px; }
 .class-code { font-size: 2.4rem; letter-spacing: .18em; font-weight: 800; margin: 8px 0; }
+
+/* Caseload: a student with no recent practice stands out. */
+.lib-tile.attn { border-left: 6px solid var(--sun); }
+
+/* ---------- Press and hold (grown-ups area in Sam's settings) ---------- */
+.grownups-entry { display: grid; gap: 10px; margin-top: 18px; padding-top: 18px; border-top: 2px solid var(--line); }
+.grownups-entry h2 { margin: 0; font-size: 1.25rem; }
+.hold-btn { position: relative; overflow: hidden; display: grid; gap: 2px; justify-items: center; min-height: 64px; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; touch-action: manipulation; }
+.hold-fill { position: absolute; inset: 0 auto 0 0; width: 0; background: color-mix(in srgb, var(--talk) 28%, transparent); transition-property: width; transition-timing-function: linear; }
+.hold-label, .hold-hint { position: relative; }
+.hold-hint { font-size: .9rem; font-weight: 400; color: var(--ink-soft); }

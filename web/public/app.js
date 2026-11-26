@@ -90,9 +90,10 @@ function mountKeep(...nodes) {
 }
 const smooth = () => (matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth');
 function toast(msg) {
-  const t = h('div', { class: 'toast', role: 'status' }, msg);
+  // Stays long enough to read (longer messages stay longer), and a tap puts it away.
+  const t = h('div', { class: 'toast', role: 'status', onclick: () => t.remove() }, msg);
   document.body.append(t);
-  setTimeout(() => t.remove(), 4000);
+  setTimeout(() => t.remove(), Math.min(10000, Math.max(4000, String(msg || '').length * 90)));
 }
 
 // A request that gets no answer must not leave the learner stuck: after `timeout` ms it stops and says so.
@@ -267,35 +268,79 @@ function renderPicker(mode, list) {
   );
 }
 
+// Press and hold for `ms` before anything happens: easy for an adult, hard to do by accident. Works with a finger,
+// a mouse, or the Space/Enter key. The fill bar shows progress (it does not animate when motion is reduced, the
+// timer still counts), and a status line says "Keep holding" for screen readers.
+function holdButton(label, hint, onDone, ms = 2000) {
+  let timer = null;
+  const status = h('span', { class: 'hold-hint', role: 'status' }, hint);
+  const btn = h('button', { class: 'btn hold-btn', type: 'button' }, h('span', { class: 'hold-fill', 'aria-hidden': 'true' }), h('span', { class: 'hold-label' }, label), status);
+  const fill = btn.querySelector('.hold-fill');
+  const stop = () => {
+    if (timer) { clearTimeout(timer); timer = null; status.textContent = hint; }
+    fill.style.transitionDuration = '0s'; fill.style.width = '0%';
+  };
+  const start = () => {
+    if (timer) return;
+    status.textContent = 'Keep holding…';
+    fill.style.transitionDuration = `${ms}ms`; fill.style.width = '100%';
+    timer = setTimeout(() => { timer = null; stop(); onDone(); }, ms);
+  };
+  btn.addEventListener('pointerdown', (e) => { e.preventDefault(); start(); });
+  for (const ev of ['pointerup', 'pointerleave', 'pointercancel', 'blur']) btn.addEventListener(ev, stop);
+  btn.addEventListener('contextmenu', (e) => e.preventDefault());
+  btn.addEventListener('keydown', (e) => { if ((e.key === ' ' || e.key === 'Enter') && !e.repeat) { e.preventDefault(); start(); } });
+  btn.addEventListener('keyup', (e) => { if (e.key === ' ' || e.key === 'Enter') stop(); });
+  return btn;
+}
+
+// Sam's own settings: how Foxy looks and sounds. Things that decide who sees his notes, or remove them, are on a
+// separate "For parents and teachers" screen that takes a press and hold to open.
 function renderSettings() {
-  const pc = privacyControls(home.consent);
   const captions = h('input', { type: 'checkbox', checked: home.settings.captions });
   const speed = h('select', { id: 'speech-speed' }, [['0.8', 'Slower'], ['0.9', 'A bit slower'], ['1', 'Normal'], ['1.1', 'Faster']].map(([v, l]) => h('option', { value: v, selected: Number(v) === Number(home.settings.speech_speed) }, l)));
   mount(
     h('div', { class: 'p-top' }, h('h1', { class: 'hello', style: 'font-size:2rem' }, 'My settings'), h('button', { class: 'btn', onclick: renderHome }, 'Back')),
-    h('label', { class: 'switch' }, captions, 'Show Foxy\u2019s words on screen'),
+    h('label', { class: 'switch' }, captions, 'Show Foxy’s words on screen'),
     h('div', { class: 'field' }, h('label', { for: 'speech-speed' }, 'How fast Foxy talks'), speed),
-    ...pc.nodes,
     reminderBox(),
     h('button', { class: 'btn btn-primary', onclick: async () => {
       try {
         await api('/settings', { method: 'PUT', body: { captions: captions.checked, speech_speed: Number(speed.value) } });
-        await api('/consent', { method: 'PUT', body: pc.read() });
         toast('Saved.'); await boot();
       } catch (e) { toast(e.message); }
     } }, 'Save'),
+    h('button', { class: 'btn', onclick: () => { try { sessionStorage.setItem(WELCOME_FORCE_KEY, '1'); } catch { /* storage unavailable: it still plays on the next open */ } location.reload(); } }, 'Watch Foxy’s welcome'),
+    h('p', { class: 'muted', style: 'font-size:.95rem' }, h('a', { href: '/about/' }, 'About TALVO'), ' · why we made it, and our film'),
+    h('section', { class: 'grownups-entry', 'aria-label': 'For parents and teachers' },
+      h('h2', {}, 'For parents and teachers'),
+      h('p', { class: 'muted', style: 'margin:0' }, 'Who can read the practice notes, and downloading or deleting them.'),
+      holdButton('Press and hold to open', 'Hold for 2 seconds', renderGrownups)),
+    h('p', { class: 'muted', style: 'font-size:.85rem' }, 'Pictures: Mulberry Symbols © Steve Lee, CC BY-SA 4.0 (mulberrysymbols.org)'),
+  );
+}
+
+function renderGrownups() {
+  const pc = privacyControls(home.consent);
+  mount(
+    h('div', { class: 'p-top' }, h('h1', { class: 'hello', style: 'font-size:2rem' }, 'For parents and teachers'), h('button', { class: 'btn', onclick: renderSettings }, 'Back')),
+    h('p', {}, `These choices belong to ${home.name}. ${home.name} can ask a parent or teacher to help with them.`),
+    ...pc.nodes,
+    h('button', { class: 'btn btn-primary', onclick: async () => {
+      try { await api('/consent', { method: 'PUT', body: pc.read() }); toast('Saved.'); await boot(); } catch (e) { toast(e.message); }
+    } }, 'Save these choices'),
+    h('h2', { style: 'margin:18px 0 0' }, 'Practice notes'),
     h('button', { class: 'btn', onclick: async () => {
-      const data = await api('/export');
-      const a = h('a', { href: URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })), download: 'my-practice-notes.json' });
-      a.click();
-    } }, 'Download my practice notes'),
+      try {
+        const data = await api('/export');
+        const a = h('a', { href: URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })), download: 'my-practice-notes.json' });
+        a.click();
+      } catch (e) { toast(e.message); }
+    } }, 'Download the practice notes'),
     h('button', { class: 'btn btn-danger', onclick: async () => {
-      if (!confirm('Delete all your practice notes? This cannot be undone.')) return;
-      await api('/records', { method: 'DELETE' }); toast('Your practice notes are deleted.');
-    } }, 'Delete my practice notes'),
-    h('button', { class: 'btn', onclick: () => { location.reload(); } }, 'Watch Foxy’s welcome'),
-    h('p', { class: 'muted', style: 'font-size:.95rem' }, h('a', { href: '/about/' }, 'About TALVO'), ' \u00B7 why we made it, and our film'),
-    h('p', { class: 'muted', style: 'font-size:.85rem' }, 'Pictures: Mulberry Symbols \u00A9 Steve Lee, CC BY-SA 4.0 (mulberrysymbols.org)'),
+      if (!confirm(`Delete all of ${home.name}'s practice notes? The team will lose them too. This cannot be undone.`)) return;
+      try { await api('/records', { method: 'DELETE' }); toast('The practice notes are deleted.'); } catch (e) { toast(e.message); }
+    } }, 'Delete the practice notes'),
   );
 }
 
@@ -640,15 +685,18 @@ async function sendResponse({ text, form }) {
   P.talk = 'busy'; drawPractice();
   try {
     const t = form ? await api(`/practice/${P.id}/respond`, { method: 'POST', form }) : await api(`/practice/${P.id}/respond`, { method: 'POST', body: { text } });
+    P.acted = true;
     applyTurn(t);
   } catch (e) { toast(e.message); P.talk = 'idle'; drawPractice(); }
 }
 async function sendConfirm(yes) {
   try { applyTurn(await api(`/practice/${P.id}/confirm`, { method: 'POST', body: { yes } })); } catch (e) { toast(e.message); }
 }
+// Pressing these does not count as taking part: a practice that only used them ends with a plain message, not praise.
+const SUPPORT_ONLY = ['repeat', 'hint', 'dont_understand', 'example', 'think', 'try_again', 'ready', 'listen_finish'];
 async function sendControl(action) {
   stopVoice();
-  try { applyTurn(await api(`/practice/${P.id}/control`, { method: 'POST', body: { action } })); } catch (e) { toast(e.message); }
+  try { const t = await api(`/practice/${P.id}/control`, { method: 'POST', body: { action } }); if (!SUPPORT_ONLY.includes(action)) P.acted = true; applyTurn(t); } catch (e) { toast(e.message); }
 }
 // ------------------------------------------------------------ Listen Buddy on screen: shapes and boxes
 const SHAPE_COLOURS = { red: '#d63c3c', blue: '#2f6fd6', green: '#2e9d57', yellow: '#f2c230', purple: '#8a4fd0', orange: '#ee8a2a' };
@@ -693,7 +741,7 @@ function drawBoard(b, locked) {
 }
 async function sendAct(a) {
   if (!P || P.talk === 'busy') return;
-  try { applyTurn(await api(`/practice/${P.id}/act`, { method: 'POST', body: a })); } catch (e) { toast(e.message); }
+  try { const t = await api(`/practice/${P.id}/act`, { method: 'POST', body: a }); P.acted = true; applyTurn(t); } catch (e) { toast(e.message); }
 }
 
 // A turn that reads steps out one by one starts with none of them on screen (-1); otherwise show the whole list.
@@ -752,7 +800,14 @@ async function finishPractice() {
 function renderDone(t) {
   closeMic();
   const feedback = t?.lines?.filter((l) => l.kind === 'feedback').map((l) => l.text) || [];
+  // Finished early without answering or doing anything (only help buttons, or nothing): no praise for what did not happen.
+  const tookPart = P ? !!P.acted || feedback.length > 0 : true;
   P = null;
+  if (!tookPart) return mount(
+    h('p', { class: 'done-msg' }, 'Practice finished.'),
+    h('p', {}, 'You did not answer anything this time. That is okay. You can try again when you are ready.'),
+    h('button', { class: 'btn btn-primary', onclick: boot }, 'Back to home'),
+  );
   mount(
     h('p', { class: 'done-msg' }, `Nice practice, ${home.name}.`),
     feedback.length ? h('p', {}, feedback.at(-1)) : h('p', {}, 'Your practice note is saved.'),
@@ -818,14 +873,26 @@ function previewBar(on) {
     h('span', {}, 'Preview: this is what Sam sees. Nothing you do here is saved.'),
     h('button', { class: 'btn btn-quiet', onclick: () => { try { sessionStorage.removeItem(PREVIEW_KEY); } catch { /* ok */ } window.close(); location.href = '/adult/'; } }, 'Close preview')));
 }
+// The welcome film plays on the first open of each day (not every open). "Watch Foxy's welcome" in settings plays it on demand.
+const WELCOME_DAY_KEY = 'talvo.welcomeDay';
+const WELCOME_FORCE_KEY = 'talvo.welcomeNow';
+function welcomeDue() {
+  try {
+    if (sessionStorage.getItem(WELCOME_FORCE_KEY)) { sessionStorage.removeItem(WELCOME_FORCE_KEY); return true; }
+    return localStorage.getItem(WELCOME_DAY_KEY) !== new Date().toLocaleDateString('en-CA');
+  } catch { return true; }
+}
 async function showWelcomeVideo() {
   if (previewToken) return hideLaunch();
   const v = document.getElementById('launch-video');
   const skip = document.getElementById('launch-skip');
   const sound = document.getElementById('launch-sound');
   // Reduce Motion: no video on its own.
-  if (!launch?.isConnected || !v || matchMedia('(prefers-reduced-motion: reduce)').matches) return hideLaunch();
-  v.addEventListener('playing', () => { if (launch.isConnected) launch.hidden = false; });
+  if (!launch?.isConnected || !v || matchMedia('(prefers-reduced-motion: reduce)').matches || !welcomeDue()) return hideLaunch();
+  v.addEventListener('playing', () => {
+    if (launch.isConnected) launch.hidden = false;
+    try { localStorage.setItem(WELCOME_DAY_KEY, new Date().toLocaleDateString('en-CA')); } catch { /* storage unavailable: it just plays again next time */ }
+  });
   v.addEventListener('ended', hideLaunch);
   v.addEventListener('error', hideLaunch);
   skip.onclick = hideLaunch;
