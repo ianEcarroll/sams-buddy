@@ -467,8 +467,9 @@ function giveCue(state, el, by, forceLevel = null) {
   const text = state.mode === 'recall' ? recallCue(state, level) : cueLadder(state.mode, state.activity, state.mode === 'category' ? categoryCueItem(state, item) : item, el)[level];
   it.supportGiven.push({ el, level, text, by });
   it.anySupport = true;
-  // Talk: the topic's picture is a hint, shown with the first cue instead of straight away (Ray, 18 Nov).
-  if (state.mode === 'conversation' && item.image_id) it.showImage = item.image_id;
+  // Talk: the topic's picture is a hint for finding something to say, so it goes with a comment cue only. It is not shown
+  // with the invitation to ask a question: by then the chat has often moved on and the picture would be unrelated.
+  if (state.mode === 'conversation' && item.image_id && el === 'turn') it.showImage = item.image_id;
   if (level === 3) it.modelGiven[el] = true;
   return line(text, level === 3 ? 'model' : 'cue', { level: LEVELS[level], element: el });
 }
@@ -844,13 +845,22 @@ function completeItem(state, newly) {
   return advance(state, lines);
 }
 
+const TOPIC_BRIDGES = ['Let me ask you about something different.', 'I am curious about something else.', 'Shall we talk about something new?'];
 function advance(state, lines) {
   state.completed.push(buildRecord(state, state.item));
   const items = state.activity.content.items;
   const timeUp = Date.now() - state.startedAt > state.settings.session_minutes * 60_000;
-  if (state.itemIndex + 1 < items.length && !timeUp) {
-    state.itemIndex += 1;
-    return lines.concat(openItem(state)); // openItem leads in: "On to the next situation." etc.
+  // Talk: a prepared topic that repeats the one just discussed is skipped, so Sam is not asked the same thing twice.
+  let next = state.itemIndex + 1;
+  const sameTopic = (a, b) => !!a?.topic && String(a.topic).trim().toLowerCase() === String(b?.topic || '').trim().toLowerCase();
+  if (state.mode === 'conversation') while (next < items.length && sameTopic(items[next], items[state.itemIndex])) next += 1;
+  if (next < items.length && !timeUp) {
+    const changedTopic = state.mode === 'conversation';
+    state.itemIndex = next;
+    const opening = openItem(state); // openItem leads in: "On to the next situation." etc.
+    // Talk: say that the subject is changing, so a prepared opener does not come out of nowhere.
+    if (changedTopic) lines.push(line(TOPIC_BRIDGES[next % TOPIC_BRIDGES.length], 'intro'));
+    return lines.concat(opening);
   }
   state.done = true;
   lines.push(line(`That's the end of this practice. Thanks for practising with me${state.learnerName ? `, ${state.learnerName}` : ''}. See you next time!`, 'closing'));
