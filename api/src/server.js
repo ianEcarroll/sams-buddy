@@ -190,6 +190,29 @@ app.post('/api/invite/:token', rateLimit(10), wrap(async (req, res) => {
   }
 }));
 
+// A team member joins from the link their main grown-up sent: they see who invited them and choose their own password.
+const TEAM_INVITE_DAYS = 7;
+const teamInviteByToken = (token) => one(`select t.id, t.name, t.email, t.role, t.learner_id, l.name as learner_name from team_invites t join learners l on l.id=t.learner_id
+  where t.token_hash=$1 and t.used_at is null and t.expires_at > now()`, [hmac(String(token || ''))]);
+app.get('/api/join/:token', rateLimit(30), wrap(async (req, res) => {
+  const t = await teamInviteByToken(req.params.token);
+  res.json(t ? { valid: true, name: t.name, email: t.email, role: t.role, learnerName: t.learner_name } : { valid: false });
+}));
+app.post('/api/join/:token', rateLimit(10), wrap(async (req, res) => {
+  const password = String(req.body?.password || '');
+  if (password.length < 10) return res.status(400).json({ error: 'Choose a password of at least 10 characters.' });
+  const client = await pool.connect();
+  try {
+    await client.query('begin');
+    const t = (await client.query('update team_invites set used_at=now() where token_hash=$1 and used_at is null and expires_at > now() returning name, email, role, learner_id', [hmac(String(req.params.token || ''))])).rows[0];
+    if (!t) { await client.query('rollback'); return res.status(410).json({ error: 'This invite link has expired or was already used. Ask for a new one.' }); }
+    if ((await client.query('select 1 from adults where email=lower($1)', [t.email])).rowCount) { await client.query('rollback'); return res.status(409).json({ error: 'That email already has a TALVO account. Sign in instead.' }); }
+    const a = (await client.query('insert into adults(learner_id, name, email, role, pass_hash) values ($1,$2,lower($3),$4,$5) returning id', [t.learner_id, t.name, t.email, t.role, hashPassword(password)])).rows[0];
+    await client.query('commit');
+    res.json({ token: sign({ kind: 'adult', sub: a.id }, 12 * 3600) });
+  } catch (e) { await client.query('rollback').catch(() => {}); throw e; } finally { client.release(); }
+}));
+
 const adult = express.Router();
 adult.use(wrap(requireAdult));
 
@@ -332,9 +355,24 @@ adult.post('/team', requireOwner, wrap(async (req, res) => {
     await q('insert into adult_learners(adult_id, learner_id, added_by) values ($1,$2,$3) on conflict do nothing', [existing.id, req.learnerId, req.adult.id]);
     return res.json({ id: existing.id, linked: true });
   }
-  if (!password || password.length < 10) return res.status(400).json({ error: 'Add a temporary password of at least 10 characters.' });
+  if (!password) {
+    // No password: send an invite link instead. The person chooses their own password when they open it.
+    const token = newInviteToken();
+    await q('update team_invites set expires_at=now() where learner_id=$1 and email=lower($2) and used_at is null', [req.learnerId, email]);
+    await q('insert into team_invites(token_hash, learner_id, name, email, role, created_by, expires_at) values ($1,$2,$3,lower($4),$5,$6, now() + make_interval(days => $7))', [hmac(token), req.learnerId, String(name).slice(0, 80), email, role, req.adult.id, TEAM_INVITE_DAYS]);
+    const base = (process.env.APP_URL || `${req.protocol}://${req.get('host')}`).replace(/\/$/, '');
+    return res.json({ invite: { url: `${base}/adult/?join=${token}`, expiresInDays: TEAM_INVITE_DAYS } });
+  }
+  if (password.length < 10) return res.status(400).json({ error: 'A password needs at least 10 characters.' });
   const a = await one('insert into adults(learner_id, name, email, role, pass_hash) values ($1,$2,lower($3),$4,$5) returning id', [req.learnerId, name, email, role, hashPassword(password)]);
   res.json({ id: a.id });
+}));
+adult.get('/team-invites', requireOwner, wrap(async (req, res) => {
+  res.json(await many('select id, name, email, role, expires_at from team_invites where learner_id=$1 and used_at is null and expires_at > now() order by created_at', [req.learnerId]));
+}));
+adult.delete('/team-invites/:id', requireOwner, wrap(async (req, res) => {
+  await q('update team_invites set expires_at=now() where id=$1 and learner_id=$2 and used_at is null', [req.params.id, req.learnerId]);
+  res.json({ ok: true });
 }));
 adult.delete('/team/:id', requireOwner, wrap(async (req, res) => {
   await q('delete from adults where id=$1 and learner_id=$2 and is_owner=false', [req.params.id, req.learnerId]);

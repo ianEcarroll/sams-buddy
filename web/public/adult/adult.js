@@ -96,6 +96,8 @@ async function boot() {
   if (reset) { history.replaceState(null, '', location.pathname + location.search); return renderReset(reset); }
   const invite = new URLSearchParams(location.search).get('invite');
   if (invite && !token) return renderInvite(invite);
+  const join = new URLSearchParams(location.search).get('join');
+  if (join && !token) return renderJoin(join);
   if (!token) {
     const { needsSetup } = await api('/setup/status');
     return needsSetup ? renderSetup() : renderLogin();
@@ -181,6 +183,28 @@ function renderSetup() {
         const r = await api('/setup', { method: 'POST', body: Object.fromEntries(Object.entries(f).map(([k, v]) => [k, v.type === 'checkbox' ? v.checked : v.value])) });
         saveToken(r.token, false); boot();
       }) }, 'Create account')));
+}
+
+// ------------------------------------------------------------ joining a team from the link a main grown-up sent
+async function renderJoin(joinToken) {
+  const t = await api(`/join/${encodeURIComponent(joinToken)}`);
+  const toSignIn = () => { history.replaceState(null, '', '/adult/'); boot(); };
+  if (!t.valid) {
+    return $app.replaceChildren(brand(), h('h1', {}, 'This invite has expired'),
+      h('p', { class: 'panel' }, 'The link has already been used or is more than 7 days old. Ask the person who sent it for a new one.'),
+      h('button', { class: 'btn', onclick: toSignIn }, 'I already have an account'));
+  }
+  const password = h('input', { type: 'password', autocomplete: 'new-password' });
+  $app.replaceChildren(brand(), h('h1', {}, `Join ${t.learnerName}\u2019s team`),
+    h('p', { class: 'muted', style: 'max-width:60ch' }, `${t.name}, you have been invited as ${ROLE[t.role] || 'a team member'} for ${t.learnerName}. Choose a password to finish. You will sign in with ${t.email}.`),
+    h('div', { class: 'panel', style: 'max-width:460px;display:grid;gap:18px' },
+      field('Choose a password (10+ characters)', password),
+      h('button', { class: 'btn btn-primary', onclick: run(async () => {
+        const r = await api(`/join/${encodeURIComponent(joinToken)}`, { method: 'POST', body: { password: password.value } });
+        saveToken(r.token, false);
+        history.replaceState(null, '', '/adult/'); tab = null; boot();
+      }) }, 'Join the team')),
+    h('button', { class: 'btn btn-quiet', onclick: toSignIn }, 'I already have an account'));
 }
 
 // ------------------------------------------------------------ joining by invite (a new family)
@@ -2055,12 +2079,13 @@ function privacyForm(c) {
     }) }, 'Save privacy choices'));
 }
 async function renderTeam(root) {
-  const [team, devices] = await Promise.all([api('/adult/team'), api('/adult/devices')]);
+  const [team, devices, pending] = await Promise.all([api('/adult/team'), api('/adult/devices'), me.adult.is_owner ? api('/adult/team-invites') : []]);
+  const inviteBox = h('div', {});
   const c = me.consent;
   const codeBox = h('div', {});
   const owner = me.adult.is_owner;
 
-  const add = { name: h('input'), email: h('input', { type: 'email', autocomplete: 'off', name: 'member-email' }), role: h('select', {}, Object.entries(ROLE).map(([k, l]) => h('option', { value: k }, l))), password: h('input', { type: 'text', placeholder: 'Temporary password', autocomplete: 'new-password', name: 'temp-password' }) };
+  const add = { name: h('input'), email: h('input', { type: 'email', autocomplete: 'off', name: 'member-email' }), role: h('select', {}, Object.entries(ROLE).map(([k, l]) => h('option', { value: k }, l))) };
   const cur = h('input', { type: 'password', autocomplete: 'current-password' });
   const nxt = h('input', { type: 'password', autocomplete: 'new-password' });
 
@@ -2088,9 +2113,25 @@ async function renderTeam(root) {
     h('ul', { class: 'list panel' }, team.map((t) => h('li', {}, h('span', {}, `${t.name} · ${ROLE[t.role]}${t.is_owner ? ' (main account)' : ''} · ${t.email}`),
       owner && !t.is_owner ? h('button', { class: 'btn btn-danger', onclick: run(async () => { if (confirm(`Remove ${t.name}?`)) { await api(`/adult/team/${t.id}`, { method: 'DELETE' }); renderShell(); } }) }, 'Remove') : null))),
     owner ? h('div', { class: 'panel' }, h('h3', { style: 'margin-top:0' }, 'Add a team member'),
-      h('div', { class: 'grid2' }, field('Name', add.name), field('Email', add.email), field('Role', add.role), field('Temporary password (10+ characters, only for someone new)', add.password)),
-      h('p', { class: 'muted', style: 'margin:6px 0 0;max-width:70ch' }, 'Someone who already has a TALVO account, such as a therapist with other students, does not need a password. They keep their own sign-in and will see this student in their list.'),
-      h('button', { class: 'btn', style: 'margin-top:10px', onclick: run(async () => { await api('/adult/team', { method: 'POST', body: Object.fromEntries(Object.entries(add).map(([k, v]) => [k, v.value])) }); toast('Team member added. Share the password with them privately.'); renderShell(); }) }, 'Add team member')) : null,
+      h('div', { class: 'grid2' }, field('Name', add.name), field('Email', add.email), field('Role', add.role)),
+      h('p', { class: 'muted', style: 'margin:6px 0 0;max-width:70ch' }, 'We make a link for you to send them. They open it and choose their own password, so you never handle one. Someone who already has a TALVO account, such as a therapist with other students, is added straight away and keeps their own sign-in.'),
+      h('button', { class: 'btn', style: 'margin-top:10px', onclick: run(async () => {
+        const r = await api('/adult/team', { method: 'POST', body: Object.fromEntries(Object.entries(add).map(([k, v]) => [k, v.value])) });
+        if (!r.invite) { toast('Team member added.'); return renderShell(); }
+        const who = add.name.value.trim() || 'them';
+        const field_ = h('input', { readonly: true, value: r.invite.url, 'aria-label': 'Invite link', style: 'width:100%' });
+        inviteBox.replaceChildren(h('div', { class: 'panel', role: 'status', style: 'display:grid;gap:8px;margin-top:10px' },
+          h('strong', {}, `Send this link to ${who}`),
+          field_,
+          h('div', { class: 'row-actions' },
+            h('button', { class: 'btn btn-primary', onclick: async () => { try { await navigator.clipboard.writeText(r.invite.url); toast('Link copied.'); } catch { field_.select(); toast('Select the link and copy it.'); } } }, 'Copy link'),
+            h('button', { class: 'btn btn-quiet', onclick: renderShell }, 'Done')),
+          h('small', { class: 'muted' }, `It works once and runs out in ${r.invite.expiresInDays} days. ${who} chooses their own password.`)));
+      }) }, 'Make invite link'),
+      inviteBox,
+      pending.length ? h('div', { style: 'margin-top:14px' }, h('h3', { style: 'margin:0 0 6px' }, 'Waiting to join'),
+        h('ul', { class: 'list' }, pending.map((p) => h('li', {}, h('span', {}, `${p.name} · ${ROLE[p.role]} · ${p.email}`),
+          h('button', { class: 'btn btn-quiet', onclick: run(async () => { await api(`/adult/team-invites/${p.id}`, { method: 'DELETE' }); renderShell(); }) }, 'Cancel invite'))))) : null) : null,
 
     h('h2', {}, 'My password'),
     h('div', { class: 'panel grid2' }, field('Current password', cur), field('New password', nxt),
