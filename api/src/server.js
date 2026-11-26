@@ -325,7 +325,9 @@ adult.get('/caseload', wrap(async (req, res) => {
     if (shared) {
       const p = await one(`select max(started_at) as last, count(*) filter (where started_at > now() - interval '7 days')::int as week from practice_sessions where learner_id=$1 and not preview`, [l.id]);
       const a = await one('select a.title, a.mode from learners l left join activities a on a.id=l.current_activity_id where l.id=$1', [l.id]);
-      Object.assign(row, { last_practice: p?.last || null, practices_7d: p?.week || 0, current: a?.title ? { title: a.title, mode: a.mode } : null });
+      // Think answers the judge marked as possibly unsafe in the last 14 days: so a person looks at them first.
+      const u = await one("select count(*)::int n, max(created_at) as last from practice_records where learner_id=$1 and review_note like '%may not be safe%' and created_at > now() - interval '14 days'", [l.id]);
+      Object.assign(row, { unsafe_14d: u?.n || 0, last_unsafe: u?.last || null, last_practice: p?.last || null, practices_7d: p?.week || 0, current: a?.title ? { title: a.title, mode: a.mode } : null });
     }
     out.push(row);
   }
