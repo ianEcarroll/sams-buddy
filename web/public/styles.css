@@ -66,6 +66,14 @@ button { cursor: pointer; }
 .hello-sub { margin: 4px 0 0; color: var(--ink-soft); }
 .start { width: 100%; border: 0; border-radius: var(--radius-lg); background: var(--talk); color: var(--talk-ink); padding: 26px 24px; text-align: left; display: grid; gap: 4px; box-shadow: 0 6px 0 color-mix(in srgb, var(--talk) 60%, #000); }
 .start:active { transform: translateY(3px); box-shadow: 0 3px 0 color-mix(in srgb, var(--talk) 60%, #000); }
+/* No activity chosen by the team: the button looks switched off, so it is clear it will not respond. */
+.start:disabled { background: var(--line); color: var(--ink-soft); box-shadow: none; cursor: default; }
+.start:disabled:active { transform: none; box-shadow: none; }
+.start:disabled span { opacity: 1; }
+/* Think: the situation stays in view while Sam answers. */
+.scenario { background: var(--surface); border: 2px solid var(--line); border-left-width: 8px; border-radius: 16px; padding: 12px 16px; }
+.scenario small { display: block; color: var(--ink-soft); font-weight: 700; font-size: .85rem; margin-bottom: 2px; }
+.scenario p { margin: 0; font-size: 1.2rem; line-height: 1.4; }
 .start strong { font-size: 1.75rem; }
 .start span { opacity: .92; }
 .cards { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
@@ -530,7 +538,10 @@ details.layer > summary small, details.fine-tune > summary small { font-weight: 
 .adult .plan-save { display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-top: 24px; padding: 16px; border-radius: 12px 12px 0 0; }
 @media (max-width: 850px) {
   .team-workspace { grid-template-columns: minmax(0, 1fr); gap: 20px; }
-  .team-workspace > .tabs { position: static; flex-direction: row; flex-wrap: wrap; }
+  /* One scrolling row, not three wrapped rows that push the page content down. */
+  .team-workspace > .tabs { position: static; flex-direction: row; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+  .team-workspace > .tabs::-webkit-scrollbar { display: none; }
+  .team-workspace > .tabs button { flex: 0 0 auto; white-space: nowrap; }
   .adult .mod-grid { grid-template-columns: minmax(0, 1fr); }
 }
 @media (max-width: 440px) { .adult .plan-save { flex-direction: column; align-items: stretch; } }
