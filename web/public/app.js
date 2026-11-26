@@ -530,6 +530,7 @@ function drawPractice() {
     bubble,
     P.speaking && (P.nowKind === 'welcome' || P.nowKind === 'intro') ? h('button', { class: 'btn btn-quiet skip-intro', onclick: skipIntro }, 'Skip') : null,
     P.thinking ? h('p', { class: 'thinking' }, 'Thinking time. Press to talk whenever you are ready.') : null,
+    P.problem ? h('div', { class: 'problem', role: 'alert' }, h('p', {}, `That did not work. ${P.problem}`), h('button', { class: 'btn', onclick: () => { P.problem = null; drawPractice(); } }, 'OK')) : null,
     cue,
     confirmBox,
     talk,
@@ -693,16 +694,22 @@ async function sendResponse({ text, form }) {
     const t = form ? await api(`/practice/${P.id}/respond`, { method: 'POST', form }) : await api(`/practice/${P.id}/respond`, { method: 'POST', body: { text } });
     P.acted = true;
     applyTurn(t);
-  } catch (e) { toast(e.message); P.talk = 'idle'; drawPractice(); }
+  } catch (e) { P.talk = 'idle'; practiceProblem(e); }
+}
+// A problem during practice stays on screen until Sam taps OK (a toast vanishes before he has read it), in calm words, with no blame.
+function practiceProblem(e) {
+  if (!P) return toast(e.message);
+  P.problem = (e && e.message) || 'Something went wrong.';
+  drawPractice();
 }
 async function sendConfirm(yes) {
-  try { applyTurn(await api(`/practice/${P.id}/confirm`, { method: 'POST', body: { yes } })); } catch (e) { toast(e.message); }
+  try { applyTurn(await api(`/practice/${P.id}/confirm`, { method: 'POST', body: { yes } })); } catch (e) { practiceProblem(e); }
 }
 // Pressing these does not count as taking part: a practice that only used them ends with a plain message, not praise.
 const SUPPORT_ONLY = ['repeat', 'hint', 'dont_understand', 'example', 'think', 'try_again', 'ready', 'listen_finish'];
 async function sendControl(action) {
   stopVoice();
-  try { const t = await api(`/practice/${P.id}/control`, { method: 'POST', body: { action } }); if (!SUPPORT_ONLY.includes(action)) P.acted = true; applyTurn(t); } catch (e) { toast(e.message); }
+  try { const t = await api(`/practice/${P.id}/control`, { method: 'POST', body: { action } }); if (!SUPPORT_ONLY.includes(action)) P.acted = true; applyTurn(t); } catch (e) { practiceProblem(e); }
 }
 // ------------------------------------------------------------ Listen Buddy on screen: shapes and boxes
 const SHAPE_COLOURS = { red: '#d63c3c', blue: '#2f6fd6', green: '#2e9d57', yellow: '#f2c230', purple: '#8a4fd0', orange: '#ee8a2a' };
@@ -747,7 +754,7 @@ function drawBoard(b, locked) {
 }
 async function sendAct(a) {
   if (!P || P.talk === 'busy') return;
-  try { const t = await api(`/practice/${P.id}/act`, { method: 'POST', body: a }); P.acted = true; applyTurn(t); } catch (e) { toast(e.message); }
+  try { const t = await api(`/practice/${P.id}/act`, { method: 'POST', body: a }); P.acted = true; applyTurn(t); } catch (e) { practiceProblem(e); }
 }
 
 // A turn that reads steps out one by one starts with none of them on screen (-1); otherwise show the whole list.
@@ -755,7 +762,7 @@ async function sendAct(a) {
 function walkStart(t) { const n = t.lines.filter((l) => l.step != null).map((l) => l.step); return n.length ? Math.min(...n) - 1 : null; }
 
 function applyTurn(t) {
-  P.turn = t; P.talk = 'idle';
+  P.turn = t; P.talk = 'idle'; P.problem = null;
   if (t.lines.length) { P.shown = []; P.nowStep = null; P.walkReveal = walkStart(t); }
   // The first spoken line renders the new turn. Do not briefly render an empty
   // caption area: that collapses the page and clamps its scroll position to zero.
@@ -856,7 +863,7 @@ async function boot() {
     if (!home.consent?.agreed_at) return renderWaitingForGrownup();
     renderHome();
     if (home.preview && previewActivity) { const id = previewActivity; previewActivity = null; startPractice(id); }
-  } catch (e) { if (token) mount(h('p', {}, e.message), h('button', { class: 'btn', onclick: boot }, 'Try again')); }
+  } catch (e) { if (token) mount(h('h1', { class: 'hello' }, 'Foxy cannot start just now'), h('p', {}, e.message), h('p', { class: 'muted' }, 'Nothing is wrong with you or your iPad. Check the internet, then try again.'), h('button', { class: 'btn btn-primary', onclick: boot }, 'Try again')); }
 }
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' }).catch(() => {});
 // An installed iPad app is never reloaded by itself: pick up new versions when it comes back to the front.
