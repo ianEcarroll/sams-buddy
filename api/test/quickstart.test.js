@@ -45,7 +45,7 @@ test('Talk: the topic picture is not shown with the question invitation', async 
 
 test('Think: cues link to what Sam said and to the situation', async () => {
   const { respond } = await import('../src/coach/engine.js');
-  const think = { id: 'z', title: 'Gym', mode: 'think', plan_goal: 'other', content: { items: [{ title: 'Gym', scenario: "You arrive at the gym for your session, but your trainer isn't there.", question: 'What would you do?', problem: 'the trainer is not there', good_actions: ['go to reception'] }] } };
+  const think = { id: 'z', title: 'Gym', mode: 'think', plan_goal: 'other', content: { items: [{ title: 'Gym', scenario: "You arrive at the gym for your session, but your trainer isn't there.", question: 'What would you do?', problem: 'the trainer is not there', good_actions: ['go to reception'], reason_example: 'staff can find my trainer' }] } };
   const { state } = createSession({ activity: think, settings: {}, learnerName: 'Sam' });
   const act = async () => ({ met: { action: 'Go to the reception' }, help: null, unsafe: false, relevant: true });
   const t1 = await respond(state, { text: 'Go to the reception' }, { judge: act });

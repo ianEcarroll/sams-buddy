@@ -1312,14 +1312,14 @@ function itemEditor(mode, it, i, urls, remove, ctx, addTopic) {
   if (mode === 'think') {
     main = [
       h('div', { class: 'grid2' }, field('Short title', txt(it, 'title'), 'For the team, e.g. "Trainer not at the gym"'), field('Picture (optional)', imagePicker(it, 'image_id', urls, false))),
-      field('The situation Foxy describes', bind(it, 'scenario', h('textarea', { rows: 2 })), `e.g. "You arrive at the gym, but your trainer isn’t there." Use places and activities from ${name}’s life.`),
-      field('What is unexpected or wrong', txt(it, 'problem'), 'e.g. "the trainer is not there"'),
+      field('The situation Foxy describes', bind(it, 'scenario', h('textarea', { rows: 2 })), `Describe what ${name} sees, without saying what is wrong, so ${name} has to notice it. e.g. "You arrive at the gym for your 4 o’clock session. You wait by the door, where your trainer usually meets you. It is now ten past four." Use places and activities from ${name}’s life.`),
+      field('What is unexpected or wrong', txt(it, 'problem'), `For the team. ${name} never sees this: Foxy uses it to check ${name} noticed. e.g. "the trainer is not there"`),
       field('Good, safe responses, one per line', multi(it, 'good_actions', 4), 'Foxy accepts these and anything with the same meaning. Asking a trusted adult always counts. The first one is used for the model cue.'),
     ];
     extra = [
       h('div', { class: 'grid2' },
-        field('Example reason (for the model cue)', txt(it, 'reason_example'), 'e.g. "the staff can find my trainer"'),
-        field('Example plan B (for the model cue)', txt(it, 'backup_example'), 'e.g. "call my dad"')),
+        field('Example reason (optional)', txt(it, 'reason_example'), 'Foxy asks "why?" once, only if this is filled in. Leave blank to skip it. e.g. "the staff can find my trainer"'),
+        field('Example plan B (optional)', txt(it, 'backup_example'), 'Foxy asks "what if that does not work?" once, only if this is filled in. Leave blank to skip it. e.g. "call my dad"')),
       field('Not safe, one per line', multi(it, 'unsafe', 2), 'Ideas Foxy should not accept, e.g. "leave on my own". They are flagged for the team in Review practice.'),
       field("Foxy's question", txt(it, 'question'), 'Leave blank for "What would you do?"'), simple(),
     ];
