@@ -372,6 +372,9 @@ details > summary { cursor: pointer; font-weight: 700; padding: 6px 0; }
 .mod-empty { margin: 4px 0; }
 .mod-add { margin-top: auto; padding-top: 6px; }
 .mod-add .btn { border-color: color-mix(in srgb, var(--mod) 45%, var(--line)); color: var(--mod); }
+#preview-bar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 50; display: flex; gap: 12px; align-items: center; justify-content: space-between;
+  padding: 10px 16px; background: #fff3c4; color: #4a3b00; border-top: 2px solid #e0b400; font-size: 0.95rem; }
+body:has(#preview-bar) { padding-bottom: 64px; }
 .start-tag { margin-left: 6px; background: var(--met-soft, var(--sky-soft)); color: var(--met, var(--ink)); font-weight: 600; }
 .edit-head { margin: 22px 0 4px; }
 

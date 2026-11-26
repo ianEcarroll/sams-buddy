@@ -289,9 +289,9 @@ adult.get('/caseload', wrap(async (req, res) => {
   for (const l of ids) {
     const c = await one('select agreed_at, can_view from consent where learner_id=$1', [l.id]);
     const shared = !!(c?.agreed_at && c.can_view?.[req.adult.role]);
-    const row = { id: l.id, name: l.name, home: l.home, shared, devices: (await one('select count(*)::int n from devices where learner_id=$1 and revoked_at is null', [l.id])).n };
+    const row = { id: l.id, name: l.name, home: l.home, shared, devices: (await one('select count(*)::int n from devices where learner_id=$1 and revoked_at is null and not preview', [l.id])).n };
     if (shared) {
-      const p = await one(`select max(started_at) as last, count(*) filter (where started_at > now() - interval '7 days')::int as week from practice_sessions where learner_id=$1`, [l.id]);
+      const p = await one(`select max(started_at) as last, count(*) filter (where started_at > now() - interval '7 days')::int as week from practice_sessions where learner_id=$1 and not preview`, [l.id]);
       const a = await one('select a.title, a.mode from learners l left join activities a on a.id=l.current_activity_id where l.id=$1', [l.id]);
       Object.assign(row, { last_practice: p?.last || null, practices_7d: p?.week || 0, current: a?.title ? { title: a.title, mode: a.mode } : null });
     }
@@ -343,12 +343,12 @@ adult.get('/admin/families', requirePlatformAdmin, wrap(async (req, res) => {
   const rows = await many(`select l.id, l.name, l.birth_year, l.created_at, l.disabled_at,
       (select json_build_object('name', a.name, 'email', a.email) from adults a where a.learner_id=l.id and a.is_owner limit 1) as owner,
       (select count(*)::int from adults a where a.learner_id=l.id) as team,
-      (select count(*)::int from devices d where d.learner_id=l.id and d.revoked_at is null) as devices,
-      (select count(*)::int from practice_sessions s where s.learner_id=l.id and s.started_at > now() - interval '7 days') as sessions_7d,
-      (select count(*)::int from practice_sessions s where s.learner_id=l.id and s.started_at > now() - interval '30 days') as sessions_30d,
-      (select max(started_at) from practice_sessions s where s.learner_id=l.id) as last_practice_at,
-      (select coalesce(sum(length(e.text)),0)::int from practice_events e join practice_sessions s on s.id=e.session_id where s.learner_id=l.id and e.who='buddy' and e.created_at > now() - interval '30 days') as buddy_chars_30d,
-      (select count(*)::int from practice_events e join practice_sessions s on s.id=e.session_id where s.learner_id=l.id and e.who='sam' and e.kind='response' and e.created_at > now() - interval '30 days') as responses_30d
+      (select count(*)::int from devices d where d.learner_id=l.id and d.revoked_at is null and not d.preview) as devices,
+      (select count(*)::int from practice_sessions s where s.learner_id=l.id and not s.preview and s.started_at > now() - interval '7 days') as sessions_7d,
+      (select count(*)::int from practice_sessions s where s.learner_id=l.id and not s.preview and s.started_at > now() - interval '30 days') as sessions_30d,
+      (select max(started_at) from practice_sessions s where s.learner_id=l.id and not s.preview) as last_practice_at,
+      (select coalesce(sum(length(e.text)),0)::int from practice_events e join practice_sessions s on s.id=e.session_id where s.learner_id=l.id and not s.preview and e.who='buddy' and e.created_at > now() - interval '30 days') as buddy_chars_30d,
+      (select count(*)::int from practice_events e join practice_sessions s on s.id=e.session_id where s.learner_id=l.id and not s.preview and e.who='sam' and e.kind='response' and e.created_at > now() - interval '30 days') as responses_30d
     from learners l order by l.created_at`);
   const rates = ratesFor({ ttsModel: ttsModel(), judgeModel: modelsFromEnv().main });
   res.json(rows.map((r) => ({ ...r, est_cost_30d: estimateCost({ buddyChars: r.buddy_chars_30d, responses: r.responses_30d }, rates) })));
@@ -406,7 +406,13 @@ adult.post('/class-code', wrap(async (req, res) => {
   res.json({ code, expiresInMinutes: CLASS_CODE_MINUTES });
 }));
 adult.get('/devices', wrap(async (req, res) => {
-  res.json(await many('select id, label, created_at, last_seen_at from devices where learner_id=$1 and revoked_at is null order by created_at', [req.learnerId]));
+  res.json(await many('select id, label, created_at, last_seen_at from devices where learner_id=$1 and revoked_at is null and not preview order by created_at', [req.learnerId]));
+}));
+// "Try as Sam": a one-day device that runs any activity exactly as Sam sees it and saves nothing.
+adult.post('/preview', wrap(async (req, res) => {
+  await q("delete from devices where preview and created_at < now() - interval '2 days'");
+  const d = await one("insert into devices(learner_id, label, preview) values ($1,'Preview',true) returning id", [req.learnerId]);
+  res.json({ token: sign({ kind: 'device', sub: d.id }) });
 }));
 adult.delete('/devices/:id', wrap(async (req, res) => {
   await q('update devices set revoked_at=now() where id=$1 and learner_id=$2', [req.params.id, req.learnerId]);
@@ -459,7 +465,7 @@ adult.get('/activities', wrap(async (req, res) => {
   await ensureStarters(req.learnerId);
   // last_practised_at: when the learner last started this activity, for "Recently used" in each module.
   const rows = await many(`select a.id, a.mode, a.title, a.goal, a.plan_goal, a.status, a.content, a.updated_at,
-      (select max(s.started_at) from practice_sessions s where s.activity_id = a.id) as last_practised_at
+      (select max(s.started_at) from practice_sessions s where s.activity_id = a.id and not s.preview) as last_practised_at
     from activities a where a.learner_id=$1 and a.status<>'archived' order by a.mode, a.updated_at desc`, [req.learnerId]);
   for (const r of rows) {
     const ids = (r.content.items || []).flatMap(imageIdsOf);
@@ -902,11 +908,13 @@ device.get('/home', wrap(async (req, res) => {
     current_activity_id: acts.some((a) => a.id === l.current_activity_id) ? l.current_activity_id : null,
     modes: s.enabled_modes,
     activities: acts,
-    consent,
+    consent: req.device.preview ? { agreed_at: new Date().toISOString(), can_view: [], save_audio: false } : consent,
+    preview: !!req.device.preview,
     voice: voiceEnabled(),
   });
 }));
 device.put('/settings', wrap(async (req, res) => {
+  if (req.device.preview) return res.json({ ok: true }); // a preview never changes Sam's settings
   const clean = {};
   if (typeof req.body?.captions === 'boolean') clean.captions = req.body.captions;
   if (req.body?.speech_speed) clean.speech_speed = Math.min(1.2, Math.max(0.7, Number(req.body.speech_speed)));
@@ -957,6 +965,11 @@ function lastUi(state) {
 
 async function saveRecords(sid, learnerId, state, reason) {
   const { records } = finish(state, reason);
+  const preview = (await one('select preview from practice_sessions where id=$1', [sid]))?.preview;
+  if (preview) {
+    await q('update practice_sessions set state=$1, ended_at=now(), ended_reason=$2 where id=$3', [state, reason, sid]);
+    return records;
+  }
   await q('delete from practice_records where session_id=$1', [sid]);
   for (const r of records) {
     await q(`insert into practice_records(learner_id, session_id, activity_id, activity_title, mode, item_label, goal, sam_response, independent, support_provided, after_support, help_requests, review_note,
@@ -984,13 +997,13 @@ async function notifyPractice(learnerId, state, records, reason) {
 
 device.post('/practice/start', wrap(async (req, res) => {
   const consent = await one('select agreed_at from consent where learner_id=$1', [req.learnerId]);
-  if (!consent?.agreed_at) return res.status(403).json({ error: 'Choose your privacy settings first.' });
+  if (!req.device.preview && !consent?.agreed_at) return res.status(403).json({ error: 'Choose your privacy settings first.' });
   const l = await one('select name, birth_year, settings, current_activity_id from learners where id=$1', [req.learnerId]);
   const id = req.body?.activityId || l.current_activity_id;
-  const act = id && await one("select id, mode, title, goal, plan_goal, content from activities where id=$1 and learner_id=$2 and status='active'", [id, req.learnerId]);
+  const act = id && await one(`select id, mode, title, goal, plan_goal, content from activities where id=$1 and learner_id=$2 and (status='active' or $3)`, [id, req.learnerId, !!req.device.preview]);
   if (!act) return res.status(404).json({ error: 'Your team has not chosen a practice yet.' });
   const { state, turn } = createSession({ activity: act, settings: settingsOf(l), learnerName: l.name, learnerAge: ageFrom(l.birth_year), learnerInterests: settingsOf(l).interests });
-  const s = await one('insert into practice_sessions(learner_id, activity_id, activity_snapshot, state) values ($1,$2,$3,$4) returning id', [req.learnerId, act.id, act, state]);
+  const s = await one('insert into practice_sessions(learner_id, activity_id, activity_snapshot, state, preview) values ($1,$2,$3,$4,$5) returning id', [req.learnerId, act.id, act, state, !!req.device.preview]);
   res.json({ title: act.title, mode: act.mode, ...(await deliver(s.id, state, turn)) });
 }));
 
@@ -1073,6 +1086,7 @@ device.get('/push', wrap(async (req, res) => {
   res.json({ configured: pushEnabled(), publicKey: pushPublicKey(), subscribed: n.n > 0, reminder_time: settingsOf(l).reminder_time });
 }));
 device.post('/push', wrap(async (req, res) => {
+  if (req.device.preview) return res.status(400).json({ error: 'Reminders are not set up in preview.' });
   const sub = req.body?.subscription;
   if (!pushEnabled()) return res.status(503).json({ error: 'Reminders are not set up yet.' });
   if (!sub?.endpoint || !sub?.keys?.p256dh || !sub?.keys?.auth || !/^https:\/\//.test(sub.endpoint)) return res.status(400).json({ error: 'That reminder subscription is not valid.' });
@@ -1113,7 +1127,7 @@ export async function sendDueReminders(now = new Date()) {
   if (!pushEnabled()) return 0;
   let sent = 0;
   const learners = await many(`select l.id, l.name, l.settings, l.last_reminder_on::text as last_reminder_on,
-      (select max(started_at) from practice_sessions s where s.learner_id=l.id) as last_practice_at
+      (select max(started_at) from practice_sessions s where s.learner_id=l.id and not s.preview) as last_practice_at
     from learners l where l.disabled_at is null and coalesce(l.settings->>'reminder_time','') <> ''
       and exists (select 1 from push_subscriptions p where p.learner_id=l.id)`);
   for (const l of learners) {

@@ -3,7 +3,15 @@ import { watchForUpdates } from '/autoupdate.js';
 const $app = document.getElementById('app');
 const $voice = document.getElementById('voice');
 const TOKEN_KEY = 'buddy.device';
-let token = localStorage.getItem(TOKEN_KEY);
+// "Try as Sam": a grown-up opens the app from the team area with a throwaway preview token.
+// It lives in this tab only (sessionStorage), never replaces a real connection, and nothing it does is saved.
+const PREVIEW_KEY = 'buddy.preview';
+const hashParams = new URLSearchParams(location.hash.slice(1));
+let previewToken = hashParams.get('preview');
+let previewActivity = hashParams.get('activity');
+if (previewToken) { try { sessionStorage.setItem(PREVIEW_KEY, previewToken); } catch { /* stays in memory */ } history.replaceState(null, '', location.pathname); }
+else { try { previewToken = sessionStorage.getItem(PREVIEW_KEY); } catch { /* none */ } }
+let token = previewToken || localStorage.getItem(TOKEN_KEY);
 let home = null;
 
 // ------------------------------------------------------------ helpers
@@ -104,7 +112,11 @@ async function api(path, { method = 'GET', body, form, timeout = 60000 } = {}) {
     throw new Error(e.name === 'AbortError' ? 'That took too long. Please try again.' : 'No connection. Check the internet and try again.');
   } finally { clearTimeout(timer); }
   const data = res.headers.get('content-type')?.includes('json') ? await res.json() : null;
-  if (res.status === 401) { localStorage.removeItem(TOKEN_KEY); token = null; renderPair(data?.error); throw new Error(data?.error); }
+  if (res.status === 401) {
+    if (previewToken) { try { sessionStorage.removeItem(PREVIEW_KEY); } catch { /* ok */ } previewToken = null; token = localStorage.getItem(TOKEN_KEY); }
+    else { localStorage.removeItem(TOKEN_KEY); token = null; }
+    renderPair(data?.error); throw new Error(data?.error);
+  }
   if (!res.ok) throw new Error(data?.error || 'Something went wrong. Try again.');
   return data;
 }
@@ -834,8 +846,10 @@ async function boot() {
   if (!token) return renderPair();
   try {
     home = await api('/home');
+    previewBar(!!home.preview);
     if (!home.consent?.agreed_at) return renderConsent();
     renderHome();
+    if (home.preview && previewActivity) { const id = previewActivity; previewActivity = null; startPractice(id); }
   } catch (e) { if (token) mount(h('p', {}, e.message), h('button', { class: 'btn', onclick: boot }, 'Try again')); }
 }
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' }).catch(() => {});
@@ -852,6 +866,13 @@ function hideLaunch() {
   try { v?.pause(); } catch { /* nothing to stop */ }
   setTimeout(() => launch.remove(), matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 400);
 }
+function previewBar(on) {
+  document.getElementById('preview-bar')?.remove();
+  if (!on) return;
+  document.body.append(h('div', { id: 'preview-bar', role: 'status' },
+    h('span', {}, 'Preview: this is what Sam sees. Nothing you do here is saved.'),
+    h('button', { class: 'btn btn-quiet', onclick: () => { try { sessionStorage.removeItem(PREVIEW_KEY); } catch { /* ok */ } window.close(); location.href = '/adult/'; } }, 'Close preview')));
+}
 // The welcome film plays on the first open of each day (not every open). "Watch Foxy's welcome" in settings plays it on demand.
 const WELCOME_DAY_KEY = 'talvo.welcomeDay';
 const WELCOME_FORCE_KEY = 'talvo.welcomeNow';
@@ -862,6 +883,7 @@ function welcomeDue() {
   } catch { return true; }
 }
 async function showWelcomeVideo() {
+  if (previewToken) return hideLaunch();
   const v = document.getElementById('launch-video');
   const skip = document.getElementById('launch-skip');
   const sound = document.getElementById('launch-sound');
