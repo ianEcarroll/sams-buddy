@@ -438,7 +438,7 @@ async function renderHome(root) {
   const steps = [
     devices ? { done: devices.length > 0, text: `Connect ${name}’s iPad`, action: ['Show me how', go('team')] } : null,
     settings ? { done: !!settings.current_activity_id, text: 'Choose what Start My Practice opens', action: ['Choose', () => { pick.scrollIntoView({ block: 'center' }); pick.focus(); }] } : null,
-    { done: !!me.consent?.agreed_at, text: `${name} makes their privacy choices`, note: `${name} is asked the first time they open TALVO.` },
+    { done: !!me.consent?.agreed_at, text: `${name} makes their privacy choices`, action: ['Choose', go('team')] },
     members && owner ? { done: members.length > 1, text: 'Add your speech therapist or teacher', action: ['Add', go('team')] } : null,
   ].filter(Boolean);
   const left = steps.filter((x) => !x.done).length;
@@ -2026,6 +2026,19 @@ function deviceList(devices) {
   return h('div', {}, recent.length ? h('ul', { class: 'list' }, recent.map(row)) : h('p', { class: 'muted' }, 'No device has been used in the last 30 days.'),
     old.length ? h('details', { class: 'codes-key' }, h('summary', {}, `Older devices (${old.length})`), h('ul', { class: 'list' }, old.map(row))) : null);
 }
+// The main grown-up confirms who may read practice records and whether voice recordings are kept. Sam can still change it later.
+function privacyForm(c) {
+  const boxes = Object.entries(ROLE).map(([k, l]) => h('label', { class: 'switch' }, h('input', { type: 'checkbox', name: k, checked: c?.agreed_at ? !!c.can_view?.[k] : true }), `${l} can read practice records`));
+  const audio = h('label', { class: 'switch' }, h('input', { type: 'checkbox', name: 'save_audio', checked: !!c?.save_audio }), `Keep recordings of ${me.learner.name}’s voice`);
+  return h('div', { style: 'display:grid;gap:8px;margin-top:12px' },
+    h('h3', { style: 'margin:0' }, c?.agreed_at ? 'Change privacy choices' : 'Confirm privacy choices'),
+    ...boxes, audio,
+    h('button', { class: 'btn btn-primary', onclick: run(async () => {
+      const can_view = Object.fromEntries(boxes.map((b) => { const i = b.querySelector('input'); return [i.name, i.checked]; }));
+      await api('/adult/consent', { method: 'PUT', body: { can_view, save_audio: audio.querySelector('input').checked } });
+      me = await api('/adult/me'); toast('Privacy choices saved.'); renderShell();
+    }) }, 'Save privacy choices'));
+}
 async function renderTeam(root) {
   const [team, devices] = await Promise.all([api('/adult/team'), api('/adult/devices')]);
   const c = me.consent;
@@ -2043,7 +2056,8 @@ async function renderTeam(root) {
         h('p', { style: 'margin-top:0' }, me.consent?.set_by_school ? `Practice results are shared with the support team, set up by the school or therapist when ${me.learner.name} was added. ${me.learner.name} can change this in My settings on their iPad or phone.` : `${me.learner.name} chose who can see their practice records. Only they can change this, in My settings on their iPad or phone.`),
         h('ul', {}, Object.entries(ROLE).map(([k, l]) => h('li', {}, `${l}: ${c.can_view?.[k] ? 'can see records' : 'cannot see records'}`))),
         h('p', {}, `Voice recordings: ${c.save_audio ? 'saved' : 'not saved'}.`))
-        : h('p', { style: 'margin:0' }, `${me.learner.name} has not made their privacy choices yet. They will be asked the first time they open the app.`)),
+        : h('p', { style: 'margin:0' }, `${me.learner.name} cannot start practising until privacy is confirmed. ${owner ? 'Choose below.' : 'Ask the main account holder to confirm it.'}`),
+      owner ? privacyForm(c) : null),
 
     h('h2', {}, `${me.learner.name}'s iPad and test devices`),
     h('div', { class: 'panel' },

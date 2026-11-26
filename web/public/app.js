@@ -199,17 +199,13 @@ function privacyControls(consent) {
   return { nodes: [h('fieldset', { style: 'border:0;padding:0;margin:0;display:grid;gap:4px' }, h('legend', { style: 'font-weight:700;margin-bottom:6px' }, 'Who can see my practice notes?'), ...boxes), audio], read };
 }
 
-function renderConsent() {
-  const pc = privacyControls(home.consent);
+// A grown-up agrees to the privacy settings in the team area before Sam's first practice; Sam is never asked to.
+function renderWaitingForGrownup() {
   mount(
     h('h1', { class: 'hello' }, `Hi ${home.name}`),
     h('p', {}, 'Foxy helps you practise what your speech therapist and teachers are working on with you.'),
-    h('p', {}, 'After each practice, Foxy saves a short note: what you said, and when Foxy gave a hint. It is not a test and there are no scores.'),
-    h('p', {}, 'You choose who can read your notes. You can change this any time in My settings.'),
-    ...pc.nodes,
-    h('button', { class: 'btn btn-primary', onclick: async () => {
-      try { await api('/consent', { method: 'PUT', body: pc.read() }); boot(); } catch (e) { toast(e.message); }
-    } }, 'Save my choices'),
+    h('p', {}, 'A grown-up needs to finish setting up first. Please ask them, then tap the button.'),
+    h('button', { class: 'btn btn-primary', onclick: boot }, 'I am ready'),
   );
 }
 
@@ -410,10 +406,15 @@ function closeMic() { if (micStream) { micStream.getTracks().forEach((t) => t.st
 const canRecord = () => home.voice && !!navigator.mediaDevices?.getUserMedia && !!window.MediaRecorder;
 const captionsOn = () => home.settings.captions || !home.voice;
 
+const INTRO_DAY_KEY = 'talvo.introDay';
 async function startPractice(activityId) {
   unlockAudio();
   try {
-    const t = await api('/practice/start', { method: 'POST', body: { activityId } });
+    // After the first practice of the day Foxy skips the greeting and explanations and goes straight to the task.
+    const today = new Date().toLocaleDateString('en-CA');
+    let quick = false;
+    if (!previewToken) { try { quick = localStorage.getItem(INTRO_DAY_KEY) === today; localStorage.setItem(INTRO_DAY_KEY, today); } catch { /* storage unavailable: full intro */ } }
+    const t = await api('/practice/start', { method: 'POST', body: { activityId, quick } });
     // walkReveal must be set before the first draw, or step 1 and its picture show during the introduction.
     P = { id: t.sessionId, title: t.title, mode: t.mode, turn: t, shown: [], talk: 'idle', speaking: false, thinking: false, help: false, walkReveal: walkStart(t) };
     drawPractice();
@@ -527,6 +528,7 @@ function drawPractice() {
     board,
     scenarioCard,
     bubble,
+    P.speaking && (P.nowKind === 'welcome' || P.nowKind === 'intro') ? h('button', { class: 'btn btn-quiet skip-intro', onclick: skipIntro }, 'Skip') : null,
     P.thinking ? h('p', { class: 'thinking' }, 'Thinking time. Press to talk whenever you are ready.') : null,
     cue,
     confirmBox,
@@ -581,13 +583,15 @@ function helpSheet() {
 const STEPS_GAP_MS = 2000;
 async function playLines(lines) {
   const gen = ++playGen;
-  const done = () => { if (gen === playGen && P) { P.speaking = false; P.nowStep = null; P.walkReveal = null; drawPractice(); } };
+  if (P) P.skipIntro = false;
+  const done = () => { if (gen === playGen && P) { P.speaking = false; P.nowKind = null; P.nowStep = null; P.walkReveal = null; drawPractice(); } };
   for (const l of lines) {
     await holdWhilePaused(gen); // paused: hold Foxy's next words until the learner is ready
     if (gen !== playGen) return;
     // Think: remember the situation until the next one starts (a lead-in such as "On to the next situation." clears it).
     if (P.mode === 'think') { if (l.kind === 'instruction') P.scenario = l.text; else if (l.kind === 'intro') P.scenario = null; }
-    P.shown.push(l); P.thinking = false; P.speaking = true;
+    if (P.skipIntro && (l.kind === 'welcome' || l.kind === 'intro')) continue; // Sam tapped Skip: drop the rest of the introduction
+    P.shown.push(l); P.thinking = false; P.speaking = true; P.nowKind = l.kind;
     if (l.step != null) { P.nowStep = l.step; P.walkReveal = l.step; } else if (P.walkReveal != null && P.walkReveal >= 0) P.nowStep = null;
     drawPractice();
     if (l.audio) {
@@ -644,8 +648,10 @@ async function holdWhilePaused(gen) {
   while (P && P.paused && gen === playGen) await new Promise((r) => setTimeout(r, 200));
 }
 function wait(ms, gen) {
-  return new Promise((res) => { const t = setInterval(() => { if (gen !== playGen) { clearInterval(t); res(); } }, 100); setTimeout(() => { clearInterval(t); res(); }, ms); });
+  return new Promise((res) => { const t = setInterval(() => { if (gen !== playGen || P?.skipIntro) { clearInterval(t); res(); } }, 100); setTimeout(() => { clearInterval(t); res(); }, ms); });
 }
+// Sam is ready: stop Foxy's introduction and go on to the question.
+function skipIntro() { if (!P) return; P.skipIntro = true; $voice.pause(); drawPractice(); }
 function stopVoice() { playGen++; $voice.pause(); if (P) { P.thinking = false; P.speaking = false; } }
 
 async function onTalk() {
@@ -847,7 +853,7 @@ async function boot() {
   try {
     home = await api('/home');
     previewBar(!!home.preview);
-    if (!home.consent?.agreed_at) return renderConsent();
+    if (!home.consent?.agreed_at) return renderWaitingForGrownup();
     renderHome();
     if (home.preview && previewActivity) { const id = previewActivity; previewActivity = null; startPractice(id); }
   } catch (e) { if (token) mount(h('p', {}, e.message), h('button', { class: 'btn', onclick: boot }, 'Try again')); }
