@@ -270,8 +270,8 @@ const think = {
   prompt: (item) => item.question || 'What would you do?',
   simplePrompt: (item) => item.simple_prompt || 'Something is not how you expected. What could you do?',
   defaultCues: {
-    problem: ['Stop and think. Is this what you expected?', 'What is different from what you expected?', 'The problem is ___.', 'The problem is {problem}.'],
-    action: ['STOP. THINK. Is this expected? If unsure, ASK.', 'What could you do, or who could you ask?', 'I would ___.', 'I would {action}.'],
+    problem: ['Stop and think. Is everything here the way you expected?', 'What is different from what you expected?', 'The problem is ___.', 'The problem is {problem}.'],
+    action: ['STOP. THINK. Is something unexpected? If you are unsure, ASK.', 'What could you do, or who could you ask?', 'I would ___.', 'I would {action}.'],
     reason: ['Why do you think that would be a good idea?', 'How would that help you?', 'That would help because ___.', 'That would help because {reason}.'],
     backup: ["What could you do if that doesn't work?", 'If that does not work, who else could you ask?', "If that doesn't work, I would ___.", "If that doesn't work, I would {backup}."],
   },

@@ -42,3 +42,22 @@ test('Talk: the topic picture is not shown with the question invitation', async 
   assert.ok(t.turn.lines.some((l) => l.kind === 'cue' || l.kind === 'model'), 'the question invitation is given');
   assert.ok(!JSON.stringify(t.turn).includes('pumpkin'), 'no unrelated picture');
 });
+
+test('Think: cues link to what Sam said and to the situation', async () => {
+  const { respond } = await import('../src/coach/engine.js');
+  const think = { id: 'z', title: 'Gym', mode: 'think', plan_goal: 'other', content: { items: [{ title: 'Gym', scenario: "You arrive at the gym for your session, but your trainer isn't there.", question: 'What would you do?', problem: 'the trainer is not there', good_actions: ['go to reception'] }] } };
+  const { state } = createSession({ activity: think, settings: {}, learnerName: 'Sam' });
+  const act = async () => ({ met: { action: 'Go to the reception' }, help: null, unsafe: false, relevant: true });
+  const t1 = await respond(state, { text: 'Go to the reception' }, { judge: act });
+  const said1 = t1.turn.lines.map((l) => l.text).join(' | ');
+  assert.ok(!/Is this what you expected/.test(said1), said1);
+  assert.ok(/Now let's look at the situation/.test(said1) && /Is everything here the way you expected/.test(said1), said1);
+  const none = async () => ({ met: {}, help: 'dont_understand', unsafe: false, relevant: false });
+  const t2 = await respond(state, { text: "I don't know what you mean" }, { judge: none });
+  const said2 = t2.turn.lines.map((l) => l.text).join(' | ');
+  assert.ok(/trainer isn't there/.test(said2) && !/What could you do\?/.test(said2), said2);
+  const prob = async () => ({ met: { problem: 'The coach is not there' }, help: null, unsafe: false, relevant: true });
+  const t3 = await respond(state, { text: 'The coach is not there' }, { judge: prob });
+  const said3 = t3.turn.lines.map((l) => l.text).join(' | ');
+  assert.ok(/You said: "Go to the reception"\. Why do you think that is a good idea/.test(said3), said3);
+});
