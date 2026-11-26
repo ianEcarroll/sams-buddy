@@ -404,14 +404,19 @@ adult.post('/pairing-code', wrap(async (req, res) => {
   await q("insert into pairing_codes(code_hash, learner_id, created_by, expires_at) values ($1,$2,$3, now() + interval '15 minutes')", [hmac(code), req.learnerId, req.adult.id]);
   res.json({ code, expiresInMinutes: 15 });
 }));
-// One code for the whole class. Students enter it on their iPad and tap their own name; each name can be taken once.
-const CLASS_CODE_MINUTES = 90;
-adult.post('/class-code', wrap(async (req, res) => {
-  if (!(await canAddStudents(req.adult.id))) return res.status(403).json({ error: 'Only a therapist or school account can make a class code.' });
-  const code = Array.from(crypto.randomBytes(6), (b) => 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'[b % 31]).join('');
-  await q('delete from class_codes where adult_id=$1 and expires_at < now() - interval \'1 day\'', [req.adult.id]);
-  await q('insert into class_codes(code_hash, adult_id, expires_at) values ($1,$2, now() + make_interval(mins => $3))', [hmac(code), req.adult.id, CLASS_CODE_MINUTES]);
-  res.json({ code, expiresInMinutes: CLASS_CODE_MINUTES });
+// One personal connection code per student, for a printed sheet. Each works once, for a week, and shows only the student's own name.
+const SHEET_CODE_DAYS = 7;
+adult.post('/student-codes', wrap(async (req, res) => {
+  if (!(await canAddStudents(req.adult.id))) return res.status(403).json({ error: 'Only a therapist or school account can make a code sheet.' });
+  const students = await many(`select l.id, l.name from adult_learners al join learners l on l.id=al.learner_id
+    where al.adult_id=$1 and al.is_owner and l.disabled_at is null order by lower(l.name)`, [req.adult.id]);
+  const out = [];
+  for (const st of students) {
+    const code = Array.from(crypto.randomBytes(6), (b) => 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'[b % 31]).join('');
+    await q("insert into pairing_codes(code_hash, learner_id, created_by, expires_at) values ($1,$2,$3, now() + make_interval(days => $4))", [hmac(code), st.id, req.adult.id, SHEET_CODE_DAYS]);
+    out.push({ id: st.id, name: st.name, code });
+  }
+  res.json({ codes: out, validDays: SHEET_CODE_DAYS });
 }));
 adult.get('/devices', wrap(async (req, res) => {
   res.json(await many('select id, label, created_at, last_seen_at from devices where learner_id=$1 and revoked_at is null and not preview order by created_at', [req.learnerId]));
@@ -427,23 +432,9 @@ adult.delete('/devices/:id', wrap(async (req, res) => {
   res.json({ ok: true });
 }));
 
-// The students on a class code that have not taken their place yet.
-const classStudents = (cls) => many(`select l.id, l.name from adult_learners al join learners l on l.id=al.learner_id
-  where al.adult_id=$1 and al.is_owner and l.disabled_at is null
-    and not exists (select 1 from devices d where d.learner_id=l.id and d.class_code_id=$2 and d.revoked_at is null)
-  order by lower(l.name)`, [cls.adult_id, cls.id]);
 app.post('/api/device/pair', rateLimit(10), wrap(async (req, res) => {
   const code = String(req.body?.code || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
   const label = String(req.body?.label || 'Device').slice(0, 60);
-  const cls = await one('select id, adult_id from class_codes where code_hash=$1 and expires_at > now()', [hmac(code)]);
-  if (cls) {
-    const students = await classStudents(cls);
-    if (!req.body?.learnerId) return res.json({ class: true, students });
-    const chosen = students.find((x) => x.id === String(req.body.learnerId));
-    if (!chosen) return res.status(400).json({ error: 'That name is not available any more. Ask your teacher.' });
-    const d = await one('insert into devices(learner_id, label, class_code_id) values ($1,$2,$3) returning id', [chosen.id, label, cls.id]);
-    return res.json({ token: sign({ kind: 'device', sub: d.id }), name: chosen.name });
-  }
   const p = await one('update pairing_codes set used_at=now() where code_hash=$1 and used_at is null and expires_at > now() returning learner_id', [hmac(code)]);
   if (!p) return res.status(400).json({ error: 'That code did not work. Ask for a new one.' });
   const d = await one('insert into devices(learner_id, label) values ($1,$2) returning id', [p.learner_id, label]);
