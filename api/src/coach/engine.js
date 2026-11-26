@@ -2,7 +2,7 @@
 //   Prompt → wait → listen → recognise what Sam supplied → offer ONE relevant cue if needed → allow another attempt.
 // Pure state machine: no I/O except the injected `judge`. State is JSON so it can live in Postgres.
 
-import { RECALL_FRESH_DAYS as RECALL_DAYS } from './modes.js';
+import { RECALL_FRESH_DAYS as RECALL_DAYS, THINK_FOLLOW_UPS } from './modes.js';
 import { detectHelp } from './judge.js';
 import { FOLLOW_BOXES, followSteps, followStepText, followInstruction, tokenName, tokenImage, tokenWords, followThing } from './modes.js';
 import { MODES, LEVELS, TEAM_PHRASE, DEFAULT_CLARIFY_PHRASES, cueLadder, describe, labelFor, freshMemories, whenNoun, categoryKind, categoryWords } from './modes.js';
@@ -319,7 +319,14 @@ async function process_(state, { text, displayText, confirmed }, judge) {
   if (state.mode === 'category') dropGivenWords(item, j);
   const newly = state.mode === 'recall' || (state.mode === 'category' && categoryKind(item) === 'name') ? absorbRecall(state, j) : absorb(state, j);
   const lines = [];
-  if (allMet(state)) return { state, turn: makeTurn(state, completeItem(state, newly)) };
+  if (allMet(state)) {
+    const extra = nextOptional(state);
+    if (!extra) return { state, turn: makeTurn(state, completeItem(state, newly)) };
+    // Credit what he has done, then one optional question. Not counted as support and not cued.
+    if (newly.length) { lines.push(line(`You ${describe(state.mode, newly, item)}.`, 'feedback')); it.praised = true; }
+    lines.push(optionalQuestion(state, extra));
+    return { state, turn: makeTurn(state, lines) };
+  }
 
   if (newly.length) lines.push(line(`You ${describe(state.mode, newly, item)}.`, 'feedback'));
 
@@ -328,11 +335,9 @@ async function process_(state, { text, displayText, confirmed }, judge) {
   if (allMet(state) || it.attempts >= state.settings.max_attempts) return { state, turn: makeTurn(state, completeItem(state, newly)) };
 
   const focus = nextMissing(state);
-  // Think Buddy: "Why…?" and "What if that doesn't work?" are part of the activity, asked once as plain
-  // follow-up questions before any cue. They are not counted as support.
-  let follow = m.followUp?.(focus, it);
-  // Name Sam's own answer, so "that" is clear even if other questions came in between.
-  if (follow && state.mode === 'think' && focus === 'reason' && it.attempts > 1 && it.met.action?.evidence) follow = `You said: "${it.met.action.evidence}". Why do you think that is a good idea?`;
+  // Other modes ask a plain follow-up question first, before any cue. It is not counted as support.
+  // (Think's "why" and "plan B" are optional and asked above, once, when everything required is done.)
+  const follow = state.mode === 'think' ? null : m.followUp?.(focus, it);
   if (follow && !it.asked[focus]) {
     it.asked[focus] = true;
     it.focus = focus;
@@ -445,7 +450,29 @@ function recallCue(state, level) {
   return ev ? `You ${ev.event}. Can you tell me about it?` : "That's okay. Tell me anything else you remember.";
 }
 
-const required = (state) => state.item.elements.filter((e) => !state.item.skipped[e]);
+// Think: "why" and "plan B" are practised but optional. The plan's goal is to notice and ask (problem + action), so
+// these two are asked once, never cued, and never stop an item from counting as done.
+const OPTIONAL_ELEMENTS = { think: ['reason', 'backup'] };
+const isOptional = (state, el) => (OPTIONAL_ELEMENTS[state.mode] || []).includes(el);
+const required = (state) => state.item.elements.filter((e) => !state.item.skipped[e] && !isOptional(state, e));
+// The next optional question to ask: only when the team wrote an example for it (leave the field blank to switch it off).
+function nextOptional(state) {
+  const it = state.item;
+  const item = curItem(state);
+  return (OPTIONAL_ELEMENTS[state.mode] || []).find((el) => !it.met[el] && !it.asked[el] && String(item[`${el}_example`] || '').trim()) || null;
+}
+function optionalQuestion(state, el) {
+  const it = state.item;
+  it.asked[el] = true;
+  it.focus = el;
+  it.focusLevel = 0;
+  let text = THINK_FOLLOW_UPS[el];
+  // Name Sam's own answer so "that" is clear even if other questions came in between.
+  if (el === 'reason' && it.attempts > 1 && it.met.action?.evidence) text = `You said: "${it.met.action.evidence}". Why do you think that is a good idea?`;
+  const q = line(text, 'prompt');
+  state.lastLines = [q];
+  return q;
+}
 const allMet = (state) => required(state).every((e) => state.item.met[e]);
 const nextMissing = (state) => required(state).find((e) => !state.item.met[e]);
 function maxLevelFor(it, el) {
@@ -463,7 +490,7 @@ function fadeStart(state, el) {
 // Think: the same question as the cue ladder, but plain and tied to this situation, for "I don't understand".
 function thinkSimpler(state, item) {
   const it = state.item;
-  const el = nextMissing(state);
+  const el = nextMissing(state) || it.focus;
   const scene = String(item.scenario || '').trim();
   if (el === 'problem') return `${scene ? `${scene} ` : ''}Is something not the way you expected?`;
   if (el === 'reason' && it.met.action?.evidence) return `You said: "${it.met.action.evidence}". How would that help?`;
@@ -543,7 +570,7 @@ function handleHelp(state, kind, text, source) {
 function hintLine(state, by) {
   if (state.mode === 'steps') return stepsHelp(state, 'need_help', 'Give me a hint', by === 'sam' ? 'button' : 'spoken');
   if (state.mode === 'listen') return listenHelp(state, 'need_help', 'Give me a hint', by === 'sam' ? 'button' : 'spoken')[0];
-  const el = state.mode === 'conversation' ? convFocus(state) : (state.item.phase === 'clarify' ? 'clarify' : nextMissing(state));
+  const el = state.mode === 'conversation' ? convFocus(state) : (state.item.phase === 'clarify' ? 'clarify' : (nextMissing(state) || (state.mode === 'think' ? state.item.focus : null)));
   if (!el) return line('You have already done everything for this one.', 'feedback');
   return giveCue(state, el, by);
 }
@@ -551,7 +578,7 @@ function hintLine(state, by) {
 function exampleLine(state, by) {
   if (state.mode === 'steps') return stepsHelp(state, 'show_me', 'Show me an example', 'button');
   if (state.mode === 'listen') return listenHelp(state, 'need_help', 'Show me an example', 'button')[0];
-  const el = state.mode === 'conversation' ? convFocus(state) : (state.item.phase === 'clarify' ? 'clarify' : nextMissing(state));
+  const el = state.mode === 'conversation' ? convFocus(state) : (state.item.phase === 'clarify' ? 'clarify' : (nextMissing(state) || (state.mode === 'think' ? state.item.focus : null)));
   if (!el) return line('You have already done everything for this one.', 'feedback');
   return giveCue(state, el, by, 3);
 }
@@ -849,11 +876,15 @@ function finishListen(state, lines) {
 function completeItem(state, newly) {
   const it = state.item;
   const item = curItem(state);
-  const met = required(state).filter((e) => it.met[e]);
+  const met = it.elements.filter((e) => it.met[e] && !it.skipped[e]);
   const lines = [];
   // Brief, specific feedback about what he did. Concise + complete → move on, no extra questions.
-  const els = it.anySupport ? newly : met;
-  if (els.length) lines.push(line(`You ${describe(state.mode, els, item)}.`, 'feedback'));
+  // Think names everything he did, so a correct answer always ends with credit for it.
+  // If he was already credited when the optional question was asked, only name what is new.
+  const els = (it.anySupport && state.mode !== 'think') || it.praised ? newly : met;
+  if (it.praised && !els.length) lines.push(line('Well done.', 'feedback'));
+  else if (els.length) lines.push(line(`You ${describe(state.mode, els, item)}.`, 'feedback'));
+  else if (state.mode === 'think') lines.push(line('Thanks for having a go. When something is not how you expect, you can always stop, think, and ask a grown-up.', 'feedback'));
   else lines.push(line('Thanks for working on that one.', 'feedback'));
 
   // Fading: remember how much support each element needed.

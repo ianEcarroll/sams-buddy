@@ -259,7 +259,7 @@ const think = {
   label: 'Think',
   tagline: 'Solve the problem',
   activityName: 'Solve a Problem',
-  defaultGoal: 'Notice the problem, say a safe thing to do and why, and what to do if it does not work',
+  defaultGoal: 'Notice something is not as expected and say a safe thing to do (asking a trusted adult counts). Why, and what to do if it does not work, are practised but optional',
   movie: false,
   cueCard: () => ['Problem', 'What I’d do', 'Why', 'If not'],
   elements: () => ['problem', 'action', 'reason', 'backup'],
@@ -838,11 +838,11 @@ export const STARTER_CATEGORY = [
 // therapist and can edit, archive or add their own in Activities.
 export const STARTER_SCENARIOS = {
   title: 'Everyday surprises',
-  goal: 'Notice the problem, say a safe thing to do and why, and what to do if it does not work',
+  goal: 'Notice something is not as expected and say a safe thing to do (asking a trusted adult counts). Why, and what to do if it does not work, are practised but optional',
   items: [
     {
       title: 'Trainer not at the gym',
-      scenario: "You arrive at the gym for your session, but your trainer isn't there.",
+      scenario: "You arrive at the gym for your 4 o'clock session. You wait by the door, where your trainer usually meets you. It is now ten past four.",
       problem: 'the trainer is not there',
       good_actions: ['ask the person at the front desk', 'wait a few minutes, then ask a member of staff', 'call or message my parent', 'check whether the session time changed'],
       reason_example: 'the staff can find out where my trainer is',
@@ -851,7 +851,7 @@ export const STARTER_SCENARIOS = {
     },
     {
       title: 'Library door locked',
-      scenario: 'Your teacher says the class is going to the library. When you get there, the door is locked and nobody is there.',
+      scenario: 'Your teacher says the class is going to the library. You walk there. The door is closed, the lights are off, and it is very quiet.',
       problem: 'the library is locked and the class is not there',
       good_actions: ['go back to the classroom', 'ask a teacher', 'go to the school office and ask', 'ask a classmate where the class went'],
       reason_example: 'a teacher will know where my class is',
@@ -860,7 +860,7 @@ export const STARTER_SCENARIOS = {
     },
     {
       title: 'Wrong drink at the café',
-      scenario: 'You order a hot chocolate at a café, but they bring you an orange juice.',
+      scenario: 'You order a hot chocolate at a café. The waiter puts a glass on your table and walks away. It is orange and cold.',
       problem: 'they brought the wrong drink',
       good_actions: ['politely tell the person who served me', 'say "Excuse me, I ordered a hot chocolate"', 'ask the staff at the counter'],
       reason_example: 'they can swap it for the right drink',

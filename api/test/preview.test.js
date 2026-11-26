@@ -8,7 +8,7 @@ const texts = (p) => p.lines.map((l) => l.text);
 
 test('Think: the situation and the question, no movie phrase', () => {
   const p = previewLines({ mode: 'think', item: STARTER_SCENARIOS.items[0] });
-  assert.ok(texts(p).includes("You arrive at the gym for your session, but your trainer isn't there."));
+  assert.ok(texts(p).includes("You arrive at the gym for your 4 o'clock session. You wait by the door, where your trainer usually meets you. It is now ten past four."));
   assert.ok(!texts(p).includes('Make a movie in your mind.'));
   assert.equal(texts(p).at(-1), 'What would you do?');
   assert.ok(p.simple);
