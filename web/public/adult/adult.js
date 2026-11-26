@@ -307,7 +307,7 @@ function studentPicker() {
 }
 // Students who have shared their practice come first, the longest without practice at the top (never practised first);
 // students who have not shared go last. A student with no practice for 3 days is marked.
-const needsLook = (x) => (x.shared ? (x.last_practice ? Date.parse(x.last_practice) : 0) : Infinity);
+const needsLook = (x) => (x.shared ? (x.unsafe_14d ? -1 : x.last_practice ? Date.parse(x.last_practice) : 0) : Infinity);
 const isQuiet = (x) => x.shared && (!x.last_practice || Date.now() - Date.parse(x.last_practice) > 3 * 86400000);
 // The students this person looks after, and how practice is going for each.
 // A teacher or therapist asks for a student's practice; the student's main grown-up allows or declines it on their Home page.
@@ -360,6 +360,7 @@ async function renderCaseload(root) {
       h('small', { class: x.devices ? 'muted' : 'muted', style: x.devices ? '' : 'font-weight:700' }, x.devices ? 'iPad connected' : 'No iPad connected yet'),
       x.shared
         ? [h('span', {}, x.current ? `Practising: ${x.current.title}` : 'No activity chosen yet'),
+          x.unsafe_14d ? h('small', { class: 'unsafe-note', role: 'status' }, `Worth a look: suggested something that may not be safe (${whenUsed(x.last_unsafe)}).`) : null,
           h('small', { class: 'muted' }, x.last_practice ? `Last practice ${whenUsed(x.last_practice)} · ${x.practices_7d} in the last 7 days` : 'No practice yet')]
         : [h('span', { class: 'muted' }, `${x.name} has not shared practice with ${ROLE[me.adult.role] ? ROLE[me.adult.role].toLowerCase() + 's' : 'your role'} yet.`), askToShare(x.id, x.name, x.asked)],
       h('div', { class: 'row-actions' },
@@ -1696,8 +1697,8 @@ const review = { goal: '', period: '30', activity: '' };
 
 function resultBadge(r) {
   if (r.success === true) return h('span', { class: 'result met' }, 'Met target');
-  if (r.success === false) return h('span', { class: 'result notyet' }, 'Not yet');
-  return h('span', { class: 'result none', title: r.plan_goal === 'other' ? 'Not linked to a plan goal' : 'Stopped before the end' }, r.plan_goal === 'other' ? 'Practice' : 'Stopped early');
+  if (r.success === false) return h('span', { class: 'result notyet', title: 'More support was needed this time' }, 'Needed more support');
+  return h('span', { class: 'result none', title: r.plan_goal === 'other' ? 'Not linked to a plan goal' : 'Stopped before the end' }, r.plan_goal === 'other' ? 'Free practice' : 'Stopped early');
 }
 function codeBadge(code) {
   if (!code) return null;
@@ -1946,15 +1947,17 @@ async function renderReview(root) {
 
 function recordCard(r, lookAt, root) {
   const answers = String(r.sam_response || '').split(' / ').filter(Boolean);
+  const sayLine = (a) => (a.startsWith('[after support] ')
+    ? h('p', { class: 'after' }, h('span', { class: 'tag supported' }, 'after support'), ' ', a.slice(16))
+    : h('p', {}, a));
   const box = (title, items, cls) => (items?.length ? h('div', { class: `rc-col ${cls}` }, h('h4', {}, title), h('ul', {}, items.map((x) => h('li', {}, x)))) : null);
   return h('article', { class: 'rec-card' },
     h('header', { class: 'rc-head' },
       h('div', { class: 'rc-title' }, goalPill(r.plan_goal), h('strong', {}, r.item_label), h('span', { class: 'muted' }, ` · ${r.activity_title}`)),
       h('div', { class: 'rc-meta' }, r.score_total != null ? h('span', { class: 'score-badge', title: `First try: ${r.score_first}/${r.score_total}` }, `${r.score_correct}/${r.score_total} correct`) : null, resultBadge(r), codeBadge(r.support_code), h('span', { class: 'muted rc-time' }, timeOf(r.created_at)))),
     answers.length ? h('div', { class: 'rc-said' }, h('h4', {}, `${me.learner.name} said`),
-      answers.map((a) => a.startsWith('[after support] ')
-        ? h('p', { class: 'after' }, h('span', { class: 'tag supported' }, 'after support'), ' ', a.slice(16))
-        : h('p', {}, a))) : h('p', { class: 'muted' }, 'No spoken answer recorded.'),
+      answers.slice(0, 2).map(sayLine),
+      answers.length > 2 ? h('details', { class: 'rc-more-said' }, h('summary', {}, `Show ${answers.length - 2} more`), answers.slice(2).map(sayLine)) : null) : h('p', { class: 'muted' }, 'No spoken answer recorded.'),
     h('div', { class: 'rc-cols' },
       box('On their own', r.independent, 'own'),
       box('After support', r.after_support, 'after'),

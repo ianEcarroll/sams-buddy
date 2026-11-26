@@ -607,6 +607,8 @@ details.layer > summary small, details.fine-tune > summary small { font-weight: 
 .rep-ex { border-left: 3px solid var(--line); padding: 2px 0 2px 12px; margin: 8px 0; }
 .rep-ex p { margin: 2px 0 0; }
 .rep-ex-head { display: flex; flex-wrap: wrap; gap: 4px 6px; align-items: center; }
+.unsafe-note { color: #8a3b00; font-weight: 700; }
+.lib-tile:has(.unsafe-note) { border-left: 6px solid #d9822b; }
 .rep-note { margin: 14px 0; }
 .rep-note-edit { width: 100%; font: inherit; padding: 8px; border: 2px solid var(--line); border-radius: 10px; }
 .rep-note-print { display: none; }
