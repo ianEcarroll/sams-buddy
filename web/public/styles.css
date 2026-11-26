@@ -607,6 +607,17 @@ details.layer > summary small, details.fine-tune > summary small { font-weight: 
 .rep-ex { border-left: 3px solid var(--line); padding: 2px 0 2px 12px; margin: 8px 0; }
 .rep-ex p { margin: 2px 0 0; }
 .rep-ex-head { display: flex; flex-wrap: wrap; gap: 4px 6px; align-items: center; }
+.rep-note { margin: 14px 0; }
+.rep-note-edit { width: 100%; font: inherit; padding: 8px; border: 2px solid var(--line); border-radius: 10px; }
+.rep-note-print { display: none; }
+.rep-page { margin-bottom: 18px; }
+@media print {
+  .rep-note-edit { display: none; }
+  .rep-note-print { display: block; border: 1px solid var(--line); border-radius: 6px; padding: 4px 10px; }
+  .rep-note-print:empty { display: none; }
+  .rep-page { break-after: page; margin: 0; }
+  .rep-page:last-child { break-after: auto; }
+}
 .rep-foot { margin-top: 22px; padding-top: 10px; border-top: 1px solid var(--line); font-size: .8rem; color: var(--ink-soft); }
 .rep-foot p { margin: 4px 0; max-width: 80ch; }
 @media print {

@@ -320,7 +320,8 @@ adult.get('/caseload', wrap(async (req, res) => {
   for (const l of ids) {
     const c = await one('select agreed_at, can_view from consent where learner_id=$1', [l.id]);
     const shared = !!(c?.agreed_at && c.can_view?.[req.adult.role]);
-    const row = { id: l.id, name: l.name, home: l.home, shared, devices: (await one('select count(*)::int n from devices where learner_id=$1 and revoked_at is null and not preview', [l.id])).n };
+    const asked = !!(await one('select 1 from share_requests where learner_id=$1 and adult_id=$2 and resolved_at is null', [l.id, req.adult.id]));
+    const row = { id: l.id, name: l.name, home: l.home, shared, asked, devices: (await one('select count(*)::int n from devices where learner_id=$1 and revoked_at is null and not preview', [l.id])).n };
     if (shared) {
       const p = await one(`select max(started_at) as last, count(*) filter (where started_at > now() - interval '7 days')::int as week from practice_sessions where learner_id=$1 and not preview`, [l.id]);
       const a = await one('select a.title, a.mode from learners l left join activities a on a.id=l.current_activity_id where l.id=$1', [l.id]);
@@ -484,6 +485,38 @@ app.post('/api/device/pair', rateLimit(10), wrap(async (req, res) => {
 adult.get('/settings', wrap(async (req, res) => {
   const l = await one('select settings, current_activity_id from learners where id=$1', [req.learnerId]);
   res.json({ settings: settingsOf(l), current_activity_id: l.current_activity_id });
+}));
+// Copy the plan to every student this person runs. Things that belong to one child (interests, reminder time, time zone) stay as they are.
+adult.post('/settings/apply-all', wrap(async (req, res) => {
+  if (!(await canAddStudents(req.adult.id))) return res.status(403).json({ error: 'Only a therapist or school account can apply a plan to all students.' });
+  const clean = {};
+  for (const k of SETTING_KEYS) if (k in (req.body?.settings || {}) && !['interests', 'reminder_time', 'timezone'].includes(k)) clean[k] = req.body.settings[k];
+  if (clean.enabled_modes) clean.enabled_modes = clean.enabled_modes.filter((m) => MODES[m]);
+  const done = await many(`update learners set settings = settings || $1::jsonb where id in
+    (select learner_id from adult_learners where adult_id=$2 and is_owner) and disabled_at is null returning id`, [clean, req.adult.id]);
+  res.json({ ok: true, count: done.length });
+}));
+// ---- ask to see a student's practice (the student's main grown-up decides)
+const isOnTeam = async (adultId, learnerId) => !!(await one('select 1 from adults where id=$1 and learner_id=$2 union all select 1 from adult_learners where adult_id=$1 and learner_id=$2', [adultId, learnerId]));
+adult.post('/share-request', wrap(async (req, res) => {
+  const learnerId = req.body?.learnerId || req.learnerId;
+  if (!(await isOnTeam(req.adult.id, learnerId))) return res.status(403).json({ error: 'You are not on this student\u2019s team.' });
+  const c = await one('select can_view from consent where learner_id=$1', [learnerId]);
+  if (c?.can_view?.[req.adult.role]) return res.status(409).json({ error: 'This student already shares practice with you.' });
+  const open = await one('select 1 from share_requests where learner_id=$1 and adult_id=$2 and resolved_at is null', [learnerId, req.adult.id]);
+  if (!open) await q('insert into share_requests(learner_id, adult_id, role) values ($1,$2,$3)', [learnerId, req.adult.id, req.adult.role]);
+  res.json({ ok: true });
+}));
+adult.get('/share-requests', requireOwner, wrap(async (req, res) => {
+  res.json(await many(`select r.id, r.role, r.created_at, a.name from share_requests r join adults a on a.id=r.adult_id where r.learner_id=$1 and r.resolved_at is null order by r.created_at`, [req.learnerId]));
+}));
+adult.post('/share-requests/:id', requireOwner, wrap(async (req, res) => {
+  const r = await one('select id, role from share_requests where id=$1 and learner_id=$2 and resolved_at is null', [req.params.id, req.learnerId]);
+  if (!r) return res.status(404).json({ error: 'That request was already answered.' });
+  const allow = req.body?.allow === true;
+  if (allow) await q("update consent set can_view = can_view || jsonb_build_object($1::text, true), updated_at=now() where learner_id=$2", [r.role, req.learnerId]);
+  await q('update share_requests set resolved_at=now(), outcome=$1 where id=$2', [allow ? 'allowed' : 'declined', r.id]);
+  res.json({ ok: true });
 }));
 adult.put('/settings', wrap(async (req, res) => {
   const body = req.body || {};

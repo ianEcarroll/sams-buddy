@@ -310,6 +310,14 @@ function studentPicker() {
 const needsLook = (x) => (x.shared ? (x.last_practice ? Date.parse(x.last_practice) : 0) : Infinity);
 const isQuiet = (x) => x.shared && (!x.last_practice || Date.now() - Date.parse(x.last_practice) > 3 * 86400000);
 // The students this person looks after, and how practice is going for each.
+// A teacher or therapist asks for a student's practice; the student's main grown-up allows or declines it on their Home page.
+function askToShare(learnerId, name, asked) {
+  const btn = h('button', { class: 'btn btn-quiet', disabled: !!asked, onclick: run(async () => {
+    await api('/adult/share-request', { method: 'POST', body: { learnerId } });
+    btn.disabled = true; btn.textContent = 'Asked'; toast(`Asked. ${name}\u2019s family will see your request.`);
+  }) }, asked ? 'Asked' : `Ask ${name} to share`);
+  return btn;
+}
 async function renderCaseload(root) {
   const list = await api('/adult/caseload');
   const open = (x, to) => { chooseStudent(x.home ? '' : x.id); tab = to; boot(); };
@@ -353,7 +361,7 @@ async function renderCaseload(root) {
       x.shared
         ? [h('span', {}, x.current ? `Practising: ${x.current.title}` : 'No activity chosen yet'),
           h('small', { class: 'muted' }, x.last_practice ? `Last practice ${whenUsed(x.last_practice)} · ${x.practices_7d} in the last 7 days` : 'No practice yet')]
-        : h('span', { class: 'muted' }, `${x.name} has not shared practice with ${ROLE[me.adult.role] ? ROLE[me.adult.role].toLowerCase() + 's' : 'your role'} yet.`),
+        : [h('span', { class: 'muted' }, `${x.name} has not shared practice with ${ROLE[me.adult.role] ? ROLE[me.adult.role].toLowerCase() + 's' : 'your role'} yet.`), askToShare(x.id, x.name, x.asked)],
       h('div', { class: 'row-actions' },
         h('button', { class: 'btn btn-primary', onclick: () => open(x, 'review') }, 'See results'),
         h('button', { class: 'btn btn-quiet', onclick: () => open(x, 'activities') }, 'Activities'))))),
@@ -363,6 +371,33 @@ async function renderCaseload(root) {
   if (list.length > 1) groupReportView(root.querySelector('#group-report'), list).catch((e) => toast(e.message));
 }
 
+// One page per student, each with its own optional note: for a school meeting or handing to families.
+function printStudentPages(rep) {
+  const shared = rep.students.filter((x) => x.shared);
+  if (!shared.length) return toast('No student has shared practice with you yet.');
+  const label = { 7: 'Last 7 days', 30: 'Last 30 days', 90: 'Last 90 days', all: 'All practice' }[reportUi.days] || `Last ${reportUi.days} days`;
+  const overlay = h('div', { class: 'report-overlay', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Student reports' });
+  const onKey = (e) => { if (e.key === 'Escape') close(); };
+  function close() { document.removeEventListener('keydown', onKey); document.body.classList.remove('printing-report'); overlay.remove(); }
+  const goalName = (k) => (goals.goals[k] ? (goals.goals[k].n < 5 ? `${goals.goals[k].n}. ${goals.goals[k].label}` : goals.goals[k].label) : k);
+  const page = (x) => {
+    const rows = (x.goals || []).filter((g) => g.key !== 'other' && (g.opportunities || g.items));
+    const total = rows.reduce((n, g) => n + g.opportunities, 0), own = rows.reduce((n, g) => n + (g.I || 0), 0);
+    return h('section', { class: 'report rep-page' },
+      h('header', { class: 'rep-head' }, h('div', {}, h('h1', {}, 'TALVO practice report'), h('p', { class: 'rep-sub' }, `${x.name} · ${label}`)),
+        h('p', { class: 'muted rep-date' }, `Prepared ${new Date().toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' })}`)),
+      h('p', { class: 'rep-lead' }, rows.length ? `${total} counted answers, ${own} given without a cue.` : 'No practice recorded in this period.'),
+      rows.length ? h('table', { class: 'rep-table' },
+        h('thead', {}, h('tr', {}, ['Goal', 'Met target', 'On their own (I)', 'One cue (M)', 'Two or more cues (P)', 'Modelled (F)'].map((t) => h('th', {}, t)))),
+        h('tbody', {}, rows.map((g) => h('tr', {}, h('td', {}, goalName(g.key)), h('td', { class: 'num' }, g.opportunities ? `${g.successes} of ${g.opportunities}` : '–'),
+          ...['I', 'M', 'P', 'F'].map((c) => h('td', { class: 'num' }, g.opportunities || g[c] ? String(g[c] || 0) : '–')))))) : null,
+      noteBlock(`class:${x.id}`, `Note for ${x.name}`),
+      h('footer', { class: 'rep-foot' }, h('p', {}, 'Counts of practice with Foxy in the TALVO app, using the team\u2019s support codes. They show practice, not a clinical assessment.')));
+  };
+  const printBtn = h('button', { class: 'btn btn-primary', onclick: () => window.print() }, 'Print or save as PDF');
+  overlay.append(h('div', { class: 'report-bar' }, h('strong', {}, `${shared.length} student report${shared.length === 1 ? '' : 's'}`), printBtn, h('button', { class: 'btn btn-quiet', onclick: close }, 'Close')), ...shared.map(page));
+  document.body.classList.add('printing-report'); document.body.append(overlay); document.addEventListener('keydown', onKey); printBtn.focus();
+}
 // Results for every student side by side, for one period. Pick "All goals" or one activity.
 const reportUi = { days: '30', by: 'goal' };
 async function groupReportView(box, list) {
@@ -395,7 +430,8 @@ async function groupReportView(box, list) {
   box.append(h('h2', {}, 'Results across students'),
     h('p', { class: 'muted', style: 'max-width:70ch;margin-top:0' }, 'Each cell shows how many tries met the target, with how much help was needed: I independent, M model, P prompt, F full help.'),
     h('div', { class: 'row-actions' }, periodSel, bySel,
-      h('button', { class: 'btn btn-quiet', onclick: run(() => download(`/adult/report.csv?days=${reportUi.days}`, 'talvo-students-report.csv')) }, 'Download (CSV)')),
+      h('button', { class: 'btn btn-quiet', onclick: run(() => download(`/adult/report.csv?days=${reportUi.days}`, 'talvo-students-report.csv')) }, 'Download (CSV)'),
+      h('button', { class: 'btn', onclick: () => printStudentPages(rep) }, 'Print a page per student')),
     table);
   await load();
 }
@@ -494,7 +530,7 @@ async function renderHome(root) {
   let week;
   if (!days || !records) {
     week = h('section', { class: 'panel' }, h('h3', { style: 'margin:0 0 6px' }, 'This week'),
-      h('p', { style: 'margin:0' }, `${name} has not shared practice with you yet. They choose this on their own device.`));
+      h('p', { style: 'margin:0 0 8px' }, `${name} has not shared practice with you yet.`), askToShare(me.learner.id, name, false));
   } else {
     const keys = Array.from({ length: 7 }, (_, i) => daysAgo(6 - i));
     const prevKeys = Array.from({ length: 7 }, (_, i) => daysAgo(13 - i));
@@ -539,7 +575,17 @@ async function renderHome(root) {
       nudge ? h('p', { class: 'muted', style: 'margin:0' }, nudge) : null,
       h('div', { class: 'row-actions' }, h('button', { class: 'btn', onclick: go('review') }, 'See all practice'), h('button', { class: 'btn btn-quiet', onclick: go('notes') }, 'Add an observation')));
   }
-  root.append(checklist, week, chooser);
+  // Requests from team members who cannot yet see practice: the main grown-up decides.
+  let asks = null;
+  if (owner) {
+    const list = await api('/adult/share-requests').catch(() => []);
+    if (list.length) asks = h('section', { class: 'panel', role: 'status', style: 'display:grid;gap:10px' },
+      h('h3', { style: 'margin:0' }, 'Someone is asking to see practice'),
+      ...list.map((r) => h('div', { class: 'row-actions' }, h('span', {}, `${r.name} (${ROLE[r.role] || r.role}) would like to see ${name}\u2019s practice.`),
+        h('button', { class: 'btn btn-primary', onclick: run(async () => { await api(`/adult/share-requests/${r.id}`, { method: 'POST', body: { allow: true } }); me = await api('/adult/me'); toast(`${r.name} can now see practice.`); renderShell(); }) }, 'Allow'),
+        h('button', { class: 'btn btn-quiet', onclick: run(async () => { await api(`/adult/share-requests/${r.id}`, { method: 'POST', body: { allow: false } }); renderShell(); }) }, 'Not now'))));
+  }
+  root.append(asks, checklist, week, chooser);
 }
 
 // ------------------------------------------------------------ activity library
@@ -743,7 +789,14 @@ async function renderPlan(root) {
       saveStatus.textContent = revision === savingRevision ? 'All changes saved' : 'Unsaved changes';
       } catch (error) { saveStatus.textContent = 'Could not save. Your changes are still here.'; throw error; }
       finally { button.disabled = false; }
-    }) }, 'Save practice plan')),
+    }) }, 'Save practice plan'),
+      me.canAddStudents && me.students.length > 1 ? h('button', { class: 'btn', title: 'Copies these settings, except interests and reminder time, to every student you run.', onclick: run(async () => {
+        if (!confirm('Apply these settings to all the students you run? Each student keeps their own interests and reminder time.')) return;
+        const s = { enabled_modes: modeBoxes.map((b) => b.querySelector('input')).filter((i) => i.checked).map((i) => i.value) };
+        for (const [k, el] of Object.entries(f)) if (!['reminder_time', 'timezone'].includes(k)) s[k] = el.type === 'checkbox' ? el.checked : el.type === 'number' ? Number(el.value) : (el.value || null);
+        const r = await api('/adult/settings/apply-all', { method: 'POST', body: { settings: s } });
+        toast(`Applied to ${r.count} student${r.count === 1 ? '' : 's'}.`);
+      }) }, 'Apply to all my students') : null),
   );
   // Keep everyday choices visible; less frequent settings remain one click away.
   for (const heading of [...root.children].filter((el) => el.tagName === 'H2')) {
@@ -1746,6 +1799,16 @@ function reportData(days, records, from, goalKeys) {
   return { perGoal, practisedDays: dayItems.size, own, cued, answered: own + cued, examples };
 }
 
+// A short note from the therapist or teacher, typed on screen and printed with the report. Kept while the page stays open.
+const reportNotes = {};
+function noteBlock(key, label) {
+  const ta = h('textarea', { class: 'rep-note-edit', rows: 3, placeholder: 'Add a note for the family or school (optional). It prints with the report.', 'aria-label': label });
+  ta.value = reportNotes[key] || '';
+  const printed = h('div', { class: 'rep-note-print' });
+  const sync = () => { reportNotes[key] = ta.value; printed.replaceChildren(...(ta.value.trim() ? [h('h3', {}, `Note from ${me.adult.name}, ${ROLE[me.adult.role] || 'team member'}`), h('p', { style: 'white-space:pre-wrap;margin:4px 0' }, ta.value.trim())] : [])); };
+  ta.addEventListener('input', sync); sync();
+  return h('div', { class: 'rep-note' }, ta, printed);
+}
 function openReport(days, records, startPeriod) {
   const name = me.learner.name;
   const state = { period: REPORT_PERIODS.some(([v]) => v === startPeriod) ? startPeriod : '30' };
@@ -1781,6 +1844,7 @@ function openReport(days, records, startPeriod) {
         ? [`${name} practised on `, h('strong', {}, `${d.practisedDays} of ${keys.length} days`),
           ...(d.answered ? [`. Of ${d.answered} counted answers, `, h('strong', {}, `${d.own} (${pct}%)`), ' were given without a cue.'] : ['.'])]
         : ['No practice recorded in this period.'])),
+      noteBlock(`one:${me.learner.id}`, 'Note on the report'),
       h('h2', {}, 'By plan goal'),
       h('table', { class: 'rep-table' },
         h('thead', {}, h('tr', {}, ['Goal', 'Practice days', 'Met target', 'On their own (I)', 'One cue (M)', 'Two or more cues (P)', 'Modelled (F)'].map((t) => h('th', {}, t)))),
