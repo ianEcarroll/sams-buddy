@@ -720,6 +720,15 @@ function addActivity(root, M) {
   return h('div', { class: 'mod-add' }, h('div', { class: 'row-actions' }, add), choose);
 }
 
+// Opens the student app in a new tab with a preview pass: the activity runs for real, but no record, email or count is made.
+async function tryAsSam(a) {
+  const tab = window.open('', '_blank'); // opened first so the browser allows it
+  try {
+    const { token } = await api('/adult/preview', { method: 'POST' });
+    const url = `/#preview=${encodeURIComponent(token)}&activity=${encodeURIComponent(a.id)}`;
+    if (tab) tab.location.href = url; else location.href = url;
+  } catch (e) { tab?.close(); throw e; }
+}
 async function renderActivities(root) {
   const acts = await api('/adult/activities');
   root.append(await startNote());
@@ -747,6 +756,7 @@ async function renderActivities(root) {
           h('br'), h('small', { class: 'muted' }, bits.join(' · '))),
         h('div', { class: 'row-actions' },
           h('button', { class: 'btn', onclick: () => editActivity(root, a) }, 'Edit'),
+          h('button', { class: 'btn btn-quiet', title: `Run this exactly as ${name} sees it. Nothing is saved.`, onclick: run(() => tryAsSam(a)) }, `Try as ${name}`),
           h('button', { class: 'btn btn-quiet', 'aria-label': `Archive ${a.title}`, onclick: run(async () => {
             if (!confirm(`Archive "${a.title}"? ${name} won’t see it any more. Past practice records are kept.`)) return;
             await api(`/adult/activities/${a.id}`, { method: 'DELETE' }); renderShell();
