@@ -165,32 +165,32 @@ LIBRARY.push(
   talk('favourites', 'Talk: favourite things', ['favourites'], [
     top('food', 'I think pizza is delicious. What kind of food do you like?', 'I like pasta.', 'What is your favourite food?'),
     top('music', 'I like listening to music when I am happy. What music do you like?', 'I like listening to pop music.', 'What music do you like?'),
-    top('films', 'I watched a really funny film. Do you like watching films?', 'I like funny films too.', 'What is your favourite film?'),
-    top('animals', 'Animals are great. I like foxes, of course. What animals do you like?', 'I like dogs.', 'Do you have a pet?'),
+    top('films', 'I watched a really funny film last night. What kind of films do you watch?', 'I like funny films too.', 'What is your favourite film?'),
+    top('animals', 'I like watching animal documentaries. What animals do you find interesting?', 'I like dogs.', 'Do you have a pet?'),
   ]),
   talk('weekend', 'Talk: weekends and holidays', ['weekend', 'holidays'], [
     top('the weekend', 'The weekend is nearly here. What do you like to do at the weekend?', 'I like to relax at home.', 'What do you do at the weekend?'),
     top('holidays', 'I love holidays. Where would you like to go for a holiday?', 'I would like to go to the beach.', 'Where do you like to go on holiday?'),
-    top('birthdays', 'Birthdays are fun. What do you like to do on your birthday?', 'I like having a cake.', 'When is your birthday?'),
+    top('birthdays', 'My birthday is in the summer. What do you like to do on your birthday?', 'I like having a cake.', 'When is your birthday?'),
     top('the weather', 'It is nice to know what the weather is like. What kind of weather do you like?', 'I like sunny days.', 'What is your favourite season?'),
   ]),
   talk('hobbies', 'Talk: hobbies and games', ['hobbies', 'games'], [
-    top('video games', 'Some people love video games. Do you like playing games?', 'I like playing games with my friends.', 'What game do you like to play?'),
-    top('sport', 'Sport is a good way to move and have fun. Do you like any sports?', 'I like to swim.', 'What sport do you like?'),
-    top('drawing and making things', 'I like making things with my paws. Do you like drawing or making things?', 'I like drawing.', 'What do you like to make?'),
-    top('playing an instrument', 'Playing music can be great fun. Have you ever played an instrument?', 'I like drums.', 'Which instrument would you like to play?'),
+    top('video games', 'A lot of people play video games to relax. What games do you play at the moment?', 'I like playing games with my friends.', 'What game do you like to play?'),
+    top('sport', 'I like watching football on TV. What sports do you play or watch?', 'I like to swim.', 'What sport do you like?'),
+    top('drawing and making things', 'I like drawing in my spare time. What do you like to make or create?', 'I like drawing.', 'What do you like to make?'),
+    top('playing an instrument', 'I always wanted to learn the guitar. What instrument would you like to play?', 'I like drums.', 'Which instrument would you like to play?'),
   ]),
   talk('school', 'Talk: school and learning', ['school'], [
     top('favourite subject', 'There are lots of subjects at school. Which one do you like best?', 'I like art best.', 'What is your favourite subject?'),
     top('lunch at school', 'Lunchtime is an important part of the day. What do you like to eat at lunch?', 'I like sandwiches.', 'What do you eat at lunch?'),
-    top('clubs and activities', 'Some schools have clubs after lessons. Do you go to any clubs?', 'I go to a sports club.', 'Which club would you like to join?'),
+    top('clubs and activities', 'Lots of people go to a club or group after school or work. What clubs or groups do you go to?', 'I go to a sports club.', 'Which club would you like to join?'),
     top('friends at school', 'It is nice to spend time with friends. What do you like to do with your friends?', 'We like to talk about games.', 'What do you do with your friends at break?'),
   ]),
   talk('out', 'Talk: out and about', ['out and about'], [
-    top('shopping', 'I like looking in shops. Do you like going shopping?', 'I like buying snacks.', 'What do you like to buy?'),
-    top('travelling', 'Trains and buses can take you to exciting places. Do you like travelling?', 'I like going on the train.', 'How do you like to travel?'),
-    top('eating out', 'Going to a café can be nice. Do you like eating out?', 'I like having hot chocolate.', 'What do you like to eat at a café?'),
-    top('the park', 'Parks are good places to relax. Do you like going to the park?', 'I like walking in the park.', 'What do you like to do at the park?'),
+    top('shopping', 'I went to the shops yesterday to buy some trainers. What do you like to buy when you go shopping?', 'I like buying snacks.', 'What do you like to buy?'),
+    top('travelling', 'I took the train to the city last week. How do you usually get around?', 'I like going on the train.', 'How do you like to travel?'),
+    top('eating out', 'There is a café near me that makes great chips. Where do you like to eat out?', 'I like having hot chocolate.', 'What do you like to eat at a café?'),
+    top('the park', 'I went for a walk in the park on Sunday. What do you like to do outside?', 'I like walking in the park.', 'What do you like to do at the park?'),
   ]),
 );
 
@@ -213,16 +213,16 @@ LIBRARY.push(
 // ---- More Talk: family and pets, and my day.
 LIBRARY.push(
   talk('family', 'Talk: family and pets', ['family', 'pets'], [
-    top('family meals', 'Family meals can be fun. Do you have a favourite meal to eat with your family?', 'I like having pizza with my family.', 'What is your favourite family meal?'),
-    top('pets', 'I do not have a pet, because I live in a forest. Do you have a pet, or would you like one?', 'I would like a dog.', 'What animal would you like as a pet?'),
+    top('family meals', 'In my family we always have pasta on Fridays. What is your favourite meal at home?', 'I like having pizza with my family.', 'What is your favourite family meal?'),
+    top('pets', 'My neighbour has a really friendly dog. What animal would you like to have as a pet?', 'I would like a dog.', 'What animal would you like as a pet?'),
     top('helping at home', 'Some people help at home by tidying or cooking. How do you help at home?', 'I help by setting the table.', 'What jobs do you do at home?'),
     top('family trips', 'A trip with your family can be special. Where have you been with your family?', 'We went to the seaside.', 'Where did you go?'),
   ]),
   talk('my-day', 'Talk: my day', ['daily life'], [
     top('today', 'I would love to hear about your day. What was the best part of today?', 'The best part was lunch.', 'What was the best part of your day?'),
-    top('something funny', 'Funny moments are great to share. Did anything make you laugh this week?', 'My friend told a funny joke.', 'What made you laugh?'),
+    top('something funny', 'I saw a really funny video this week. What made you laugh this week?', 'My friend told a funny joke.', 'What made you laugh?'),
     top('looking forward', 'It is nice to look forward to things. What are you looking forward to?', 'I am looking forward to the weekend.', 'What are you looking forward to?'),
-    top('something new', 'Learning something new is exciting. Have you learned anything new lately?', 'I learned a new song.', 'What did you learn?'),
+    top('something new', 'I learned how to cook a new recipe this week. What is something new you learned recently?', 'I learned a new song.', 'What did you learn?'),
   ]),
 );
 

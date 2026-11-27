@@ -1320,6 +1320,7 @@ function itemEditor(mode, it, i, urls, remove, ctx, addTopic) {
       h('div', { class: 'grid2' },
         field('Example reason (optional)', txt(it, 'reason_example'), 'Foxy asks "why?" once, only if this is filled in. Leave blank to skip it. e.g. "the staff can find my trainer"'),
         field('Example plan B (optional)', txt(it, 'backup_example'), 'Foxy asks "what if that does not work?" once, only if this is filled in. Leave blank to skip it. e.g. "call my dad"')),
+      field('Foxy’s clue (optional)', txt(it, 'first_clue'), `A concrete question about what ${name} can see, given if ${name} needs help to notice. e.g. "Can you see your trainer?" Leave blank for "Look at the situation again. What is not right?"`),
       field('Not safe, one per line', multi(it, 'unsafe', 2), 'Ideas Foxy should not accept, e.g. "leave on my own". They are flagged for the team in Review practice.'),
       field("Foxy's question", txt(it, 'question'), 'Leave blank for "What would you do?"'), simple(),
     ];

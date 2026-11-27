@@ -27,7 +27,7 @@ test('organiser words: First → Next → Then → Finally', () => {
 test('the organiser shows Who, Where, the four steps and How it ended, lighting up as Sam tells it', async () => {
   let { state, turn } = createSession({ activity: band() });
   assert.deepEqual(turn.ui.cueCard.labels, ['Who', 'Where', 'First', 'Next', 'Then', 'Finally', 'How it ended']);
-  assert.match(turn.lines.at(-1).text, /who was there, where it happens, then what happens first, next, then and finally, and how it ended/);
+  assert.match(turn.lines.at(-1).text, /Who was there\? Where were they\? What happened, from first to last\? How did it end\?/);
   ({ turn } = await say(state, 'Dad came to the school hall. First we got changed into our uniforms.'));
   assert.deepEqual(turn.ui.cueCard.lit, [true, true, true, false, false, false, false]);
 });
