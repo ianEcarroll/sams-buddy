@@ -514,7 +514,7 @@ async function renderHome(root) {
   const steps = [
     devices ? { done: devices.length > 0, text: `Connect ${name}’s iPad`, action: ['Show me how', go('team')] } : null,
     settings ? { done: !!settings.current_activity_id, text: 'Choose what Start My Practice opens', action: ['Choose', () => { pick.scrollIntoView({ block: 'center' }); pick.focus(); }] } : null,
-    { done: !!me.consent?.agreed_at, text: `${name} makes their privacy choices`, action: ['Choose', go('team')] },
+    { done: !!me.consent?.agreed_at, text: `Confirm who can see ${name}’s practice`, action: ['Choose', go('team')] },
     members && owner ? { done: members.length > 1, text: 'Add your speech therapist or teacher', action: ['Add', go('team')] } : null,
   ].filter(Boolean);
   const left = steps.filter((x) => !x.done).length;
@@ -876,7 +876,7 @@ function startOptions(acts, selectedId) {
   return Object.entries(MODULES).flatMap(([m, M]) => {
     const list = acts.filter((a) => a.status === 'active' && M.modes.includes(a.mode));
     return list.length ? [h('optgroup', { label: HIDDEN_MODULES.includes(m) ? `${M.label} (tile not shown to ${me.learner.name})` : M.label },
-      list.map((a) => h('option', { value: a.id, selected: a.id === selectedId }, a.title)))] : [];
+      list.map((a) => h('option', { value: a.id, selected: a.id === selectedId }, modes?.[a.mode]?.activityName ? `${a.title} · ${modes[a.mode].activityName}` : a.title)))] : [];
   });
 }
 const moduleOf = (mode) => Object.keys(MODULES).find((k) => MODULES[k].modes.includes(mode));
@@ -1926,6 +1926,15 @@ async function renderReview(root) {
     }));
   }
   draw();
+  // Practices the team hid ("Not a real practice"), so one hidden by mistake can be restored.
+  const hiddenWrap = h('div', {});
+  api('/adult/records?hidden=1').then((hid) => {
+    if (!hid?.length) return;
+    const sessions = new Set(hid.map((r) => r.session_id)).size;
+    hiddenWrap.replaceChildren(h('details', { class: 'codes-key' }, h('summary', {}, `Hidden practice (${sessions}): not counted`),
+      h('p', { class: 'muted' }, 'Marked as not a real practice. Not in counts, reports or exports.'),
+      hid.map((r) => recordCard(r, null, root))));
+  }).catch(() => {});
 
   root.append(
     h('div', { class: 'review-top' },
@@ -1943,6 +1952,7 @@ async function renderReview(root) {
     h('div', { class: 'review-filters' }, goalSel, periodSel, actSel),
     chartsWrap,
     listWrap,
+    hiddenWrap,
   );
 }
 
@@ -1971,7 +1981,14 @@ function recordCard(r, lookAt, root) {
       h('p', {}, h('strong', {}, 'Visual aids: '), (r.visual_aids || []).join(', ') || 'none'),
       h('p', {}, h('strong', {}, 'Activity goal: '), r.goal),
       lookAt ? h('p', {}, h('strong', {}, 'Team asked reviewers to look at: '), lookAt) : null,
-      h('button', { class: 'btn', onclick: () => showTranscript(root, r.session_id) }, 'Open transcript')));
+      h('div', { class: 'row-actions' },
+        h('button', { class: 'btn', onclick: () => showTranscript(root, r.session_id) }, 'Open transcript'),
+        r.hidden_at
+          ? h('button', { class: 'btn', onclick: run(async () => { await api(`/adult/records/${r.id}/hidden`, { method: 'POST', body: { hidden: false } }); toast('Practice restored.'); renderShell(); }) }, 'Restore this practice')
+          : h('button', { class: 'btn btn-quiet', onclick: run(async () => {
+            if (!confirm(`Hide this whole practice from ${me.learner.name}’s counts, reports and exports? Use this when it was not ${me.learner.name}, for example a grown-up testing. Nothing is deleted, and you can restore it.`)) return;
+            await api(`/adult/records/${r.id}/hidden`, { method: 'POST', body: { hidden: true } }); toast('Practice hidden.'); renderShell();
+          }) }, 'Not a real practice'))));
 }
 
 async function showTranscript(root, sessionId) {
@@ -2127,8 +2144,20 @@ function deviceList(devices) {
   const seen = (d) => (d.last_seen_at ? Date.parse(d.last_seen_at) : 0);
   const sorted = [...devices].sort((a, b) => seen(b) - seen(a));
   const stale = (d) => !seen(d) || Date.now() - seen(d) > 30 * 86400000;
-  const row = (d) => h('li', {}, h('span', {}, `${d.label} · ${d.last_seen_at ? `last used ${whenUsed(d.last_seen_at)}` : 'never used'}`),
-    h('button', { class: 'btn btn-danger', onclick: run(async () => { if (confirm(`Disconnect ${d.label}?`)) { await api(`/adult/devices/${d.id}`, { method: 'DELETE' }); renderShell(); } }) }, 'Disconnect'));
+  const row = (d) => {
+    const name = h('input', { value: d.label, 'aria-label': 'Device name', maxlength: 40, style: 'max-width:16rem' });
+    const save = () => { if (name.value.trim() && name.value.trim() !== d.label) run(async () => { await api(`/adult/devices/${d.id}`, { method: 'PUT', body: { label: name.value } }); d.label = name.value.trim(); toast('Device name saved.'); })(); };
+    name.addEventListener('change', save);
+    const test = h('input', { type: 'checkbox', checked: !!d.test, onchange: run(async (e) => {
+      await api(`/adult/devices/${d.id}`, { method: 'PUT', body: { test: e.target.checked } });
+      toast(e.target.checked ? `Test device: practice on it is not saved to ${me.learner.name}’s records.` : `Practice on this device is saved to ${me.learner.name}’s records again.`);
+    }) });
+    return h('li', {},
+      h('div', { style: 'display:grid;gap:6px' }, name,
+        h('small', { class: 'muted' }, `${d.last_seen_at ? `Last used ${whenUsed(d.last_seen_at)}` : 'Never used'}`),
+        h('label', { class: 'switch' }, test, `Test device (practice on it is not saved)`)),
+      h('button', { class: 'btn btn-danger', onclick: run(async () => { if (confirm(`Disconnect ${d.label}?`)) { await api(`/adult/devices/${d.id}`, { method: 'DELETE' }); renderShell(); } }) }, 'Disconnect'));
+  };
   const recent = sorted.filter((d) => !stale(d)), old = sorted.filter(stale);
   return h('div', {}, recent.length ? h('ul', { class: 'list' }, recent.map(row)) : h('p', { class: 'muted' }, 'No device has been used in the last 30 days.'),
     old.length ? h('details', { class: 'codes-key' }, h('summary', {}, `Older devices (${old.length})`), h('ul', { class: 'list' }, old.map(row))) : null);
@@ -2161,7 +2190,7 @@ async function renderTeam(root) {
     h('h2', {}, `${me.learner.name}'s privacy choices`),
     h('div', { class: 'panel' },
       c?.agreed_at ? h('div', {},
-        h('p', { style: 'margin-top:0' }, me.consent?.set_by_school ? `Practice results are shared with the support team, set up by the school or therapist when ${me.learner.name} was added. ${me.learner.name} can change this in My settings on their iPad or phone.` : `${me.learner.name} chose who can see their practice records. Only they can change this, in My settings on their iPad or phone.`),
+        h('p', { style: 'margin-top:0' }, `${me.consent?.set_by_school ? `Practice results are shared with the support team, set up by the school or therapist when ${me.learner.name} was added.` : `A grown-up confirmed who can see ${me.learner.name}’s practice records.`} ${owner ? 'You can change this below, or' : 'The main account holder can change this here, or'} on ${me.learner.name}’s iPad: in My settings, press and hold “For parents and teachers”.`),
         h('ul', {}, Object.entries(ROLE).map(([k, l]) => h('li', {}, `${l}: ${c.can_view?.[k] ? 'can see records' : 'cannot see records'}`))),
         h('p', {}, `Voice recordings: ${c.save_audio ? 'saved' : 'not saved'}.`))
         : h('p', { style: 'margin:0' }, `${me.learner.name} cannot start practising until privacy is confirmed. ${owner ? 'Choose below.' : 'Ask the main account holder to confirm it.'}`),
@@ -2169,7 +2198,7 @@ async function renderTeam(root) {
 
     h('h2', {}, `${me.learner.name}'s iPad and test devices`),
     h('div', { class: 'panel' },
-      h('p', { style: 'margin-top:0' }, `Open this site on ${me.learner.name}'s iPad (or a phone for testing), add it to the home screen, then enter a connection code. Each device needs its own code.`),
+      h('p', { style: 'margin-top:0' }, `Open this site on ${me.learner.name}'s iPad (or a phone for testing), add it to the home screen, then enter a connection code. Each device needs its own code. Give each device a name, and mark the ones you test on as test devices so your practice does not count as ${me.learner.name}’s.`),
       h('button', { class: 'btn btn-primary', onclick: run(async () => { const r = await api('/adult/pairing-code', { method: 'POST' }); codeBox.replaceChildren(h('p', { class: 'code' }, r.code), h('p', { class: 'muted' }, `Works once, for ${r.expiresInMinutes} minutes.`)); }) }, 'Create a connection code'),
       codeBox,
       deviceList(devices)),
