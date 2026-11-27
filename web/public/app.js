@@ -833,7 +833,7 @@ async function boot() {
   if (!token) return renderPair();
   try {
     home = await api('/home');
-    previewBar(!!home.preview);
+    previewBar(!!home.preview, !!home.test);
     if (!home.consent?.agreed_at) return renderWaitingForGrownup();
     renderHome();
     if (home.preview && previewActivity) { const id = previewActivity; previewActivity = null; startPractice(id); }
@@ -853,9 +853,11 @@ function hideLaunch() {
   try { v?.pause(); } catch { /* nothing to stop */ }
   setTimeout(() => launch.remove(), matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 400);
 }
-function previewBar(on) {
+function previewBar(on, test = false) {
   document.getElementById('preview-bar')?.remove();
   if (!on) return;
+  // A test device is a real, connected device marked by the team: say so, with nothing to close.
+  if (test) { document.body.append(h('div', { id: 'preview-bar', role: 'status' }, h('span', {}, 'Test device: practice here is not saved to the records.'))); return; }
   document.body.append(h('div', { id: 'preview-bar', role: 'status' },
     h('span', {}, 'Preview: this is what Sam sees. Nothing you do here is saved.'),
     h('button', { class: 'btn btn-quiet', onclick: () => { try { sessionStorage.removeItem(PREVIEW_KEY); } catch { /* ok */ } window.close(); location.href = '/adult/'; } }, 'Close preview')));

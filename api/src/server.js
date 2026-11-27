@@ -291,9 +291,9 @@ async function groupReport(adult, days, tz) {
     const rec = (by) => many(`select ${by} as key, count(*)::int items, count(success)::int opportunities, count(*) filter (where success)::int successes,
         count(*) filter (where support_code='I')::int "I", count(*) filter (where support_code='M')::int "M",
         count(*) filter (where support_code='P')::int "P", count(*) filter (where support_code='F')::int "F"
-      from practice_records where learner_id=$1 and ($2::int is null or created_at > now() - make_interval(days => $2)) group by 1 order by 1`, [l.id, days]);
+      from practice_records where learner_id=$1 and hidden_at is null and ($2::int is null or created_at > now() - make_interval(days => $2)) group by 1 order by 1`, [l.id, days]);
     const [goals, activities, last] = await Promise.all([rec('plan_goal'), rec('activity_title'),
-      one('select max(created_at) as last from practice_records where learner_id=$1', [l.id])]);
+      one('select max(created_at) as last from practice_records where learner_id=$1 and hidden_at is null', [l.id])]);
     out.push({ id: l.id, name: l.name, shared: true, last_practice: last?.last || null, goals, activities });
   }
   return out;
@@ -321,12 +321,12 @@ adult.get('/caseload', wrap(async (req, res) => {
     const c = await one('select agreed_at, can_view from consent where learner_id=$1', [l.id]);
     const shared = !!(c?.agreed_at && c.can_view?.[req.adult.role]);
     const asked = !!(await one('select 1 from share_requests where learner_id=$1 and adult_id=$2 and resolved_at is null', [l.id, req.adult.id]));
-    const row = { id: l.id, name: l.name, home: l.home, shared, asked, devices: (await one('select count(*)::int n from devices where learner_id=$1 and revoked_at is null and not preview', [l.id])).n };
+    const row = { id: l.id, name: l.name, home: l.home, shared, asked, devices: (await one('select count(*)::int n from devices where learner_id=$1 and revoked_at is null and not preview and not test', [l.id])).n };
     if (shared) {
       const p = await one(`select max(started_at) as last, count(*) filter (where started_at > now() - interval '7 days')::int as week from practice_sessions where learner_id=$1 and not preview`, [l.id]);
       const a = await one('select a.title, a.mode from learners l left join activities a on a.id=l.current_activity_id where l.id=$1', [l.id]);
       // Think answers the judge marked as possibly unsafe in the last 14 days: so a person looks at them first.
-      const u = await one("select count(*)::int n, max(created_at) as last from practice_records where learner_id=$1 and review_note like '%may not be safe%' and created_at > now() - interval '14 days'", [l.id]);
+      const u = await one("select count(*)::int n, max(created_at) as last from practice_records where learner_id=$1 and hidden_at is null and review_note like '%may not be safe%' and created_at > now() - interval '14 days'", [l.id]);
       Object.assign(row, { unsafe_14d: u?.n || 0, last_unsafe: u?.last || null, last_practice: p?.last || null, practices_7d: p?.week || 0, current: a?.title ? { title: a.title, mode: a.mode } : null });
     }
     out.push(row);
@@ -392,7 +392,7 @@ adult.get('/admin/families', requirePlatformAdmin, wrap(async (req, res) => {
   const rows = await many(`select l.id, l.name, l.birth_year, l.created_at, l.disabled_at,
       (select json_build_object('name', a.name, 'email', a.email) from adults a where a.learner_id=l.id and a.is_owner limit 1) as owner,
       (select count(*)::int from adults a where a.learner_id=l.id) as team,
-      (select count(*)::int from devices d where d.learner_id=l.id and d.revoked_at is null and not d.preview) as devices,
+      (select count(*)::int from devices d where d.learner_id=l.id and d.revoked_at is null and not d.preview and not d.test) as devices,
       (select count(*)::int from practice_sessions s where s.learner_id=l.id and not s.preview and s.started_at > now() - interval '7 days') as sessions_7d,
       (select count(*)::int from practice_sessions s where s.learner_id=l.id and not s.preview and s.started_at > now() - interval '30 days') as sessions_30d,
       (select max(started_at) from practice_sessions s where s.learner_id=l.id and not s.preview) as last_practice_at,
@@ -460,7 +460,15 @@ adult.post('/student-codes', wrap(async (req, res) => {
   res.json({ codes: out, validDays: SHEET_CODE_DAYS });
 }));
 adult.get('/devices', wrap(async (req, res) => {
-  res.json(await many('select id, label, created_at, last_seen_at from devices where learner_id=$1 and revoked_at is null and not preview order by created_at', [req.learnerId]));
+  res.json(await many('select id, label, test, created_at, last_seen_at from devices where learner_id=$1 and revoked_at is null and not preview order by created_at', [req.learnerId]));
+}));
+// Name a device ("Sam's iPad") or mark it as a test device, whose practice is never saved.
+adult.put('/devices/:id', wrap(async (req, res) => {
+  const label = typeof req.body?.label === 'string' ? req.body.label.trim().slice(0, 40) : null;
+  const test = typeof req.body?.test === 'boolean' ? req.body.test : null;
+  const d = await one('update devices set label=coalesce($1, label), test=coalesce($2, test) where id=$3 and learner_id=$4 and revoked_at is null and not preview returning id', [label || null, test, req.params.id, req.learnerId]);
+  if (!d) return res.status(404).json({ error: 'Device not found.' });
+  res.json({ ok: true });
 }));
 // "Try as Sam": a one-day device that runs any activity exactly as Sam sees it and saves nothing.
 adult.post('/preview', wrap(async (req, res) => {
@@ -833,8 +841,18 @@ app.get('/api/images/:id', wrap(async (req, res) => {
 // ------------------------------------------------------------------ review (only what Sam has agreed to share)
 
 adult.get('/records', wrap(requireRecordAccess), wrap(async (req, res) => {
+  // ?hidden=1: the practices the team hid ("Not a real practice"), so they can be restored.
   res.json(await many(`select r.*, s.started_at, s.ended_reason from practice_records r join practice_sessions s on s.id=r.session_id
-    where r.learner_id=$1 order by r.created_at desc limit 200`, [req.learnerId]));
+    where r.learner_id=$1 and (r.hidden_at is not null) = $2 order by r.created_at desc limit 200`, [req.learnerId, req.query.hidden === '1']));
+}));
+// "Not a real practice" (e.g. a grown-up testing on the learner's iPad): hides the whole practice from counts, reports and
+// exports. Nothing is deleted, and it can be restored.
+adult.post('/records/:id/hidden', wrap(requireRecordAccess), wrap(async (req, res) => {
+  const r = await one('select session_id from practice_records where id=$1 and learner_id=$2', [req.params.id, req.learnerId]);
+  if (!r) return res.status(404).json({ error: 'Practice not found.' });
+  const hide = req.body?.hidden !== false;
+  await q('update practice_records set hidden_at = case when $1 then now() else null end, hidden_by = case when $1 then $2 else null end where session_id=$3', [hide, req.adult.name || null, r.session_id]);
+  res.json({ ok: true });
 }));
 adult.get('/sessions/:id/events', wrap(requireRecordAccess), wrap(async (req, res) => {
   const s = await one('select id from practice_sessions where id=$1 and learner_id=$2', [req.params.id, req.learnerId]);
@@ -890,7 +908,7 @@ adult.get('/summary', wrap(requireRecordAccess), wrap(async (req, res) => {
       count(*) filter (where support_code='M')::int as "M",
       count(*) filter (where support_code='P')::int as "P",
       count(*) filter (where support_code='F')::int as "F"
-    from practice_records where learner_id=$1
+    from practice_records where learner_id=$1 and hidden_at is null
     group by 1, 2 order by 2 desc`, [req.learnerId, tz]);
   res.json({ tz, days: rows });
 }));
@@ -905,7 +923,7 @@ const clip = (s, n = 160) => (s && s.length > n ? `${s.slice(0, n - 1)}…` : s 
 
 async function recordsForExport(learnerId, tz) {
   return many(`select r.*, to_char(r.created_at at time zone $2, 'YYYY-MM-DD') as day, to_char(r.created_at at time zone $2, 'HH24:MI') as time
-    from practice_records r where r.learner_id=$1 order by r.created_at`, [learnerId, tz]);
+    from practice_records r where r.learner_id=$1 and r.hidden_at is null order by r.created_at`, [learnerId, tz]);
 }
 
 // One row per goal per date — the plan's "Weekly record" columns.
@@ -982,6 +1000,7 @@ device.get('/home', wrap(async (req, res) => {
     activities: acts,
     consent: req.device.preview ? { agreed_at: new Date().toISOString(), can_view: [], save_audio: false } : consent,
     preview: !!req.device.preview,
+    test: !!req.device.test,
     voice: voiceEnabled(),
   });
 }));
