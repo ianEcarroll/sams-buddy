@@ -667,7 +667,7 @@ async function renderLibrary(root) {
     ['object', 'Describe a Picture', 'Name it, say what group it is in and what it is for'],
     ['follow', 'Follow on Screen', 'Listen, then move shapes or pictures in order'],
     ['recall', 'Remember My Day', `Remember real things ${name} did`],
-    ['category', 'Memory Test', 'Name or add things that belong in a group'],
+    ['category', 'Word Groups', 'Name or add things that belong in a group'],
     ['listen', 'Listen to a Story', 'A short story, then questions about it'],
   ].filter(([k]) => items.some((i) => i.mode === k));
   const typeTitle = (k) => TYPES.find(([key]) => key === k)?.[1] || modeLabel(k);
@@ -914,7 +914,7 @@ function whenUsed(iso) {
 // Every tile has the same "+ New activity" button. Tiles with two kinds of practice then ask which kind.
 const KIND_BLURB = {
   recall: 'Recall real things they did, with clues and the family\u2019s photos.',
-  category: 'Memory test: add a word to a list, or name things in a group, such as animals or fruit.',
+  category: 'Word groups: add a word to a list, or name things in a group, such as animals or fruit.',
   listen: 'Foxy reads a short story, then asks questions about it.',
   explain: 'Explain how to do something everyday, step by step.',
   object: 'Name a picture, say its group and what it\u2019s used for.',
@@ -1555,7 +1555,7 @@ function categoryEditor(it) {
   draw();
   const main = [field('What does Foxy ask?', kind, it.kind === 'add' ? '' : `"I'll give you the name of a group. Tell me all the things you can think of in it."`), body];
   const extra = [
-    field('Introduction', bind(it, 'intro', h('textarea', { rows: 2 })), `Leave blank for Foxy\u2019s short introduction (\u201cThis is a memory test\u2026\u201d). It is said before the first group of each kind.`),
+    field('Introduction', bind(it, 'intro', h('textarea', { rows: 2 })), `Leave blank for Foxy\u2019s short introduction (\u201cThis is word groups\u2026\u201d). It is said before the first group of each kind.`),
     field("Foxy's question", txt(it, 'prompt'), 'Leave blank to let Foxy ask in the usual way.'),
     field('Simpler wording', txt(it, 'simple_prompt'), `Said if ${name} says “I don’t understand”.`),
   ];

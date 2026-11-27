@@ -178,7 +178,7 @@ function renderWaitingForGrownup() {
   mount(
     h('h1', { class: 'hello' }, `Hi ${home.name}`),
     h('p', {}, 'Foxy helps you practise what your speech therapist and teachers are working on with you.'),
-    h('p', {}, 'A grown-up needs to finish setting up first. Please ask them, then tap the button.'),
+    h('p', {}, 'Someone from your support team needs to finish setting up first. Please ask them, then tap the button.'),
     h('button', { class: 'btn btn-primary', onclick: boot }, 'I am ready'),
   );
 }

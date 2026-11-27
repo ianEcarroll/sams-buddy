@@ -319,11 +319,11 @@ const nm = (group, accepted, target = 3) => ({ kind: 'name', group, target, acce
 const ad = (group, given, accepted) => ({ kind: 'add', group, given, accepted });
 
 LIBRARY.push(
-  category('food-name', 'Memory test: food and drink', ['groups', 'food'], [nm('vegetables', VEG), nm('drinks', DRINKS), nm('things in a kitchen', KITCHEN)]),
-  category('move-name', 'Memory test: things that move and play', ['groups'], [nm('vehicles', VEHICLES), nm('sports', SPORTS), nm('musical instruments', INSTRUMENTS)]),
-  category('home-name', 'Memory test: at home and school', ['groups', 'home', 'school'], [nm('clothes', CLOTHES), nm('furniture', FURNITURE), nm('things for school', SCHOOL)]),
-  category('food-add', 'Memory test: add a word (food and drink)', ['groups', 'food'], [ad('vegetables', ['carrot', 'potato', 'peas'], VEG), ad('drinks', ['water', 'milk', 'juice'], DRINKS), ad('things in a kitchen', ['kettle', 'toaster', 'fridge'], KITCHEN)]),
-  category('everyday-add', 'Memory test: add a word (everyday things)', ['groups'], [ad('vehicles', ['car', 'bus', 'train'], VEHICLES), ad('musical instruments', ['guitar', 'piano', 'drums'], INSTRUMENTS), ad('things for school', ['pen', 'ruler', 'book'], SCHOOL)]),
+  category('food-name', 'Word groups: food and drink', ['groups', 'food'], [nm('vegetables', VEG), nm('drinks', DRINKS), nm('things in a kitchen', KITCHEN)]),
+  category('move-name', 'Word groups: things that move and play', ['groups'], [nm('vehicles', VEHICLES), nm('sports', SPORTS), nm('musical instruments', INSTRUMENTS)]),
+  category('home-name', 'Word groups: at home and school', ['groups', 'home', 'school'], [nm('clothes', CLOTHES), nm('furniture', FURNITURE), nm('things for school', SCHOOL)]),
+  category('food-add', 'Word groups: add a word (food and drink)', ['groups', 'food'], [ad('vegetables', ['carrot', 'potato', 'peas'], VEG), ad('drinks', ['water', 'milk', 'juice'], DRINKS), ad('things in a kitchen', ['kettle', 'toaster', 'fridge'], KITCHEN)]),
+  category('everyday-add', 'Word groups: add a word (everyday things)', ['groups'], [ad('vehicles', ['car', 'bus', 'train'], VEHICLES), ad('musical instruments', ['guitar', 'piano', 'drums'], INSTRUMENTS), ad('things for school', ['pen', 'ruler', 'book'], SCHOOL)]),
 );
 
 // ---- Memory: listen to a short story, then answer questions about it.
@@ -383,7 +383,7 @@ LIBRARY.push(
     day('At the weekend', 'at the weekend', 4),
   ]),
   remember('out', 'Remember my day: trips and special days', ['out and about', 'holidays'], [
-    day('A trip out', 'on our last trip out'),
+    day('A trip out', 'on your last trip out'),
     day('A special day', 'on a special day, like a birthday or a party', 3),
     day('In the holidays', 'in the holidays', 4),
   ]),

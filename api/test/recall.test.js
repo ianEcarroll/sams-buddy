@@ -82,7 +82,7 @@ test('a list older than 7 days is ignored: general clues, no old photo', async (
   ({ turn } = await say(state, 'Hmm'));
   assert.equal(turn.lines.at(-1).text, 'Think about the weekend. Where did you go, or who were you with?');
   ({ turn } = await say(state, 'Um'));
-  assert.equal(turn.lines.at(-1).text, 'Think about the morning, the afternoon and the evening.');
+  assert.equal(turn.lines.at(-1).text, 'At the weekend, I ___.');
   ({ turn } = await say(state, 'I forget'));
   assert.deepEqual(turn.ui.images, [], 'no photo from an old list');
   assert.equal(state.item.recalled[0].known, -1, 'old list not used for matching either');

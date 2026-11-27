@@ -426,6 +426,9 @@ function interestClue(state) {
   return `Did you do any of the things you enjoy, like ${pick.join(' or ')}?`;
 }
 
+// "on Saturday" → "On Saturday", for sentence starters.
+const whenPhrase = (item) => { const w = String(item.when || 'in the last few days').trim(); return w[0].toUpperCase() + w.slice(1); };
+
 // Clues for one listed memory not yet remembered: broad → specific → photo (or Buddy says it, if there's no photo).
 function recallCue(state, level) {
   const it = state.item;
@@ -444,10 +447,11 @@ function recallCue(state, level) {
     if (ev?.specific_clue) return ev.specific_clue;
     const hint = interestClue(state);
     if (!ev && hint) { it.usedInterests = true; return hint; }
-    return 'Think about the morning, the afternoon and the evening.';
+    return `${whenPhrase(item)}, I ___.`;
   }
   if (ev?.image_id) { it.showImage = ev.image_id; return 'Look at this photo. What were you doing?'; }
-  return ev ? `You ${ev.event}. Can you tell me about it?` : "That's okay. Tell me anything else you remember.";
+  // Without the family's list Foxy cannot know what happened, so the strongest help is two ways to start.
+  return ev ? `You ${ev.event}. Can you tell me about it?` : `You could start like this: "${whenPhrase(item)}, I went…" or "${whenPhrase(item)}, I saw…"`;
 }
 
 // Think: "why" and "plan B" are practised but optional. The plan's goal is to notice and ask (problem + action), so
@@ -577,10 +581,23 @@ function hintLine(state, by) {
 
 function exampleLine(state, by) {
   if (state.mode === 'steps') return stepsHelp(state, 'show_me', 'Show me an example', 'button');
-  if (state.mode === 'listen') return listenHelp(state, 'need_help', 'Show me an example', 'button')[0];
+  if (state.mode === 'listen') return listenHelp(state, 'show_me', 'Show me an example', 'button')[0];
   const el = state.mode === 'conversation' ? convFocus(state) : (state.item.phase === 'clarify' ? 'clarify' : (nextMissing(state) || (state.mode === 'think' ? state.item.focus : null)));
   if (!el) return line('You have already done everything for this one.', 'feedback');
+  // Already modelled this part: show a whole answer instead of repeating the same line.
+  if (state.mode !== 'conversation' && state.mode !== 'recall' && state.mode !== 'category' && state.item.modelGiven[el]) return wholeExample(state, by);
   return giveCue(state, el, by, 3);
+}
+
+// "Show me an example" after a model: every part still missing, said together as one answer.
+function wholeExample(state, by) {
+  const it = state.item;
+  const item = curItem(state);
+  const els = it.elements.filter((e) => e !== 'order' && !it.met[e] && !isOptional(state, e));
+  const parts = (els.length ? els : [it.focus]).map((e) => String(cueLadder(state.mode, state.activity, item, e)[3] || '').replace(/^You could say: "?|"$/g, '').trim()).filter(Boolean);
+  for (const e of els) { it.supportGiven.push({ el: e, level: 3, text: 'Whole example answer', by }); it.modelGiven[e] = true; }
+  it.anySupport = true;
+  return line(`Here is a whole answer: "${parts.join(' ')}" Now you try, in your own words.`, 'model', { level: LEVELS[3] });
 }
 
 /** Buttons on the practice screen. */
@@ -604,6 +621,9 @@ export function control(state, action) {
     case 'dont_understand':
       return { state, turn: makeTurn(state, handleHelp(state, 'dont_understand', "I don't understand", 'button')) };
     case 'example':
+      // Follow on Screen: an example is Foxy doing the step (there is no spoken answer to model).
+      if (state.mode === 'follow') return { state, turn: followTurn(state, followNextSupport(state, 'sam', 3)) };
+      if (state.mode === 'listen') return { state, turn: makeTurn(state, listenHelp(state, 'show_me', 'Show me an example', 'button')) };
       return { state, turn: makeTurn(state, [exampleLine(state, 'sam')]) };
     case 'think':
       state.paused = true;
@@ -730,7 +750,7 @@ function storyLines(state) {
     const lead = itemLead(state);
     if (lead) lines.push(line(lead, 'intro'));
     if (item.intro) lines.push(line(item.intro, 'intro'));
-    lines.push(line(item.title ? `This story is called: ${item.title}.` : 'Here is a story. Listen carefully.', 'intro'));
+    lines.push(line(item.title ? `This story is called: ${String(item.title).replace(/^story:\s*/i, '')}.` : 'Here is a story. Listen carefully.', 'intro'));
     if (questionsOf(state).some((q) => q?.kind === 'title')) lines.push(line("At the end, I'll ask you to give the story a new name.", 'intro'));
   } else lines.push(line('Here is the story again. Listen carefully.', 'intro'));
   lines.push(line(item.story || '', 'story'));
@@ -815,10 +835,12 @@ function endRound(state, lines) {
   const right = Object.values(L.results).filter((r) => r.correct).length;
   const missed = total - right;
   if (!missed) {
-    lines.push(line(L.round === 1 ? `You got all ${total} right. Well done!` : `That's all ${total} right now. Well done!`, 'feedback'));
+    lines.push(line(L.round === 1 ? 'You answered every question. You remembered the story well.' : 'You have answered every question now.', 'feedback'));
     return { state, turn: listenTurn(state, finishListen(state, lines)) };
   }
-  lines.push(line(right ? `You got ${right} out of ${total} right. Good listening.` : 'Those questions were tricky.', 'feedback'));
+  // Name what was remembered (in their words), not a score.
+  const got = Object.values(L.results).filter((r) => r.correct).map((r) => `"${r.answer}"`);
+  lines.push(line(got.length ? `You remembered ${got.length > 1 ? `${got.slice(0, -1).join(', ')} and ${got.at(-1)}` : got[0]}.` : 'Those questions were tricky.', 'feedback'));
   if (L.round >= listenRounds(state)) {
     lines.push(line('Thanks for listening so carefully.', 'feedback'));
     return { state, turn: listenTurn(state, finishListen(state, lines)) };
@@ -859,6 +881,13 @@ function listenHelp(state, kind, text, source) {
   if (L.phase !== 'question') return state.lastLines.length ? state.lastLines : [line('Take your time.', 'ack')];
   const q = questionsOf(state)[L.queue[L.pos]];
   if (kind === 'repeat') return [line('Sure.', 'ack'), ...state.lastLines];
+  const answer = (q.answers || [])[0] || q.answer;
+  if (kind === 'show_me' && answer) {
+    L.helped = true;
+    it.anySupport = true;
+    it.supportGiven.push({ el: `q_${L.queue[L.pos]}`, level: 3, text: `Answer shown: ${answer}`, by: 'sam' });
+    return [line(`The answer is: ${answer}. Now you say it.`, 'model', { level: LEVELS[3] }), line(q.question, 'prompt')];
+  }
   L.helped = true;
   it.anySupport = true;
   it.supportGiven.push({ el: `q_${L.queue[L.pos]}`, level: 1, text: q.clue || 'Think back to the story.', by: source === 'button' ? 'sam' : 'buddy' });
@@ -884,7 +913,7 @@ function completeItem(state, newly) {
   const els = (it.anySupport && state.mode !== 'think') || it.praised ? newly : met;
   if (it.praised && !els.length) lines.push(line('Well done.', 'feedback'));
   else if (els.length) lines.push(line(`You ${describe(state.mode, els, item)}.`, 'feedback'));
-  else if (state.mode === 'think') lines.push(line('Thanks for having a go. When something is not how you expect, you can always stop, think, and ask a grown-up.', 'feedback'));
+  else if (state.mode === 'think') lines.push(line('Thanks for having a go. When something is not how you expect, you can always stop, think, and ask someone you trust.', 'feedback'));
   else lines.push(line('Thanks for working on that one.', 'feedback'));
 
   // Fading: remember how much support each element needed.
@@ -1235,14 +1264,14 @@ function followWrong(state, cur) {
 }
 
 // Next support for the current step: hear it again → see it on screen → Buddy shows it.
-function followNextSupport(state, by) {
+function followNextSupport(state, by, force = null) {
   const it = state.item;
   const cur = followCur(state);
   if (!cur) return [];
   const steps = followSteps(curItem(state));
   const text = followStepText(cur.step, cur.i ? steps[cur.i - 1].token : null);
   const top = Math.max(0, ...it.supportGiven.filter((s) => s.el === cur.el).map((s) => s.level));
-  const level = Math.min(3, it.supportGiven.some((s) => s.el === cur.el) ? top + 1 : 1);
+  const level = force ?? Math.min(3, it.supportGiven.some((s) => s.el === cur.el) ? top + 1 : 1);
   it.anySupport = true;
   it.phase = 'act';
   if (level === 1) {
@@ -1421,8 +1450,8 @@ function stepsBeginQuestions(state) {
   const S = state.item.steps;
   S.pos = 0;
   if (!stepsAsk(state)) {
-    if (stepsRetell(state)) return stepsAskRetell(state, 'Good listening.');
-    return stepsComplete(state, [line('Good listening. Well done.', 'feedback')]);
+    if (stepsRetell(state)) return stepsAskRetell(state, 'That was every step.');
+    return stepsComplete(state, [line('You listened to every step.', 'feedback')]);
   }
   return [line("Let's see what you remember.", 'intro'), ...stepAsk(state)];
 }

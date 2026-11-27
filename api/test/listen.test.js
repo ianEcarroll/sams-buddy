@@ -22,7 +22,7 @@ test('all five right first time ends the item with full marks', async () => {
   let { turn } = control(state, 'start_questions');
   assert.match(texts(turn).at(-1), /^The first question is: Where does the story happen\?$/);
   for (const a of ['In Neverland', 'a silver thimble', 'Peter Pan', 'a crow', 'she glows gold']) ({ turn } = await say(state, a));
-  assert.ok(texts(turn).some((t) => /all 5 right/.test(t)));
+  assert.ok(texts(turn).some((t) => /You answered every question/.test(t)));
   assert.equal(state.done, true);
   const r = state.completed[0];
   assert.equal(r.score_correct, 5); assert.equal(r.score_first, 5); assert.equal(r.support_code, 'I');
@@ -33,7 +33,8 @@ test('misses are counted, retry replays the story and asks only the missed ones'
   control(state, 'start_questions');
   let turn;
   for (const a of ['Neverland', 'a hat', 'Peter', 'a dog', 'she glows']) ({ turn } = await say(state, a));
-  assert.ok(texts(turn).some((t) => t === 'You got 3 out of 5 right. Good listening.'));
+  assert.ok(texts(turn).some((t) => /^You remembered "Neverland"/.test(t)), 'names what was remembered');
+  assert.ok(!texts(turn).some((t) => /out of/.test(t)), 'no score');
   assert.equal(turn.expect, 'choice');
   ({ turn } = control(state, 'listen_retry'));
   assert.ok(texts(turn).some((t) => /story again/.test(t)));
@@ -42,7 +43,7 @@ test('misses are counted, retry replays the story and asks only the missed ones'
   assert.match(texts(turn).at(-1), /^The first question is: What was Tinker Bell's favourite thing\?$/);
   await say(state, 'the thimble');
   ({ turn } = await say(state, 'a crow'));
-  assert.ok(texts(turn).some((t) => /all 5 right now/.test(t)));
+  assert.ok(texts(turn).some((t) => /answered every question now/.test(t)));
   const r = state.completed[0];
   assert.equal(r.score_first, 3); assert.equal(r.score_correct, 5);
   assert.equal(r.support_code, 'M');
@@ -248,4 +249,13 @@ test('first reading: title, then the story (never "Here is the story again"); a 
   control(state, 'start_questions');
   for (const a of ['Neverland', 'a thimble', 'Peter', 'a dog', 'glows']) await say(state, a);
   assert.ok(texts(control(state, 'listen_retry').turn).includes('Here is the story again. Listen carefully.'));
+});
+
+test('Show me an example gives the answer; library story titles are not read twice', async () => {
+  const { state } = createSession({ activity: act() });
+  control(state, 'start_questions');
+  const { turn } = control(state, 'example');
+  assert.match(texts(turn)[0], /^The answer is: /);
+  const lib = { ...act(), content: { items: [{ ...structuredClone(STARTER_STORIES[0].items[0]), title: 'Story: Ayo’s drum solo' }] } };
+  assert.ok(texts(createSession({ activity: lib }).turn).includes('This story is called: Ayo’s drum solo.'));
 });
