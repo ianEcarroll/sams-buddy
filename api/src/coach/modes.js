@@ -151,7 +151,7 @@ function taskElements(item) {
 const task = {
   label: 'Listen',
   tagline: 'Understand and follow instructions',
-  activityName: 'Practise a Task',
+  activityName: 'Listen to Instructions',
   defaultGoal: 'Retell the job instructions in order; ask for clarification when needed',
   movie: true,
   cueCard: (item) => (item.steps || []).map((_, i, a) => cap(ordinal(i, a.length))),
@@ -236,7 +236,7 @@ const conversation = {
 const listen = {
   label: 'Memory',
   tagline: 'Remember and recall',
-  activityName: 'Listen to a Story',
+  activityName: 'Remember a Story',
   defaultGoal: 'Listen to a story and answer questions about it',
   cueCard: () => null,
   elements: (item) => (item.questions || []).map((_, i) => `q_${i}`),
