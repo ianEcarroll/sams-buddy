@@ -51,7 +51,7 @@ test('Think: cues link to what Sam said and to the situation', async () => {
   const t1 = await respond(state, { text: 'Go to the reception' }, { judge: act });
   const said1 = t1.turn.lines.map((l) => l.text).join(' | ');
   assert.ok(!/Is this what you expected/.test(said1), said1);
-  assert.ok(/Now let's look at the situation/.test(said1) && /Is everything here the way you expected/.test(said1), said1);
+  assert.ok(/Good idea\. Now look at the situation again\. What is not right\?/.test(said1), said1);
   const none = async () => ({ met: {}, help: 'dont_understand', unsafe: false, relevant: false });
   const t2 = await respond(state, { text: "I don't know what you mean" }, { judge: none });
   const said2 = t2.turn.lines.map((l) => l.text).join(' | ');

@@ -487,12 +487,22 @@ function fadeStart(state, el) {
 }
 
 // One cue, one element, one step stronger than last time.
+// The last question Foxy asked in this Talk topic (from its last reply, else the opener).
+function lastFoxyQuestion(state, item) {
+  const said = [item.opener, ...(state.item.conv?.turns || []).map((t) => t.reply)].filter(Boolean);
+  for (const t of said.reverse()) {
+    const qs = String(t).match(/[^.!?]*\?/g);
+    if (qs?.length) return qs.at(-1).trim();
+  }
+  return null;
+}
+
 // Think: the same question as the cue ladder, but plain and tied to this situation, for "I don't understand".
 function thinkSimpler(state, item) {
   const it = state.item;
   const el = nextMissing(state) || it.focus;
   const scene = String(item.scenario || '').trim();
-  if (el === 'problem') return `${scene ? `${scene} ` : ''}Is something not the way you expected?`;
+  if (el === 'problem') return `${scene ? `${scene} ` : ''}${String(item.first_clue || '').trim() || 'What is not right?'}`;
   if (el === 'reason' && it.met.action?.evidence) return `You said: "${it.met.action.evidence}". How would that help?`;
   if (el === 'backup') return 'What could you do if that did not work?';
   return MODES.think.simplePrompt(item);
@@ -506,8 +516,14 @@ function giveCue(state, el, by, forceLevel = null) {
   let text = state.mode === 'recall' ? recallCue(state, level) : cueLadder(state.mode, state.activity, state.mode === 'category' ? categoryCueItem(state, item) : item, el)[level];
   if (state.mode === 'think' && level === 0) {
     // Going back to an earlier step: link it to what Sam just said, and name his answer when asking "why".
-    if (el === 'problem' && it.met.action) text = `Good idea. Now let's look at the situation. ${text}`;
+    // He already said what he'd do, so "If you are unsure, ASK" would not fit: go straight to the concrete question.
+    if (el === 'problem' && it.met.action) text = `Good idea. Now look at the situation again. ${String(item.first_clue || '').trim() || 'What is not right?'}`;
     if (el === 'reason' && it.met.action?.evidence) text = `You said: "${it.met.action.evidence}". Why do you think that is a good idea?`;
+  }
+  // Talk: the first cue repeats Foxy's last question, so it is clear what to answer.
+  if (state.mode === 'conversation' && el === 'turn' && level === 0 && text === 'Take your time.') {
+    const q = lastFoxyQuestion(state, item);
+    if (q) text = `Take your time. ${q}`;
   }
   it.supportGiven.push({ el, level, text, by });
   it.anySupport = true;

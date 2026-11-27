@@ -48,7 +48,7 @@ const object = {
   elements: () => ['name', 'category', 'function'],
   elementLabel: { name: 'Name', category: 'Group', function: 'Use' },
   cueCardIndex: (el) => ({ name: 0, category: 1, function: 2 }[el]),
-  prompt: (item) => item.prompt || "What is this? Tell me what it's called, what group it belongs to, and what it's used for.",
+  prompt: (item) => item.prompt || 'What is it? What group is it in? What is it used for?',
   simplePrompt: (item) => item.simple_prompt || "Look at the picture. What is it? What do we use it for?",
   defaultCues: {
     name: ['Start with its name.', 'What is it called?', 'It is a ___.', 'It is a {name}.'],
@@ -105,7 +105,8 @@ const story = {
     get: (t, k) => t[k] ?? (String(k).startsWith('event_') ? `Event ${Number(String(k).slice(6)) + 1}` : k),
   }),
   cueCardIndex: storyCardIndex,
-  prompt: (item) => item.prompt || `When you are ready, tell me the story. Say ${whoList(item).length ? 'who was there, ' : ''}where it happens, then what happens first, next, then and finally${item.outcome?.trim() ? ', and how it ended' : ''}.`,
+  // Short questions, one idea each, instead of one long sentence with seven parts.
+  prompt: (item) => item.prompt || `When you are ready, tell me the story. ${whoList(item).length ? 'Who was there? ' : ''}Where were they? What happened, from first to last?${item.outcome?.trim() ? ' How did it end?' : ''}`,
   simplePrompt: (item) => item.simple_prompt || 'Look at the pictures. Tell me what happens.',
   defaultCues: {
     who: ['Remember to say who was there.', 'Who was there?', '___ was there.', '{whoModel} {whoVerb} there.'],
@@ -196,9 +197,11 @@ const conversation = {
   elementLabel: { turn: 'Comment', question: 'Question' },
   cueCardIndex: () => null,
   prompt: (item) => item.opener,
-  simplePrompt: (item) => item.simple_prompt || `We're talking about ${item.topic}. What do you think about it?`,
+  simplePrompt: (item) => item.simple_prompt || 'Tell me one thing you like, or one thing you did.',
   defaultCues: {
-    turn: ["Let's keep talking about {topic}.", 'What do you think about {topic}?', 'I think ___.', '{example}'],
+    // The topic name is never pasted into a cue ("favourite subject" does not fit a sentence). The first cue repeats
+    // Foxy's last question (added in the engine), the next ones are concrete.
+    turn: ['Take your time.', 'Tell me one thing you like, or one thing you did.', 'I like ___ because ___.', '{example}'],
     // Levels 0–1 hold several wordings; one is picked at random each time so the invitation doesn't sound repetitive.
     question: [
       [
@@ -210,10 +213,10 @@ const conversation = {
         "I'd love to hear your question.",
       ],
       [
-        'What could you ask me about {topic}?',
-        'What would you like to know about my {topic}?',
-        'Is there something about {topic} you want to ask me?',
-        'You could find out what I think about {topic}.',
+        'What could you ask me about what I just said?',
+        'You could ask me the same question I asked you.',
+        'What would you like to know about what I said?',
+        'Ask me one thing about what I said.',
       ],
       'Do you ___?',
       'You could ask: "{exampleQuestion}"',
@@ -221,8 +224,8 @@ const conversation = {
   },
   vars: (item) => ({
     topic: item.topic,
-    example: item.example_comment || `You could say: "I like ${item.topic} too."`,
-    exampleQuestion: item.example_question || `What do you like about ${item.topic}?`,
+    example: item.example_comment || 'You could say: "I like that too, because it is fun."',
+    exampleQuestion: item.example_question || 'What about you?',
   }),
   achieved: { turn: 'made a comment that fits the topic', question: 'asked a follow-up question', connection: 'connected it to your own experience' },
   evidenceLabel: { turn: 'Comment', question: 'Question', connection: 'Connection' },
@@ -270,12 +273,16 @@ const think = {
   prompt: (item) => item.question || 'What would you do?',
   simplePrompt: (item) => item.simple_prompt || 'Something is not how you expected. What could you do?',
   defaultCues: {
-    problem: ['Stop and think. Is everything here the way you expected?', 'What is different from what you expected?', 'The problem is ___.', 'The problem is {problem}.'],
-    action: ['STOP. THINK. Is something unexpected? If you are unsure, ASK.', 'What could you do, or who could you ask?', 'I would ___.', 'I would {action}.'],
+    // Rung 1 is the team's cue from Sam's plan, word for word. Rung 2 is concrete: the team's own clue about this
+    // situation if they wrote one ("Can you see your trainer?"), else a plain question. The model shows the whole
+    // Goal 1 skill: what is wrong, and asking.
+    problem: ['STOP. THINK. Is this expected? If you are unsure, ASK.', '{firstClue}', 'The problem is ___.', 'The problem is {problem}. So I would {action}.'],
+    action: ['You noticed something is wrong. What could you do? If you are unsure, ask.', 'Who could you ask for help here?', 'I would ask ___.', 'I would {action}.'],
     reason: ['Why do you think that would be a good idea?', 'How would that help you?', 'That would help because ___.', 'That would help because {reason}.'],
     backup: ["What could you do if that doesn't work?", 'If that does not work, who else could you ask?', "If that doesn't work, I would ___.", "If that doesn't work, I would {backup}."],
   },
   vars: (item) => ({
+    firstClue: String(item.first_clue || '').trim() || 'Look at the situation again. What is not right?',
     problem: item.problem || 'something is not as expected',
     action: (item.good_actions || [])[0] || 'ask an adult I trust',
     reason: item.reason_example || 'they can help me find out what to do',
