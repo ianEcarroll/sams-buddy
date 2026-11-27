@@ -848,7 +848,7 @@ export const STARTER_SCENARIOS = {
   goal: 'Notice something is not as expected and say a safe thing to do (asking a trusted adult counts). Why, and what to do if it does not work, are practised but optional',
   items: [
     {
-      title: 'Trainer not at the gym',
+      title: 'Trainer not at the gym', first_clue: 'Can you see your trainer?',
       scenario: "You arrive at the gym for your 4 o'clock session. You wait by the door, where your trainer usually meets you. It is now ten past four.",
       problem: 'the trainer is not there',
       good_actions: ['ask the person at the front desk', 'wait a few minutes, then ask a member of staff', 'call or message my parent', 'check whether the session time changed'],
@@ -857,7 +857,7 @@ export const STARTER_SCENARIOS = {
       unsafe: ['leave on my own without telling anyone', 'go off with someone I do not know'],
     },
     {
-      title: 'Library door locked',
+      title: 'Library door locked', first_clue: 'Can you see your class?',
       scenario: 'Your teacher says the class is going to the library. You walk there. The door is closed, the lights are off, and it is very quiet.',
       problem: 'the library is locked and the class is not there',
       good_actions: ['go back to the classroom', 'ask a teacher', 'go to the school office and ask', 'ask a classmate where the class went'],
@@ -866,7 +866,7 @@ export const STARTER_SCENARIOS = {
       unsafe: ['leave the school', 'wander around on my own for a long time'],
     },
     {
-      title: 'Wrong drink at the café',
+      title: 'Wrong drink at the café', first_clue: 'Is that a hot chocolate?',
       scenario: 'You order a hot chocolate at a café. The waiter puts a glass on your table and walks away. It is orange and cold.',
       problem: 'they brought the wrong drink',
       good_actions: ['politely tell the person who served me', 'say "Excuse me, I ordered a hot chocolate"', 'ask the staff at the counter'],

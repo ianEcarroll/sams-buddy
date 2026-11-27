@@ -27,7 +27,7 @@ const task = (id, title, level, tags, steps) => ({
   plan_goal: 'instructions',
   level, // a first guide only; the therapist decides what is easy or hard for each learner
   tags,
-  age: '10–20',
+  age: '13–20',
   source: LIBRARY_SOURCE,
   content: { items: [{ title, steps }], skill: 'understanding', run: 'learn' },
 });
@@ -118,8 +118,8 @@ export const LIBRARY = [
 // and ideas that are NOT safe (flagged for the team if the learner says them).
 const think = (id, title, tags, items) => ({
   id: `think-${id}`, mode: 'think', title,
-  goal: 'Notice the problem, say a safe thing to do and why, and what to do if it does not work',
-  plan_goal: 'unexpected', level: null, tags, age: '10–20', source: LIBRARY_SOURCE,
+  goal: 'Notice something is not as expected and say a safe thing to do (asking a trusted adult counts)',
+  plan_goal: 'unexpected', level: null, tags, age: '13–20', source: LIBRARY_SOURCE,
   content: { items },
 });
 const sit = (title, scenario, problem, good_actions, reason_example, backup_example, unsafe) => ({ title, scenario, problem, good_actions, reason_example, backup_example, unsafe });
@@ -156,7 +156,7 @@ LIBRARY.push(
 const talk = (id, title, tags, items) => ({
   id: `talk-${id}`, mode: 'conversation', title,
   goal: 'Relevant comments, personal connections and follow-up questions',
-  plan_goal: 'conversation', level: null, tags, age: '10–20', source: LIBRARY_SOURCE,
+  plan_goal: 'conversation', level: null, tags, age: '13–20', source: LIBRARY_SOURCE,
   content: { items },
 });
 const top = (topic, opener, example_comment, example_question) => ({ topic, opener, example_comment, example_question });
@@ -230,7 +230,7 @@ LIBRARY.push(
 const explain = (id, title, tags, items) => ({
   id: `explain-${id}`, mode: 'explain', title,
   goal: 'Explain how I do something clearly and completely',
-  plan_goal: 'other', level: null, tags, age: '10–20', source: LIBRARY_SOURCE,
+  plan_goal: 'other', level: null, tags, age: '13–20', source: LIBRARY_SOURCE,
   content: { items },
 });
 const pt = (text, question, starter, model) => ({ text, question, starter, model });
@@ -312,7 +312,7 @@ const SCHOOL = ['pen', 'pencil', 'ruler', 'rubber', 'eraser', 'book', 'bag', 'ca
 const category = (id, title, tags, items) => ({
   id: `memory-${id}`, mode: 'category', title,
   goal: items[0].kind === 'add' ? 'Listen to a list of words and add one that fits' : 'Name things that belong in a group',
-  plan_goal: 'other', level: null, tags, age: '10–20', source: LIBRARY_SOURCE,
+  plan_goal: 'other', level: null, tags, age: '13–20', source: LIBRARY_SOURCE,
   content: { items },
 });
 const nm = (group, accepted, target = 3) => ({ kind: 'name', group, target, accepted });
@@ -330,7 +330,7 @@ LIBRARY.push(
 const story = (id, title, tags, text, questions) => ({
   id: `story-${id}`, mode: 'listen', title,
   goal: 'Listen to a story and answer questions about it',
-  plan_goal: 'other', level: null, tags, age: '10–20', source: LIBRARY_SOURCE,
+  plan_goal: 'other', level: null, tags, age: '13–20', source: LIBRARY_SOURCE,
   content: { items: [{ title, story: text, questions }] },
 });
 const qn = (question, answers, clue) => ({ question, answers, clue });
@@ -365,7 +365,7 @@ const NUM_WORDS = ['zero', 'one', 'two', 'three', 'four', 'five'];
 const remember = (id, title, tags, items) => ({
   id: `remember-${id}`, mode: 'recall', title,
   goal: 'Remember real things I did, with as few clues as possible',
-  plan_goal: 'narrative', level: null, tags, age: '10–20', source: LIBRARY_SOURCE,
+  plan_goal: 'narrative', level: null, tags, age: '13–20', source: LIBRARY_SOURCE,
   content: { items },
 });
 const day = (title, when, target = 3) => ({ title, when, target });
@@ -400,7 +400,7 @@ LIBRARY.push(
 const tell = (id, title, level, tags, items) => ({
   id: `tell-${id}`, mode: 'story', title,
   goal: 'Who and where, events in order (First → Next → Then → Finally) and how it ended',
-  plan_goal: 'narrative', level, tags, age: '10–20', source: LIBRARY_SOURCE,
+  plan_goal: 'narrative', level, tags, age: '13–20', source: LIBRARY_SOURCE,
   content: { items },
 });
 const pic = (title, who, setting, events, pictures, outcome, target_words = []) => ({
@@ -431,7 +431,7 @@ LIBRARY.push(
 const object = (id, title, tags, items) => ({
   id: `describe-${id}`, mode: 'object', title,
   goal: 'Name, group and use in one sentence',
-  plan_goal: 'other', level: null, tags, age: '10–20', source: LIBRARY_SOURCE,
+  plan_goal: 'other', level: null, tags, age: '13–20', source: LIBRARY_SOURCE,
   content: { items },
 });
 const obj = (pic, name, alts, category, categories, use, keywords) => ({ image_id: `sym:${pic}`, name, name_alternatives: alts, category, category_alternatives: categories, function: use, function_keywords: keywords });
@@ -489,7 +489,7 @@ LIBRARY.push(
 const follow = (id, title, level, tags, items) => ({
   id: `follow-${id}`, mode: 'follow', title,
   goal: 'Listen to the whole instruction, then follow the steps in order',
-  plan_goal: 'instructions', level, tags, age: '10–20', source: LIBRARY_SOURCE,
+  plan_goal: 'instructions', level, tags, age: '13–20', source: LIBRARY_SOURCE,
   content: { items },
 });
 const fo = (title, tokens, steps) => ({ title, tokens, steps });
@@ -561,6 +561,95 @@ const SET_LEVELS = {
   'explain-routines': 'Easy', 'explain-things': 'Medium', 'explain-out': 'Medium', 'explain-life': 'Harder',
 };
 for (const it of LIBRARY) if (SET_LEVELS[it.id]) it.level = SET_LEVELS[it.id];
+
+// ---- Sets written for 13 to 20 year olds (student review, 27 Nov): college, work, phones, money and friends.
+// Think situations describe what the learner sees or hears without naming what is wrong, and give the team a concrete
+// first clue ("What does the screen say?").
+const sitc = (first_clue, ...rest) => ({ ...sit(...rest), first_clue });
+LIBRARY.push(
+  think('college-work', 'Think: surprises at college and work', ['work', 'college'], [
+    sitc('What did your manager say about the rota?', 'Shift changed', 'You arrive at work at 9 for your Saturday shift. Your manager looks surprised and says, "You’re on the rota for Sunday this week."', 'my shift was changed and I did not know', ['ask my manager to show me the rota', 'ask what I should do today', 'check my messages for a new rota', 'call a parent to tell them'], 'my manager can tell me when I need to work', 'ask another member of staff or my job coach', ['walk out without saying anything', 'argue loudly with my manager']),
+    sitc('What does the sign on the door say?', 'Room changed', 'You go to room B4 for your Tuesday class. There is a sign on the door: "Today: room C12".', 'my class has moved to another room', ['go to room C12', 'ask a member of staff where C12 is', 'check the college app or my timetable'], 'the sign tells me where my class is today', 'ask at reception', ['go home without telling anyone', 'wait outside B4 for the whole lesson']),
+    sitc('Do you know what "the cages" are?', 'An instruction I do not understand', 'Your supervisor says, "Can you sort the stock in the back, then do the cages?" Then she walks away. You have never heard of the cages.', 'I do not understand part of the instruction', ['ask what the cages are', 'ask my supervisor to show me', 'say: could you explain that again, please?'], 'asking means I do the job right', 'ask another colleague or my job coach', ['guess and do something that might be wrong', 'pretend I understood and do nothing']),
+    sitc('What does the screen say?', 'Card does not work', 'You are buying lunch in the canteen. You tap your bank card. The machine beeps and the screen says "Declined".', 'my card did not work', ['try once more', 'pay with cash if I have some', 'politely tell the person at the till and put the food back', 'message a parent'], 'the person at the till sees this a lot and can help', 'ask a member of staff or a friend to help', ['keep tapping again and again while people wait', 'walk off with the food']),
+    sitc('Look at your phone. What does the battery say?', 'Phone almost dead', 'You are in town and need to get home later. You look at your phone. The battery says 3%.', 'my phone is about to run out', ['message a parent now with my plan', 'ask a shop or café if I can charge it', 'turn on low power mode'], 'my family will know my plan even if the phone dies', 'ask a member of staff to help me call home', ['give my phone to a stranger to charge', 'go somewhere new without telling anyone']),
+  ]),
+  think('phones-messages', 'Think: surprises with phones and messages', ['technology', 'friends', 'social'], [
+    sitc('Would a real company ask for your bank details by text?', 'A prize message', 'You get a text from a number you do not know. It says you have won a £500 prize and asks for your bank details.', 'it could be a scam', ['do not reply', 'show a parent or a trusted adult', 'delete or block the number'], 'a trusted adult can check if it is real', 'ask someone at college or my job coach', ['send my bank details', 'click the link']),
+    sitc('Where does the last message say to meet?', 'Plan changed in the group chat', 'Your friends planned to meet at the cinema at 7. At 6 you see new messages in the group chat. The last one says, "See you at the bowling place instead."', 'the meeting place has changed', ['read the messages again', 'ask the group where and when we are meeting now', 'tell my parent the new plan'], 'I need to know where to go', 'call one friend to check', ['go to the cinema anyway without checking', 'go somewhere without telling my family']),
+    sitc('What colour did you order, and what colour is it?', 'Wrong order', 'You ordered a black hoodie online. The parcel arrives. You open it and the hoodie inside is grey.', 'they sent the wrong colour', ['check my order on my phone', 'ask a parent to help me contact the shop', 'use the returns form in the parcel'], 'the shop can send the right one', 'take it back to the shop with the receipt', ['throw it away', 'write angry comments online']),
+    sitc('Have you ever met this person in real life?', 'Someone online wants to meet', 'You play an online game with someone you have never met. Today they ask to meet you in town on Saturday.', 'I do not know this person in real life', ['say no for now', 'tell a parent or a trusted adult', 'block or report them if they keep asking'], 'a trusted adult can help me stay safe', 'report them in the game', ['meet them on my own', 'give them my address']),
+  ]),
+  task('cafe-order', 'Order at a café counter', 'Easy', ['out and about', 'food', 'social'], [
+    s('Join the queue. Look at the menu.', 'queue-to', 'What do you look at while you wait?', 'the menu'),
+    s('Decide what you want before it is your turn.', 'menu', 'When do you decide?', 'before it is my turn', { reasoning: ['Why do you decide before your turn?', 'so I am ready and the queue keeps moving'] }),
+    s('Say hello. Say what you would like.', 'cafe', 'What do you say?', 'hello and what I would like', { independence: ['What could you do if they do not hear you?', 'say it again a bit louder'] }),
+    s('Pay with your card or cash.', 'card', 'How do you pay?', 'with my card or cash'),
+    s('Wait for your order. Say thank you.', 'tray', 'What do you say when you get your order?', 'thank you'),
+  ]),
+  task('self-checkout', 'Pay at a self-checkout', 'Medium', ['out and about', 'money', 'independence'], [
+    s('Take your basket to a free self-checkout.', 'basket', 'Where do you take your basket?', 'a free self-checkout'),
+    s('Scan each item. Wait for the beep.', 'shop', 'What do you wait for after each scan?', 'the beep', { independence: ['What could you do if an item will not scan?', 'ask the assistant for help'] }),
+    s('Put each item in the bagging area.', 'basket-2', 'Where do the items go?', 'the bagging area'),
+    s('Press Pay. Tap your card or put in cash.', 'card', 'How do you pay?', 'tap my card or put in cash', { reasoning: ['Why do you check the total before you pay?', 'to make sure it is right'] }),
+    s('Take your receipt and your shopping.', 'shop-2', 'What do you take at the end?', 'my receipt and my shopping'),
+  ]),
+  task('running-late', 'Tell work I am running late', 'Medium', ['work', 'technology', 'independence'], [
+    s('Open your messages. Find your manager’s name.', 'mobile-phone', 'Whose name do you find?', 'my manager'),
+    s('Write: Sorry, I am running late.', 'mobile-phone-text-message', 'What do you write first?', 'sorry, I am running late', { reasoning: ['Why do you tell them straight away?', 'so they can plan without me'] }),
+    s('Say what time you will arrive.', 'clock', 'What else do you say?', 'what time I will arrive'),
+    s('Read it again. Then press Send.', 'text-mobile-message-to', 'What do you do before you press Send?', 'read it again', { independence: ['What could you do if they do not reply?', 'call them, or tell another member of staff when I arrive'] }),
+  ]),
+  explain('getting-things-done', 'Explain: getting things done', ['independence', 'out and about', 'work'], [
+    { title: 'Booking an appointment by phone', question: 'Tell me how you book an appointment on the phone.', points: [
+      pt('say who I am', 'What do you say first?', 'First I say ___.', 'First I say my name.'),
+      pt('say what appointment I need', 'What do you ask for?', 'Then I say I need ___.', 'Then I say I need an appointment with the doctor.'),
+      pt('listen to the times and choose one', 'How do you pick a time?', 'I listen and ___.', 'I listen to the times and choose one that works.'),
+      pt('repeat the time back and write it down', 'How do you remember it?', 'At the end I ___.', 'At the end I say the time back and write it down.'),
+    ] },
+    { title: 'Using a self-checkout', question: 'Tell me how you use a self-checkout.', points: [
+      pt('scan each item', 'What do you do with each item?', 'First I ___ each item.', 'First I scan each item.'),
+      pt('put the items in the bagging area', 'Where do the items go?', 'Then I put them ___.', 'Then I put them in the bagging area.'),
+      pt('press pay and use a card or cash', 'How do you pay?', 'Then I press ___.', 'Then I press Pay and tap my card.'),
+      pt('ask the assistant if a message comes up', 'What if something goes wrong?', 'If a message comes up, I ___.', 'If a message comes up, I ask the assistant.'),
+    ] },
+    { title: 'Telling a manager I am running late', question: 'Tell me what you do if you are going to be late for work.', points: [
+      pt('message or call as soon as I know', 'When do you tell them?', 'I tell them ___.', 'I tell them as soon as I know.'),
+      pt('say that I am running late', 'What do you say?', 'I say that ___.', 'I say that I am running late.'),
+      pt('say what time I will arrive', 'What else do they need to know?', 'I say I will be there at ___.', 'I say I will be there at ten past nine.'),
+      pt('say sorry when I get there', 'What do you do when you arrive?', 'When I arrive I ___.', 'When I arrive I say sorry.'),
+    ] },
+    { title: 'Ordering food at a counter', question: 'Tell me how you order food at a counter.', points: [
+      pt('wait in the queue and look at the menu', 'What do you do while you wait?', 'While I wait I ___.', 'While I wait I look at the menu.'),
+      pt('decide before it is my turn', 'When do you decide?', 'I decide ___.', 'I decide before it is my turn.'),
+      pt('say clearly what I would like', 'What do you say?', 'I say, "Can I have ___, please?"', 'I say, "Can I have a chicken wrap, please?"'),
+      pt('pay and wait for my order', 'What do you do after you pay?', 'After I pay I ___.', 'After I pay I wait for my order.'),
+    ] },
+  ]),
+  story('first-shift', 'Story: Jordan’s first shift', ['work'],
+    'On Saturday, Jordan started work at the garden centre. His supervisor, Kate, gave him a green T-shirt and a name badge. His first job was to water the plants in the greenhouse. At eleven o’clock, a customer asked where the compost was. Jordan did not know, so he said, "I’ll find out for you," and asked Kate. She showed him aisle 3. At lunch, Jordan ate a cheese sandwich in the staff room. At the end of the day, Kate said he had worked hard, and she put him on the rota for next Saturday.',
+    [qn('Where did Jordan start work?', ['garden centre', 'the garden centre', 'garden center'], 'It is a shop that sells plants.'),
+     qn('What was his supervisor called?', ['Kate'], 'Her name starts with K.'),
+     qn('What was his first job?', ['water the plants', 'watering the plants', 'watering', 'water'], 'He did it in the greenhouse.'),
+     qn('What did Jordan do when he did not know where the compost was?', ['asked Kate', 'asked', 'find out', 'asked his supervisor', 'he asked'], 'He said he would find out, and went to someone.'),
+     qn('Which aisle was the compost in?', ['3', 'three', 'aisle 3', 'aisle three'], 'It is a number between two and four.')]),
+  story('change-of-plan', 'Story: a change of plan', ['friends', 'social'],
+    'Maya and her friends planned to meet outside the cinema at seven o’clock. At six, Maya’s phone buzzed. Her friend Leo wrote in the group chat that the film was sold out. The group decided to go bowling instead. Maya felt a bit annoyed, because she had wanted to see the film. She took a deep breath, told her mum about the new plan and caught the bus to the bowling alley. In the end she got the highest score, and the friends agreed to see the film next week.',
+    [qn('Where did they plan to meet?', ['cinema', 'outside the cinema', 'the cinema'], 'It is where you go to watch a film.'),
+     qn('Why did the plan change?', ['sold out', 'the film was sold out', 'no tickets'], 'There were no tickets left.'),
+     qn('Where did they go instead?', ['bowling', 'bowling alley', 'the bowling alley'], 'You roll a heavy ball there.'),
+     qn('Who did Maya tell about the new plan?', ['her mum', 'mum', 'mom', 'her mom', 'her mother'], 'Someone in her family.'),
+     qn('What happened at the bowling?', ['highest score', 'she got the highest score', 'she won', 'won'], 'Think about her score.')]),
+  story('interview', 'Story: the job interview', ['work'],
+    'Priya had an interview for a job at the library. The night before, she ironed her shirt and wrote down two questions to ask. She arrived ten minutes early and told the receptionist her name. The manager, Mr Hughes, asked why she wanted the job. Priya said she liked books and helping people. When he asked a question she did not understand, she said, "Could you say that another way, please?" He smiled and explained. At the end, Priya asked what the hours would be. Two days later, she got a phone call. She had the job.',
+    [qn('Where was the job?', ['library', 'the library', 'at the library'], 'It is a place full of books.'),
+     qn('How early did Priya arrive?', ['ten minutes', '10 minutes', 'ten minutes early'], 'It was a number of minutes, more than five.'),
+     qn('Why did Priya want the job?', ['books', 'likes books', 'she liked books', 'helping people', 'help people'], 'She said two things she likes.'),
+     qn('What did Priya say when she did not understand?', ['say that another way', 'could you say that another way', 'another way', 'asked him to explain', 'explain'], 'She asked him to say it differently.'),
+     qn('How did she find out she had the job?', ['phone call', 'a phone call', 'call', 'phoned', 'phone'], 'Her phone rang two days later.')]),
+);
+
+for (const [id, level] of [['think-college-work', 'Medium'], ['think-phones-messages', 'Medium'], ['explain-getting-things-done', 'Medium']]) LIBRARY.find((x) => x.id === id).level = level;
 
 export const libraryById = (id) => LIBRARY.find((x) => x.id === id) || null;
 
