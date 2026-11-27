@@ -119,3 +119,15 @@ test('the starter situations describe what Sam sees without naming what is wrong
     assert.ok(!new RegExp(`\\b${it.problem.split(' ').slice(-2).join(' ')}\\b`, 'i').test(it.scenario), `"${it.title}" gives the problem away`);
   }
 });
+
+// ---- "Show me an example" gives something new after a model, and works in every activity.
+test('Show me an example after the model gives a whole answer, not the same line again', async () => {
+  const { control } = await import('../src/coach/engine.js');
+  let { state } = createSession({ activity: gym });
+  await say(state, 'um');
+  control(state, 'hint'); control(state, 'hint');
+  const first = control(state, 'hint').turn.lines.at(-1).text;
+  const ex = control(state, 'example').turn.lines.at(-1).text;
+  assert.notEqual(ex, first);
+  assert.match(ex, /^Here is a whole answer: /);
+});
