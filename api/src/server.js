@@ -752,6 +752,12 @@ adult.put('/activities/:id', wrap(async (req, res) => {
   await q('update activities set mode=$1, title=$2, goal=$3, plan_goal=$4, status=$5, content=$6, updated_at=now() where id=$7 and learner_id=$8', [mode, title.trim(), goal, planGoalOf(req.body), status, content, req.params.id, req.learnerId]);
   res.json({ ok: true });
 }));
+// "Make ready" on the Activities list: a draft (often just added from the Library) is shown to the learner.
+adult.post('/activities/:id/ready', wrap(async (req, res) => {
+  const a = await one("update activities set status='active', updated_at=now() where id=$1 and learner_id=$2 and status='draft' returning id", [req.params.id, req.learnerId]);
+  if (!a) return res.status(404).json({ error: 'That draft was not found. It may already be ready.' });
+  res.json({ ok: true });
+}));
 adult.delete('/activities/:id', wrap(async (req, res) => {
   await q("update activities set status='archived', updated_at=now() where id=$1 and learner_id=$2", [req.params.id, req.learnerId]);
   await q('update learners set current_activity_id=null where id=$1 and current_activity_id=$2', [req.learnerId, req.params.id]);

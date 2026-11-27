@@ -562,7 +562,7 @@ async function renderHome(root) {
     const onGoal = (ks, k) => sumOf(ks, (d) => (d.plan_goal === k ? d.opportunities : 0));
     const quiet = Object.entries(goals.goals).filter(([k]) => k !== 'other').find(([k]) => onGoal(month, k) > 0 && !onGoal(keys, k));
     const nudge = lastDay && lastDay < daysAgo(1) ? `No practice since ${dayTitle(lastDay)}.`
-      : quiet && lastDay ? `${quiet[1].n < 5 ? `${quiet[1].n}. ${quiet[1].label}` : quiet[1].label} has had no practice in the last 7 days.` : null;
+      : quiet && lastDay ? `${quiet[1].label} has had no practice in the last 7 days.` : null;
     week = h('section', { class: 'panel', style: 'display:grid;gap:12px' },
       h('h3', { style: 'margin:0' }, 'This week'),
       h('p', { class: 'week-line', style: 'margin:0' }, h('strong', {}, `${name} practised on ${practised} of the last 7 days.`),
@@ -668,7 +668,7 @@ async function renderLibrary(root) {
     ['follow', 'Follow on Screen', 'Listen, then move shapes or pictures in order'],
     ['recall', 'Remember My Day', `Remember real things ${name} did`],
     ['category', 'Word Groups', 'Name or add things that belong in a group'],
-    ['listen', 'Listen to a Story', 'A short story, then questions about it'],
+    ['listen', 'Remember a Story', 'A short story, then questions about it'],
   ].filter(([k]) => items.some((i) => i.mode === k));
   const typeTitle = (k) => TYPES.find(([key]) => key === k)?.[1] || modeLabel(k);
   const body = h('div', { class: 'lib-body' });
@@ -968,6 +968,9 @@ async function renderActivities(root) {
           a.id === me.learner.current_activity_id ? h('span', { class: 'tag start-tag' }, 'Opens with Start') : null,
           h('br'), h('small', { class: 'muted' }, bits.join(' · '))),
         h('div', { class: 'row-actions' },
+          a.status === 'draft' ? h('button', { class: 'btn btn-primary', title: `Show it to ${name}`, onclick: run(async () => {
+            await api(`/adult/activities/${a.id}/ready`, { method: 'POST' }); toast(`"${a.title}" is ready. ${name} can see it now.`); renderShell();
+          }) }, 'Make ready') : null,
           h('button', { class: 'btn', onclick: () => editActivity(root, a) }, 'Edit'),
           h('button', { class: 'btn btn-quiet', title: `Run this exactly as ${name} sees it. Nothing is saved.`, onclick: run(() => tryAsSam(a)) }, `Try as ${name}`),
           h('button', { class: 'btn btn-quiet', 'aria-label': `Archive ${a.title}`, onclick: run(async () => {
@@ -978,7 +981,14 @@ async function renderActivities(root) {
     return h('section', { class: 'mod-card', 'data-module': mod },
       h('header', { class: 'mod-head' }, moduleIcon(mod), h('div', {}, h('h2', {}, M.label), h('small', { class: 'muted' }, M.tagline))),
       hidden ? h('p', { class: 'mod-note' }, `Hidden from ${name}. Turn it on in Practice plan → TALVO modules.`) : null,
-      mine.length ? h('ul', { class: 'list' }, mine.map(row)) : h('p', { class: 'muted mod-empty' }, `Nothing here yet, so ${name} does not see this tile.`),
+      // Ready activities first; drafts (often added from the Library) folded below so a long tile stays readable.
+      (() => {
+        const ready = mine.filter((a) => a.status !== 'draft'), drafts = mine.filter((a) => a.status === 'draft');
+        return [
+          ready.length ? h('ul', { class: 'list' }, ready.map(row)) : h('p', { class: 'muted mod-empty' }, `Nothing ready yet, so ${name} does not see this tile.`),
+          drafts.length ? h('details', { class: 'codes-key' }, h('summary', {}, `Drafts (${drafts.length}): not shown to ${name} yet`), h('ul', { class: 'list' }, drafts.map(row))) : null,
+        ];
+      })(),
       addActivity(root, M));
   });
   root.append(
@@ -1684,8 +1694,14 @@ const DEFAULT_GOAL = { story: 'narrative', conversation: 'conversation', task: '
 // "Memory Buddy: Remember My Day" — two modes share Memory Buddy, so lists show both names.
 const modeName = (m) => `${modes[m].label}: ${modes[m].activityName}`;
 const TZ = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+// Parents see plain words; therapists, teachers and job coaches keep the plan's numbers and I/M/P/F codes.
+const isParent = () => me?.adult?.role === 'parent';
+const PARENT_CODES = { I: 'On their own', M: 'Needed one hint', P: 'Needed several hints', F: 'Foxy showed the answer' };
+const PARENT_SHORT = { I: 'on their own', M: 'one hint', P: 'several hints', F: 'shown' };
+const codeShort = (c) => (isParent() ? PARENT_SHORT[c] : c);
 const goalPill = (k) => {
   const g = goals?.goals[k] || goals?.goals.other;
+  if (isParent()) return h('span', { class: `goal-pill g-${k || 'other'}` }, g.label);
   return h('span', { class: `goal-pill g-${k || 'other'}` }, g.n < 5 ? `${g.n} · ${g.short}` : g.short);
 };
 const dayKey = (d) => new Date(d).toLocaleDateString('en-CA', { timeZone: TZ }); // YYYY-MM-DD
@@ -1703,6 +1719,7 @@ function resultBadge(r) {
 }
 function codeBadge(code) {
   if (!code) return null;
+  if (isParent()) return h('span', { class: `code-badge c-${code}`, title: `${code}: ${goals.codes[code]}` }, PARENT_CODES[code]);
   return h('span', { class: `code-badge c-${code}`, title: goals.codes[code] }, h('b', {}, code), ` ${goals.codes[code]}`);
 }
 
@@ -1834,7 +1851,7 @@ function openReport(days, records, startPeriod) {
         const after = String(r.sam_response).split(' / ').filter(Boolean).map((a) => a.replace(/^\[after support\] /, '(after support) ')).join(' / ');
         return h('div', { class: 'rep-ex' },
           h('div', { class: 'rep-ex-head' }, h('strong', {}, r.item_label), h('span', { class: 'muted' }, ` · ${r.activity_title} · ${dayShort(dayKey(r.created_at))}`),
-            r.support_code ? h('span', { class: `code-badge c-${r.support_code}` }, h('b', {}, r.support_code), ` ${goals.codes[r.support_code]}`) : null),
+            r.support_code ? codeBadge(r.support_code) : null),
           h('p', {}, `${name} said: “${after.length > 240 ? `${after.slice(0, 239)}…` : after}”`));
       })));
 
@@ -1891,8 +1908,8 @@ async function renderReview(root) {
       h('div', { class: 'gc-head' }, goalPill(k), h('span', { class: 'muted' }, 'Last 7 days')),
       h('div', { class: 'gc-big' }, opp ? h('span', {}, h('strong', {}, String(met)), ` of ${opp}`) : h('span', { class: 'muted' }, recent.length ? 'None in the last 7 days' : 'No practice yet')),
       opp ? h('div', { class: 'gc-sub' }, 'met the target') : null,
-      total ? h('div', { class: 'code-bar', 'aria-label': codes.map(([c, v]) => `${c}: ${v}`).join(', ') },
-        codes.filter(([, v]) => v).map(([c, v]) => h('span', { class: `c-${c}`, style: `flex:${v}` }, `${c} ${v}`))) : null,
+      total ? h('div', { class: 'code-bar', 'aria-label': codes.map(([c, v]) => `${codeShort(c)}: ${v}`).join(', ') },
+        codes.filter(([, v]) => v).map(([c, v]) => h('span', { class: `c-${c}`, style: `flex:${v}` }, isParent() ? `${v} ${codeShort(c)}` : `${c} ${v}`))) : null,
       recent.length ? h('div', { class: 'gc-days' }, h('span', { class: 'muted' }, 'Recent days:'), recent.map((d) => h('span', {}, `${dayShort(d.day)}: ${d.successes}/${d.opportunities}`))) : null);
   }));
   const syncCards = () => cards.querySelectorAll('.goal-card').forEach((b, i) => b.setAttribute('aria-pressed', String(review.goal === Object.keys(goals.goals)[i])));
