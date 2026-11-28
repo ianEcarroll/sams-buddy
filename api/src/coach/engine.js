@@ -536,13 +536,13 @@ function fadeStart(state, el) {
 
 // One cue, one element, one step stronger than last time.
 // The last question Foxy asked in this Talk topic (from its last reply, else the opener).
+// Only Foxy's most recent words count: an earlier question has usually been answered already, and asking it
+// again reads as not listening (found by the Foxy check, 28 Nov).
 function lastFoxyQuestion(state, item) {
-  const said = [item.opener, ...(state.item.conv?.turns || []).map((t) => t.reply)].filter(Boolean);
-  for (const t of said.reverse()) {
-    const qs = String(t).match(/[^.!?]*\?/g);
-    if (qs?.length) return qs.at(-1).trim();
-  }
-  return null;
+  const replies = (state.item.conv?.turns || []).map((t) => t.reply).filter(Boolean);
+  const latest = replies.length ? replies.at(-1) : item.opener;
+  const qs = String(latest || '').match(/[^.!?]*\?/g);
+  return qs?.length ? qs.at(-1).trim() : null;
 }
 
 // Think: the same question as the cue ladder, but plain and tied to this situation, for "I don't understand".
