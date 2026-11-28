@@ -87,7 +87,7 @@ test('why and plan B are asked once each, never cued, and an "I don\'t know" sti
   ({ turn } = await say(state, "I don't know"));
   assert.equal(turn.lines.at(-1).text, THINK_FOLLOW_UPS.backup, 'moves on to plan B once, with no cue or sentence starter');
   ({ turn } = await say(state, 'Not sure'));
-  assert.equal(turn.lines[0].text, 'Well done.', 'ends warmly, without repeating the credit');
+  assert.equal(turn.lines[0].text, 'Thanks for telling me.', 'ends warmly, without repeating the credit');
   assert.ok(!turn.lines.some((l) => l.kind === 'cue' || l.kind === 'model'), 'no cue was given');
   assert.equal(state.item?.supportGiven?.length ?? 0, 0);
   const rec = state.completed[0];
