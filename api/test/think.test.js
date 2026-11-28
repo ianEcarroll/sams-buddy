@@ -82,7 +82,7 @@ test('Think is linked to plan goal 1 and has three starter situations', () => {
 test('why and plan B are asked once each, never cued, and an "I don\'t know" still ends with credit', async () => {
   let { state } = createSession({ activity: gym });
   let { turn } = await say(state, "I'd ask the person at the front desk");
-  assert.match(turn.lines.map((l) => l.text).join(' | '), /You noticed the problem and said a safe thing to do/, 'credit comes straight away');
+  assert.match(turn.lines.map((l) => l.text).join(' | '), /You said a safe thing to do\./, 'credit comes straight away');
   assert.equal(turn.lines.at(-1).text, THINK_FOLLOW_UPS.reason);
   ({ turn } = await say(state, "I don't know"));
   assert.equal(turn.lines.at(-1).text, THINK_FOLLOW_UPS.backup, 'moves on to plan B once, with no cue or sentence starter');
@@ -109,7 +109,7 @@ test('with no example reason or plan B written, Foxy asks neither and finishes w
   let { state } = createSession({ activity: bare });
   const { turn } = await say(state, "I'd ask the person at the front desk");
   const said = turn.lines.map((l) => l.text).join(' | ');
-  assert.match(said, /You noticed the problem and said a safe thing to do/);
+  assert.match(said, /You said a safe thing to do\./);
   assert.ok(!turn.lines.some((l) => l.text === THINK_FOLLOW_UPS.reason || l.text === THINK_FOLLOW_UPS.backup));
   assert.equal(state.completed[0].success, true);
 });
@@ -130,4 +130,26 @@ test('Show me an example after the model gives a whole answer, not the same line
   const ex = control(state, 'example').turn.lines.at(-1).text;
   assert.notEqual(ex, first);
   assert.match(ex, /^Here is a whole answer: /);
+});
+
+// ---- Foxy check, 28 Nov: praise only what Sam said, and help him finish a reason he started.
+test('"noticed the problem" is said only when Sam names the problem, not when his safe idea only implies it', async () => {
+  let { state } = createSession({ activity: gym });
+  let { turn } = await say(state, 'ask the receptionist');
+  let said = turn.lines.map((l) => l.text).join(' | ');
+  assert.match(said, /You said a safe thing to do\./);
+  assert.doesNotMatch(said, /noticed/);
+  assert.ok(state.item.met.problem, 'still recorded as noticed for the team');
+  ({ state } = createSession({ activity: gym }));
+  ({ turn } = await say(state, "The trainer is not there, so I would ask the receptionist"));
+  assert.match(turn.lines.map((l) => l.text).join(' | '), /You noticed the problem, said a safe thing to do/);
+});
+
+test('an unfinished "because" gets one sentence starter, then Foxy moves on', async () => {
+  let { state } = createSession({ activity: gym });
+  await say(state, 'ask the receptionist');
+  let { turn } = await say(state, 'because');
+  assert.equal(turn.lines.at(-1).text, MODES.think.defaultCues.reason[2]);
+  ({ turn } = await say(state, 'because'));
+  assert.equal(turn.lines.at(-1).text, THINK_FOLLOW_UPS.backup, 'only once');
 });

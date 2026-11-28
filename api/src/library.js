@@ -451,7 +451,7 @@ LIBRARY.push(
     obj('shampoo', 'shampoo', ['hair wash'], 'bathroom things', ['bathroom', ...WASH], 'wash your hair', ['hair', 'wash', 'clean', 'shower']),
   ]),
   object('kitchen', 'Describe: in the kitchen', ['kitchen', 'food'], [
-    obj('fridge', 'fridge', ['refrigerator'], 'kitchen things', ['kitchen', 'appliances', 'electrical things'], 'keep food cold and fresh', ['cold', 'food', 'fresh', 'keep']),
+    obj('fridge', 'fridge', ['refrigerator'], 'kitchen things', ['kitchen thing', 'appliances', 'appliance', 'electrical things'], 'keep food cold and fresh', ['cold', 'food', 'fresh', 'keep']),
     obj('spoon', 'spoon', ['teaspoon'], 'cutlery', ['kitchen things', 'things for eating', 'knives and forks'], 'eat soup or cereal', ['soup', 'cereal', 'eat', 'stir']),
     obj('fork', 'fork', [], 'cutlery', ['kitchen things', 'things for eating', 'knives and forks'], 'pick up food to eat', ['eat', 'food', 'pick', 'spear']),
     obj('knife', 'knife', [], 'cutlery', ['kitchen things', 'things for eating', 'knives and forks', 'tools'], 'cut food', ['cut', 'food', 'slice', 'chop']),

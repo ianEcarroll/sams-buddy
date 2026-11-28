@@ -176,7 +176,7 @@ function newItemState(state) {
     showImage: null, // recall: photo shown as the strongest clue; talk: the topic's picture, shown once a hint is given
   };
   if (state.mode === 'task' && item.unclear_instruction) { st.phase = 'clarify'; st.elements.unshift('clarify'); }
-  if (state.mode === 'conversation') st.conv = { validTurns: 0, questionAsked: false, turns: [], noted: {} };
+  if (state.mode === 'conversation') st.conv = { validTurns: 0, questionAsked: false, turns: [], noted: {}, log: [], bridges: 0 };
   if (state.mode === 'listen') st.listen = { phase: 'story', round: 1, queue: [], pos: 0, results: {}, helped: false };
   if (state.mode === 'steps') st.steps = { phase: 'step', pos: 0, said: false, level: -1, tries: 0, results: {}, visual: false, sawStep: {}, list: false, retellTries: 0, retell: null };
   return st;
@@ -330,7 +330,9 @@ async function process_(state, { text, displayText, confirmed }, judge) {
     : false;
 
   const history = state.mode === 'conversation'
-    ? [{ who: 'Foxy', text: item.opener }, ...conv.turns.flatMap((t) => [{ who: state.learnerName || 'Learner', text: t.text }, ...(t.reply ? [{ who: 'Foxy', text: t.reply }] : [])])]
+    // Everything said in this topic, including off-topic answers and Foxy's replies to them, so an answer that carries on
+    // Sam's own thread ("what music do you like?" → "I like rock") is read in context.
+    ? [{ who: 'Foxy', text: item.opener }, ...(conv.log || [])]
     // Think: what Foxy just asked, so an answer to "What could you do if that doesn't work?" is read as plan B.
     : state.mode === 'think' && state.lastLines?.length ? [{ who: 'Foxy', text: state.lastLines.map((l) => l.text).join(' ') }] : [];
 
@@ -343,9 +345,15 @@ async function process_(state, { text, displayText, confirmed }, judge) {
 
   it.responses.push({ text: displayText, afterSupport: it.anySupport });
 
-  if (j.help && j.help !== 'none') return { state, turn: makeTurn(state, handleHelp(state, j.help, text, 'spoken')) };
+  if (state.mode === 'conversation') {
+    // "I don't understand" in Talk: Claude asks the same question again in simpler words, with two choices.
+    const lines = j.bridge && (j.help === 'dont_understand' || j.help === 'other_clarification') ? convBridge(state, j.bridge, text)
+      : j.help && j.help !== 'none' ? handleHelp(state, j.help, text, 'spoken') : conversationTurn(state, j, text);
+    conv.log.push({ who: state.learnerName || 'Learner', text }, ...lines.filter((l) => ['reply', 'cue', 'model', 'prompt', 'ack'].includes(l.kind)).map((l) => ({ who: 'Foxy', text: l.text })));
+    return { state, turn: makeTurn(state, lines) };
+  }
 
-  if (state.mode === 'conversation') return { state, turn: makeTurn(state, conversationTurn(state, j, text)) };
+  if (j.help && j.help !== 'none') return { state, turn: makeTurn(state, handleHelp(state, j.help, text, 'spoken')) };
 
   // Task, clarification phase: success = Sam asks for clarification.
   if (state.mode === 'task' && it.phase === 'clarify') {
@@ -362,19 +370,31 @@ async function process_(state, { text, displayText, confirmed }, judge) {
   it.attempts += 1;
   if (j.unsafe) it.unsafe.push(displayText);
   if (state.mode === 'category') dropGivenWords(item, j);
+  // A lone "because" or "so" is a reason he has started, not one he has given.
+  if (state.mode === 'think' && UNFINISHED.test(String(text).trim())) { j.met.reason = null; j.met.backup = null; }
   const newly = state.mode === 'recall' || (state.mode === 'category' && categoryKind(item) === 'name') ? absorbRecall(state, j) : absorb(state, j);
   const lines = [];
   if (allMet(state)) {
+    const open = it.focus && isOptional(state, it.focus) && !it.met[it.focus] && !it.nudged?.[it.focus] ? it.focus : null;
+    if (open && UNFINISHED.test(String(text).trim())) {
+      it.nudged = { ...(it.nudged || {}), [open]: true };
+      const cue = line(cueLadder(state.mode, state.activity, item, open)[2], 'cue', { level: LEVELS[2], element: open });
+      it.supportGiven.push({ el: open, level: 2, text: cue.text, by: 'buddy' });
+      state.lastLines = [cue];
+      return { state, turn: makeTurn(state, [cue]) };
+    }
     const extra = nextOptional(state);
     if (!extra) return { state, turn: makeTurn(state, completeItem(state, newly)) };
     // Credit what he has done, then one optional question. Not counted as support and not cued.
-    if (newly.length) { lines.push(line(`You ${describe(state.mode, newly, item)}.`, 'feedback')); it.praised = true; }
+    if (newly.length) { const shown = shownEls(state, newly); if (shown.length) lines.push(line(`You ${describe(state.mode, shown, item)}.`, 'feedback')); it.praised = true; }
     lines.push(optionalQuestion(state, extra));
     return { state, turn: makeTurn(state, lines) };
   }
 
   const before = state.mode === 'recall' ? Object.keys(it.met).filter((e) => e.startsWith('memory_') && !newly.includes(e)).length : 0;
-  if (newly.length) lines.push(line(before ? `You remembered ${newly.length === 1 ? 'another thing' : `${newly.length} more things`}.` : `You ${describe(state.mode, newly, item)}.`, 'feedback'));
+  if (newly.length && shownEls(state, newly).length) lines.push(line(before ? `You remembered ${newly.length === 1 ? 'another thing' : `${newly.length} more things`}.` : `You ${describe(state.mode, shownEls(state, newly), item)}.`, 'feedback'));
+  // Word groups: say plainly when a word is not in the group ("An apple is a fruit, not a vegetable.").
+  if (state.mode === 'category' && !newly.length && j.note) lines.push(line(j.note, 'feedback'));
 
   // After a model, one more attempt; if the element is still missing, note it and move to the next one.
   if (it.focus && it.modelGiven[it.focus] && !it.met[it.focus]) it.skipped[it.focus] = true;
@@ -523,6 +543,18 @@ function optionalQuestion(state, el) {
   state.lastLines = [q];
   return q;
 }
+// Think: when the problem was only implied by the safe idea ("ask the receptionist"), the feedback names the safe idea and
+// does not say "you noticed the problem": Sam did not say it (reviewer, 28 Nov). It is still recorded as noticed.
+const normEv = (t) => String(t || '').toLowerCase().replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
+function shownEls(state, els) {
+  if (state.mode !== 'think' || !els.includes('problem')) return els;
+  const p = normEv(state.item.met.problem?.evidence);
+  const a = normEv(state.item.met.action?.evidence);
+  const implied = !p || (a && (p === a || a.includes(p) || p.includes(a)));
+  return implied && (els.includes('action') || state.item.met.action) ? els.filter((e) => e !== 'problem') : els;
+}
+// "because", "so", "cos" on its own: an unfinished reason. One sentence starter, once (the optional parts are not cued otherwise).
+const UNFINISHED = /^(because|cos|'?cause|so|so that|um+|er+)[.!?]*$/i;
 const allMet = (state) => required(state).every((e) => state.item.met[e]);
 const nextMissing = (state) => required(state).find((e) => !state.item.met[e]);
 function maxLevelFor(it, el) {
@@ -625,6 +657,10 @@ function handleHelp(state, kind, text, source) {
     case 'other_clarification':
       // Think: say the missing step in the words of this situation, not the generic "What could you do?" Sam may already have answered.
       if (state.mode === 'think') return [line("That's okay. Let me say it another way.", 'ack'), line(thinkSimpler(state, item), 'prompt')];
+      if (state.mode === 'conversation' && !item.simple_prompt) {
+        const q = lastFoxyQuestion(state, item);
+        if (q) return [line('Let me ask it another way.', 'ack'), line(q, 'prompt')];
+      }
       return [line('Thanks for telling me.', 'ack'), line(m.simplePrompt(item), 'prompt')];
     case 'check_with_coach':
       return [line('Checking with your job coach is a good idea. For this practice, I can give you a hint.', 'ack'), hintLine(state, 'buddy')];
@@ -744,6 +780,9 @@ function conversationTurn(state, j, text) {
       it.skipped.turn = true;
       return completeConversationItem(state, lines);
     }
+    // Claude's reply answers what Sam actually said (his own interest, "I don't know") and links back to the topic,
+    // twice at most. After that, or with the keyword judge, the fixed cues take over.
+    if (j.bridge && c.bridges < 2) return convBridge(state, j.bridge, text);
     lines.push(giveCue(state, 'turn', 'buddy'));
     return lines;
   }
@@ -772,6 +811,19 @@ function conversationTurn(state, j, text) {
   }
   state.lastLines = lines.filter((l) => l.kind === 'reply' || l.kind === 'cue' || l.kind === 'model');
   return lines;
+}
+
+// A reply to an answer that was not a valid turn. It counts as the first, lightest support for this turn.
+function convBridge(state, reply, text) {
+  const it = state.item;
+  it.conv.bridges += 1;
+  it.focus = 'turn';
+  it.focusLevel = Math.max(0, it.focusLevel);
+  it.supportGiven.push({ el: 'turn', level: 0, text: reply, by: 'buddy' });
+  it.anySupport = true;
+  const l = line(reply, 'reply');
+  state.lastLines = [l];
+  return [l];
 }
 
 function completeConversationItem(state, lines) {
@@ -982,7 +1034,7 @@ function completeItem(state, newly) {
   // If he was already credited when the optional question was asked, only name what is new.
   const els = (it.anySupport && state.mode !== 'think') || it.praised ? newly : met;
   if (it.praised && !els.length) lines.push(line('Thanks for telling me.', 'feedback'));
-  else if (els.length) lines.push(line(`You ${describe(state.mode, els, item)}.`, 'feedback'));
+  else if (els.length) lines.push(line(`You ${describe(state.mode, shownEls(state, els), item)}.`, 'feedback'));
   else if (state.mode === 'think') lines.push(line('Thanks for having a go. When something is not how you expect, you can always stop, think, and ask someone you trust.', 'feedback'));
   else lines.push(line('Thanks for working on that one.', 'feedback'));
 
@@ -1005,10 +1057,12 @@ function advance(state, lines) {
   if (state.mode === 'conversation') while (next < items.length && sameTopic(items[next], items[state.itemIndex])) next += 1;
   if (next < items.length && !timeUp) {
     const changedTopic = state.mode === 'conversation';
+    const was = items[state.itemIndex];
     state.itemIndex = next;
     const opening = openItem(state); // openItem leads in: "On to the next situation." etc.
     // Talk: say that the subject is changing, so a prepared opener does not come out of nowhere.
-    if (changedTopic) lines.push(line(TOPIC_BRIDGES[next % TOPIC_BRIDGES.length], 'intro'));
+    // Name both topics so the change is clear ("Thanks for telling me about video games. Now let's talk about music.").
+    if (changedTopic) lines.push(line(was?.topic && items[next]?.topic ? `Thanks for telling me about ${topicLabel(was)}. Now let's talk about ${topicLabel(items[next])}.` : TOPIC_BRIDGES[next % TOPIC_BRIDGES.length], 'intro'));
     return lines.concat(opening);
   }
   state.done = true;

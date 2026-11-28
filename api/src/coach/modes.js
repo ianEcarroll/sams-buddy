@@ -204,18 +204,16 @@ const conversation = {
     turn: ['Take your time.', 'Tell me one thing you like, or one thing you did.', 'I like ___ because ___.', '{example}'],
     // Levels 0–1 hold several wordings; one is picked at random each time so the invitation doesn't sound repetitive.
     question: [
+      // Plain invitations only: "What would you like to know?" was answered literally ("a vampire") in the Foxy check.
       [
         'You could ask me something too.',
-        'Your turn. What would you like to know?',
-        'Is there anything you want to find out from me?',
-        "I wonder what you'd like to know about me.",
-        'Anything you are curious about?',
-        "I'd love to hear your question.",
+        'Now you could ask me a question.',
+        'Is there anything you want to ask me?',
+        "I'd love to hear a question from you.",
       ],
       [
         'What could you ask me about what I just said?',
         'You could ask me the same question I asked you.',
-        'What would you like to know about what I said?',
         'Ask me one thing about what I said.',
       ],
       'Do you ___?',
