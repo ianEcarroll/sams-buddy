@@ -45,10 +45,25 @@ test('"I don\'t understand" without Claude asks Foxy\'s last question again, not
   assert.deepEqual(turn.lines.map((l) => l.text), ['Let me ask it another way.', 'What kind of food do you like?']);
 });
 
-test('the topic change names both topics', async () => {
+test('the topic change names the new topic', async () => {
   const { state } = start({ turns_per_topic: 1 });
   const { turn } = await respond(state, { text: 'I like pizza' }, { judge: judgeWith(null) });
-  assert.ok(turn.lines.some((l) => l.text === "Thanks for telling me about food. Now let's talk about music."), turn.lines.map((l) => l.text).join(' | '));
+  assert.ok(turn.lines.some((l) => l.text === "Thanks for telling me about that. Now let's talk about music."), turn.lines.map((l) => l.text).join(' | '));
+});
+
+const three = { ...talk, content: { items: [...talk.content.items, { topic: 'sport', opener: 'I like football. What sport do you like?', keywords: ['sport', 'football'] }] } };
+test('after the chosen topic comes the other one offered, not the next in the list', async () => {
+  const { state } = createSession({ activity: { ...three, content: { items: [three.content.items[0], three.content.items[2], three.content.items[1]] } }, settings: { turns_per_topic: 1 }, quickStart: true });
+  control(state, 'topic_0');
+  const offered = state.activity.content.items.map((i) => i.topic);
+  assert.deepEqual(offered.slice(0, 2).sort(), ['food', 'sport'].sort(), 'the two offered come first');
+});
+
+test('a topic Sam already took the chat onto goes to the end', async () => {
+  const { state } = createSession({ activity: three, settings: { turns_per_topic: 1 }, quickStart: true });
+  control(state, 'topic_0'); // food, then music (offered), then sport
+  const { turn } = await respond(state, { text: 'what music do you like?' }, { judge: judgeWith(null) });
+  assert.ok(turn.lines.some((l) => /let's talk about sport/.test(l.text)), turn.lines.map((l) => l.text).join(' | '));
 });
 
 test('the question invitations are plain, with no "What would you like to know?"', () => {

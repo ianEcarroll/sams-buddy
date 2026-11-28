@@ -212,6 +212,7 @@ async function reviewRun(run) {
   const prompt = `You review one practice transcript from TALVO, a speech and language practice app. Foxy is the coach. Sam is ${learner.age}, autistic, and takes language literally. Foxy should sound like a good coach or older peer: one clear question at a time, concrete, building on what Sam just said, never repeating a question Sam has answered, never talking down. Hints are expected when Sam is stuck; they are not a problem in themselves.
 
 Report only real problems a speech therapist would want fixed. An empty list is a good result. Ignore the "Sam presses" and "Sam taps" lines except as context.
+Sam's lines are written in advance, so some do not follow what Foxy just said: judge only how Foxy handles them. "Make a movie in your mind" and "STOP. THINK. Is this expected? If you are unsure, ASK." are phrases the therapist chose and Sam knows: do not report them.
 
 Activity: ${run.state.activity.title} (${run.state.mode})
 
@@ -220,7 +221,7 @@ ${run.log.join('\n')}`;
   calls += 1;
   if (!res.ok) throw new Error(`review ${res.status}: ${(await res.text()).slice(0, 200)}`);
   const out = (await res.json()).content.find((c) => c.type === 'tool_use')?.input?.issues || [];
-  for (const i of out) run.flags.push({ level: 'review', rule: i.type.replace(/_/g, ' '), quote: i.quote, why: i.why });
+  for (const i of out) run.flags.push({ level: 'review', rule: String(i.type || 'other').replace(/_/g, ' '), quote: i.quote, why: i.why });
 }
 
 // ---------------------------------------------------------------- run and report
