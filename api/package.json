@@ -10,7 +10,8 @@
     "start": "node src/server.js",
     "dev": "node --watch src/server.js",
     "migrate": "node src/migrate.js",
-    "test": "node --test test/*.test.js"
+    "test": "node --test test/*.test.js",
+    "check:foxy": "node scripts/foxy-check.mjs"
   },
   "dependencies": {
     "express": "^4.21.2",
