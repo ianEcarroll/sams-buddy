@@ -224,7 +224,7 @@ adult.use(wrap(requireAdult));
 // A therapist or teacher who runs their own account (main account, not a parent) can create students.
 const MAX_STUDENTS = 60;
 // A school or therapist who has permission can set up a student's privacy choices when adding them, so results show
-// straight away. The student can still change them in My settings on their own device.
+// straight away. A grown-up can change them later in Team & privacy, or behind the hold-to-open screen on the iPad.
 async function setSchoolConsent(learnerId, adultId) {
   await q(`update consent set agreed_at=now(), can_view='{"parent":true,"therapist":true,"teacher":true,"job_coach":true}'::jsonb, save_audio=false, set_by=$2, updated_at=now() where learner_id=$1`, [learnerId, adultId]);
 }

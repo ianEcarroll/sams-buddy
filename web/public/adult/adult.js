@@ -343,7 +343,7 @@ async function renderCaseload(root) {
   const addForm = me.canAddStudents ? h('div', { class: 'panel', style: 'display:grid;gap:12px;max-width:560px;margin-top:18px' },
     h('h3', { style: 'margin:0' }, list.length ? 'Add students' : 'Add your students'),
     field('First names, one per line', names, 'Paste your class list. After a first name you can add a comma and the year of birth, for example \u201cBen, 2012\u201d. The year helps Foxy talk at the right level.'),
-    h('label', { class: 'switch' }, perm, h('span', {}, 'I have permission to see these students\u2019 practice results', h('br'), h('small', { class: 'muted' }, 'From their families, or covered by your school\u2019s agreement. This lets you and the support team see results straight away. A student can change it any time in My settings on their device. If you leave it unticked, each student chooses on their own device first.'))),
+    h('label', { class: 'switch' }, perm, h('span', {}, 'I have permission to see these students\u2019 practice results', h('br'), h('small', { class: 'muted' }, 'From their families, or covered by your school\u2019s agreement. Results are then shared with you and the support team straight away, and voice recordings are not kept. If you leave it unticked, confirm each student\u2019s privacy choices in their Team & privacy page before they can practise. A grown-up can change them later there, or on the student\u2019s iPad.'))),
     h('button', { class: 'btn btn-primary', onclick: run(async () => {
       const students = parse();
       if (!students.length) return toast('Add at least one first name.');
@@ -415,7 +415,7 @@ async function groupReportView(box, list) {
       : [...new Set(shared.flatMap((x) => x.activities.map((a) => a.key)))].sort().map((k) => [k, k]);
     const rowsOf = (x) => (reportUi.by === 'goal' ? x.goals : x.activities);
     table.replaceChildren(!keys.length
-      ? h('p', { class: 'panel' }, shared.length ? 'No practice in this period yet.' : 'No student has shared practice with you yet. They choose this on their own device the first time they open TALVO.')
+      ? h('p', { class: 'panel' }, shared.length ? 'No practice in this period yet.' : 'No student has shared practice with you yet. Confirm each student\u2019s privacy choices in their Team & privacy page, or ask their main account holder to share.')
       : h('table', { class: 'report-table' },
         h('thead', {}, h('tr', {}, h('th', {}, 'Student'), keys.map(([, l]) => h('th', {}, l)))),
         h('tbody', {}, rep.students.map((x) => h('tr', {}, h('th', { scope: 'row' }, x.name),
