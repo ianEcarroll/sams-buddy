@@ -1431,6 +1431,10 @@ const blankFollow = () => ({ tokens: ['red-circle', 'blue-square', 'green-triang
 const fObjects = () => modes.follow?.objects || [];
 const fObject = (id) => fObjects().find((o) => o.id === id);
 const tName = (id) => fObject(id)?.name || String(id).replace('-', ' ');
+// Real places instead of numbered boxes ("the fridge"), from the server with the modes: { id, name, img }.
+const fPlaces = () => modes.follow?.places || [];
+const fPlace = (id) => fPlaces().find((p) => p.id === id);
+const capPlace = (t) => String(t).charAt(0).toUpperCase() + String(t).slice(1);
 const F_FILL = { red: '#d63c3c', blue: '#2f6fd6', green: '#2e9d57', yellow: '#f2c230', purple: '#8a4fd0', orange: '#ee8a2a' };
 const F_PATH = { circle: '<circle cx="24" cy="24" r="18"/>', square: '<rect x="7" y="7" width="34" height="34" rx="4"/>', triangle: '<path d="M24 5 L43 40 H5 Z"/>',
   star: '<path d="M24 4l5.9 12.6 13.7 1.6-10.1 9.4 2.7 13.6L24 34.4l-12.2 6.8 2.7-13.6L4.4 18.2l13.7-1.6z"/>', heart: '<path d="M24 42S6 31 6 18a9 9 0 0 1 18-3 9 9 0 0 1 18 3c0 13-18 24-18 24z"/>' };
@@ -1452,6 +1456,14 @@ function followEditor(it) {
   const draw = () => {
     const toks = it.tokens;
     const tokOpts = toks.map((t) => [t, tName(t)]);
+    const places = Array.isArray(it.places) && it.places.length >= 2 ? it.places : null;
+    const nBoxes = places ? places.length : 4;
+    const boxLabel = (n) => (places ? capPlace(fPlace(places[n - 1])?.name.replace(/^the /, '') || `Place ${n}`) : `Box ${n}`);
+    const boxOpts = Array.from({ length: nBoxes }, (_, i) => [i + 1, boxLabel(i + 1)]);
+    const placeRows = places ? h('div', { class: 'q-list' }, places.map((pid, i) => h('div', { class: 'q-row' }, h('div', { class: 'q-num' }, String(i + 1)),
+      h('div', { class: 'q-fields' }, field('Place', h('div', { class: 'tok-pick' }, fPlace(pid) ? h('img', { class: 'tok-thumb sym', src: fPlace(pid).img, alt: '' }) : null,
+        sel(fPlaces().map((p) => [p.id, capPlace(p.name.replace(/^the /, ''))]), pid, (v) => { if (places.includes(v)) { toast('That place is already used.'); draw(); return; } places[i] = v; draw(); })))),
+      places.length > 2 ? h('button', { class: 'btn btn-quiet', onclick: () => { removePlace(i); draw(); } }, 'Remove') : null))) : null;
     const shapes = h('div', { class: 'q-list' }, toks.map((t, i) => {
       // One list: Buddy's coloured shapes, then everyday objects. Taken ones are still listed so the current one shows.
       const pick = h('select', { onchange: (e) => replaceTok(t, e.target.value) },
@@ -1459,7 +1471,7 @@ function followEditor(it) {
         fObjects().length ? h('optgroup', { label: 'Everyday objects' }, fObjects().map((o) => h('option', { value: o.id, selected: o.id === t }, o.name))) : null);
       return h('div', { class: 'q-row' }, h('div', { class: 'q-num' }, String(i + 1)), h('div', { class: 'q-fields' }, h('div', { class: 'grid2' },
         field('Shape or object', h('div', { class: 'tok-pick' }, tokenThumb(t), pick)),
-        field('Starts in', sel([['', 'The tray'], ...[1, 2, 3, 4].map((n) => [n, `Box ${n}`])], it.start[t] || '', (v) => { if (v) it.start[t] = Number(v); else delete it.start[t]; draw(); })))),
+        field('Starts in', sel([['', 'The tray'], ...boxOpts], it.start[t] || '', (v) => { if (v) it.start[t] = Number(v); else delete it.start[t]; draw(); })))),
         h('button', { class: 'btn btn-quiet', onclick: () => { it.tokens.splice(i, 1); delete it.start[t]; draw(); } }, 'Remove'));
     }));
     const steps = h('div', { class: 'q-list' }, it.steps.map((st, i) => {
@@ -1471,7 +1483,7 @@ function followEditor(it) {
           field('Step', sel(F_TYPES, st.type, (v) => { st.type = v; draw(); })),
           needsTok ? field('Which one', sel(tokOpts, st.token, (v) => { st.token = v; draw(); })) : h('div')),
         needsBox || needsTarget ? h('div', { class: 'grid2' },
-          needsBox ? field('Box', sel([1, 2, 3, 4].map((n) => [n, `Box ${n}`]), st.box, (v) => { st.box = Number(v); draw(); })) : h('div'),
+          needsBox ? field(places ? 'Where' : 'Box', sel(boxOpts, st.box, (v) => { st.box = Number(v); draw(); })) : h('div'),
           needsTarget ? field('Next to which', sel(tokOpts.filter(([t]) => t !== st.token), st.target, (v) => { st.target = v; draw(); })) : h('div')) : null),
         h('button', { class: 'btn btn-quiet', onclick: () => { it.steps.splice(i, 1); draw(); } }, 'Remove'));
     }));
@@ -1483,11 +1495,28 @@ function followEditor(it) {
       toks.length < 4 ? h('div', { class: 'row-actions' },
         h('button', { class: 'btn', onclick: () => { const free = F_COLOURS.flatMap((c) => F_SHAPES.map((x) => `${c}-${x}`)).find((x) => !toks.includes(x)); it.tokens.push(free); draw(); } }, 'Add a shape'),
         fObjects().length ? h('button', { class: 'btn', onclick: () => { const free = fObjects().map((o) => o.id).find((x) => !toks.includes(x)); if (free) { it.tokens.push(free); draw(); } } }, 'Add an object') : null) : '',
+      h('h4', { class: 'q-head' }, 'Where things go'),
+      h('p', { class: 'muted', style: 'margin:0' }, 'Numbered boxes, or real places like the fridge or a bag: "Put the milk in the fridge."'),
+      sel([['boxes', 'Four numbered boxes'], ['places', 'Real places (2 to 4)']], places ? 'places' : 'boxes', (v) => {
+        if (v === 'places') { it.places = fPlaces().slice(0, 3).map((p) => p.id); } else delete it.places;
+        for (const st of it.steps) if (st.box > (it.places?.length || 4)) st.box = 1;
+        for (const k of Object.keys(it.start)) if (it.start[k] > (it.places?.length || 4)) delete it.start[k];
+        draw();
+      }),
+      placeRows,
+      places && places.length < 4 ? h('button', { class: 'btn', onclick: () => { const free = fPlaces().map((p) => p.id).find((x) => !places.includes(x)); if (free) { places.push(free); draw(); } } }, 'Add a place') : null,
       h('h4', { class: 'q-head' }, 'Steps (1 to 4)'),
       h('p', { class: 'muted', style: 'margin:0' }, 'Two steps is the plan\u2019s target; three is the trial. A "Tell me" step is answered by speaking, so put it last.'),
       steps,
       it.steps.length < 4 ? h('button', { class: 'btn', onclick: () => { it.steps.push({ type: 'box', token: toks[0], box: 1 }); draw(); } }, 'Add a step') : '',
     );
+  };
+  // Removing place i: steps and starting spots after it move up one, ones that used it go back to the first place.
+  const removePlace = (i) => {
+    it.places.splice(i, 1);
+    const fix = (n) => (n - 1 === i ? 1 : n - 1 > i ? n - 1 : n);
+    for (const st of it.steps) if (st.box) st.box = fix(st.box);
+    for (const k of Object.keys(it.start)) it.start[k] = fix(it.start[k]);
   };
   const replaceTok = (from, to) => {
     if (it.tokens.includes(to)) { toast('That one is already in this instruction.'); draw(); return; }

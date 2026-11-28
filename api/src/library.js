@@ -4,7 +4,7 @@
 // personalised in Activities afterwards. The original is never changed.
 //
 // Text is TALVO's own. Pictures are Mulberry Symbols (CC BY-SA 4.0, © Steve Lee), stored as "sym:<name>".
-import { FOLLOW_OBJECTS, FOLLOW_STEP_TYPES, FOLLOW_BOXES, isFollowToken, followInstruction, tokenName } from './coach/modes.js';
+import { FOLLOW_OBJECTS, FOLLOW_PLACES, FOLLOW_STEP_TYPES, followBoxCount, followPlaces, isFollowToken, followInstruction, tokenName } from './coach/modes.js';
 
 export const LIBRARY_SOURCE = 'Text written for TALVO';
 export const LIBRARY_PICTURE_CREDIT = 'Pictures: Mulberry Symbols © Steve Lee, CC BY-SA 4.0 (mulberrysymbols.org)';
@@ -493,6 +493,8 @@ const follow = (id, title, level, tags, items) => ({
   content: { items },
 });
 const fo = (title, tokens, steps) => ({ title, tokens, steps });
+// The same, with real places instead of numbered boxes ("put the milk in the fridge").
+const fp = (title, places, tokens, steps) => ({ title, places, tokens, steps });
 const box = (token, n) => ({ type: 'box', token, box: n });
 const touch = (token) => ({ type: 'touch', token });
 const nextTo = (token, target) => ({ type: 'next_to', token, target });
@@ -521,6 +523,22 @@ LIBRARY.push(
   follow('four', 'Follow on screen: four steps', 'Harder', ['shapes', 'pictures', 'four steps'], [
     fo('Four shapes', ['red-circle', 'blue-square', 'green-triangle', 'yellow-star'], [box('red-circle', 1), box('blue-square', 2), rightOf('green-triangle', 'blue-square'), { type: 'say_box', box: 2 }]),
     fo('Key, phone and wallet', ['obj-key', 'obj-phone', 'obj-wallet'], [touch('obj-phone'), box('obj-phone', 1), box('obj-key', 3), { type: 'say_box', box: 3 }]),
+  ]),
+);
+
+// ---- Real places instead of numbered boxes: putting shopping away, packing a bag, sorting washing.
+LIBRARY.push(
+  follow('places-2', 'Follow on screen: putting things away', 'Easy', ['real life', 'two steps', 'home'], [
+    fp('Shopping away', ['fridge', 'cupboard', 'freezer'], ['obj-milk', 'obj-cereal', 'obj-tin'], [box('obj-milk', 1), box('obj-cereal', 2)]),
+    fp('Pack for college', ['bag', 'desk', 'drawer'], ['obj-laptop', 'obj-charger', 'obj-lunchbox'], [box('obj-laptop', 1), box('obj-lunchbox', 2)]),
+    fp('Sort the washing', ['washing_machine', 'wardrobe', 'drawer'], ['obj-tshirt', 'obj-jumper', 'obj-socks'], [box('obj-socks', 1), box('obj-jumper', 2)]),
+    fp('Touch, then put away', ['fridge', 'cupboard', 'table'], ['obj-cheese', 'obj-bread', 'obj-crisps'], [touch('obj-cheese'), box('obj-cheese', 1)]),
+  ]),
+  follow('places-3', 'Follow on screen: three steps in real places', 'Medium', ['real life', 'three steps', 'home', 'work'], [
+    fp('Unpack the shopping', ['fridge', 'cupboard', 'freezer', 'table'], ['obj-milk', 'obj-eggs', 'obj-tin', 'obj-bread'], [box('obj-milk', 1), box('obj-tin', 2), box('obj-bread', 4)]),
+    fp('Get ready for the gym', ['bag', 'table', 'locker'], ['obj-towel', 'obj-shoes', 'obj-phone'], [box('obj-towel', 1), box('obj-shoes', 3), { type: 'say_box', box: 1 }]),
+    fp('Tidy the desk', ['desk', 'drawer', 'bin'], ['obj-pencil', 'obj-scissors', 'obj-laptop'], [touch('obj-scissors'), box('obj-scissors', 2), box('obj-laptop', 1)]),
+    fp('Pack for a trip', ['suitcase', 'bag', 'table'], ['obj-tshirt', 'obj-soap', 'obj-headphones'], [box('obj-tshirt', 1), box('obj-soap', 2), box('obj-headphones', 3)]),
   ]),
 );
 
@@ -702,7 +720,7 @@ export function libraryDetail(item) {
   } else if (item.mode === 'object') {
     parts = list.map((x) => ({ heading: x.name.charAt(0).toUpperCase() + x.name.slice(1), image: x.image_id, rows: [['Name', [x.name, ...x.name_alternatives].join(', ')], ['Group', [x.category, ...x.category_alternatives]], ['What it is for', x.function], ['Words that show the use', x.function_keywords]] }));
   } else if (item.mode === 'follow') {
-    parts = list.map((x) => ({ heading: x.title, images: x.tokens.filter((k) => k.startsWith('obj-')).map((k) => `sym:${FOLLOW_OBJECTS[k.slice(4)].file}`), rows: [['Foxy says', followInstruction(x)], ['Shapes or pictures on screen', x.tokens.map(tokenName)]] }));
+    parts = list.map((x) => ({ heading: x.title, images: x.tokens.filter((k) => k.startsWith('obj-')).map((k) => `sym:${FOLLOW_OBJECTS[k.slice(4)].file}`), rows: [['Foxy says', followInstruction(x)], ['Shapes or pictures on screen', x.tokens.map(tokenName)], ...(followPlaces(x).length ? [['Places', followPlaces(x).map((p) => FOLLOW_PLACES[p].name)]] : [])] }));
   } else if (item.mode === 'story') {
     parts = list.map((x) => ({ heading: x.title, images: x.image_ids, rows: [['Who', x.who], ['Where', x.setting], ['What happens, in order', x.events], ['How it ended', x.outcome], ...(x.target_words?.length ? [['Words Foxy listens for', x.target_words]] : [])] }));
   } else if (item.mode === 'recall') {
@@ -795,9 +813,10 @@ export function libraryProblems(symbolSlugs, items = LIBRARY) {
         steps.forEach((st, k) => {
           if (!FOLLOW_STEP_TYPES.includes(st?.type)) out.push(`${where} step ${k + 1}: needs a type`);
           else if (!st.type.startsWith('say_') && !toks.includes(st.token)) out.push(`${where} step ${k + 1}: not one of this instruction's shapes or objects`);
-          if (['box', 'say_box'].includes(st?.type) && !(Number(st.box) >= 1 && Number(st.box) <= FOLLOW_BOXES)) out.push(`${where} step ${k + 1}: box must be 1 to ${FOLLOW_BOXES}`);
+          if (['box', 'say_box'].includes(st?.type) && !(Number(st.box) >= 1 && Number(st.box) <= followBoxCount(x))) out.push(`${where} step ${k + 1}: box must be 1 to ${followBoxCount(x)}`);
           if (['next_to', 'left_of', 'right_of'].includes(st?.type) && (!toks.includes(st.target) || st.target === st.token)) out.push(`${where} step ${k + 1}: needs a different one to put it next to`);
         });
+        if (x.places && (followPlaces(x).length !== x.places.length || x.places.length < 2)) out.push(`${where}: places must be 2 to 4 known places`);
         if (new Set(steps.filter((st) => st.type === 'box').map((st) => st.box)).size !== steps.filter((st) => st.type === 'box').length) out.push(`${where}: two steps use the same box`);
       });
     } else if (it.mode === 'story') {

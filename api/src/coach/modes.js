@@ -541,7 +541,51 @@ export const FOLLOW_OBJECTS = {
   guitar: { name: 'guitar', file: 'guitar', words: ['guitar'] },
   camera: { name: 'camera', file: 'camera', words: ['camera'] },
   clock: { name: 'clock', file: 'clock', words: ['clock'] },
+  // Everyday things for putting away, packing and tidying (used with places).
+  milk: { name: 'milk', file: 'milk-carton', words: ['milk'] },
+  cheese: { name: 'cheese', file: 'cheese', words: ['cheese'] },
+  bread: { name: 'bread', file: 'bread', words: ['bread', 'loaf'] },
+  eggs: { name: 'eggs', file: 'egg', words: ['egg', 'eggs'] },
+  tin: { name: 'tin', file: 'tin-can', words: ['tin', 'can'] },
+  cereal: { name: 'cereal', file: 'cereal-box-bran', words: ['cereal', 'cereal box'] },
+  crisps: { name: 'crisps', file: 'crisps', words: ['crisps', 'chips'] },
+  laptop: { name: 'laptop', file: 'laptop', words: ['laptop', 'computer'] },
+  charger: { name: 'charger', file: 'charger-electric', words: ['charger', 'cable'] },
+  lunchbox: { name: 'lunch box', file: 'lunch-box', words: ['lunch box', 'lunchbox', 'lunch'] },
+  tshirt: { name: 'T-shirt', file: 't-shirt', words: ['t-shirt', 'tshirt', 't shirt', 'shirt'] },
+  jumper: { name: 'jumper', file: 'jumper', words: ['jumper', 'sweater'] },
+  socks: { name: 'socks', file: 'socks', words: ['socks', 'sock'] },
+  shoes: { name: 'shoes', file: 'shoe-mans', words: ['shoes', 'shoe', 'trainers'] },
+  towel: { name: 'towel', file: 'towel', words: ['towel'] },
+  soap: { name: 'soap', file: 'soap', words: ['soap'] },
 };
+// Real places instead of numbered boxes (optional, per instruction): item.places = ['bag', 'fridge', ...], 2 to 4.
+// "Put the milk in the fridge" instead of "put the milk in box 2". `words` are what the learner might say for it.
+export const FOLLOW_PLACES = {
+  bag: { name: 'the bag', file: 'school-bag', words: ['bag', 'backpack', 'rucksack'] },
+  basket: { name: 'the basket', file: 'basket', words: ['basket'] },
+  fridge: { name: 'the fridge', file: 'fridge', words: ['fridge'] },
+  freezer: { name: 'the freezer', file: 'freezer', words: ['freezer'] },
+  cupboard: { name: 'the cupboard', file: 'cupboard', words: ['cupboard'] },
+  drawer: { name: 'the drawer', file: 'drawer', words: ['drawer'] },
+  table: { name: 'the table', file: 'table', words: ['table'], prep: 'on' },
+  desk: { name: 'the desk', file: 'desk', words: ['desk'], prep: 'on' },
+  bin: { name: 'the bin', file: 'recycle-bin', words: ['bin', 'rubbish', 'trash'] },
+  sink: { name: 'the sink', file: 'sink', words: ['sink'] },
+  locker: { name: 'the locker', file: 'locker', words: ['locker'] },
+  wardrobe: { name: 'the wardrobe', file: 'wardrobe', words: ['wardrobe', 'closet'] },
+  suitcase: { name: 'the suitcase', file: 'suitcase-1', words: ['suitcase', 'case'] },
+  tray: { name: 'the tray', file: 'tray', words: ['tray'], prep: 'on' },
+  washing_machine: { name: 'the washing machine', file: 'washing-machine', words: ['washing machine', 'washer', 'machine'] },
+};
+export const followPlaces = (item) => (Array.isArray(item?.places) ? item.places.filter((p) => FOLLOW_PLACES[p]).slice(0, 4) : []);
+export const followBoxCount = (item) => (followPlaces(item).length >= 2 ? followPlaces(item).length : FOLLOW_BOXES);
+// "box 2", or the place in slot 2 when the instruction uses places.
+export const boxName = (item, n) => { const p = followPlaces(item)[Number(n) - 1]; return p ? FOLLOW_PLACES[p].name : `box ${n}`; };
+// "in box 2", "in the fridge", "on the table".
+export const boxPhrase = (item, n) => { const p = FOLLOW_PLACES[followPlaces(item)[Number(n) - 1]]; return `${p?.prep || 'in'} ${boxName(item, n)}`; };
+export const boxWords = (item, n) => FOLLOW_PLACES[followPlaces(item)[Number(n) - 1]]?.words || null;
+
 const objectOf = (id) => (String(id || '').startsWith('obj-') ? FOLLOW_OBJECTS[String(id).slice(4)] || null : null);
 export const isFollowToken = (id) => {
   if (objectOf(id)) return true;
@@ -554,19 +598,21 @@ export const tokenImage = (id) => (objectOf(id) ? `/symbols/${objectOf(id).file}
 export const tokenWords = (id) => objectOf(id)?.words || String(id || '').split('-').filter(Boolean);
 // "shape" when an instruction only has shapes, otherwise "picture".
 export const followThing = (item) => ((item?.tokens || []).some((t) => objectOf(t)) ? 'picture' : 'shape');
+// What Sam touches second: "a box", or "where it goes" when the boxes are real places.
+export const followTarget = (item) => (followPlaces(item).length >= 2 ? 'where it goes' : 'a box');
 export const FOLLOW_STEP_TYPES = ['touch', 'box', 'next_to', 'left_of', 'right_of', 'say_left', 'say_right', 'say_box'];
 // One step in words. `prevToken` lets "Then put it in box 3" follow "touch the green triangle".
-export function followStepText(step, prevToken = null) {
+export function followStepText(step, prevToken = null, item = null) {
   const t = step.token && step.token === prevToken ? 'it' : `the ${tokenName(step.token)}`;
   switch (step.type) {
     case 'touch': return `touch the ${tokenName(step.token)}`;
-    case 'box': return `put ${t} in box ${step.box}`;
+    case 'box': return `put ${t} ${boxPhrase(item, step.box)}`;
     case 'next_to': return `put ${t} next to the ${tokenName(step.target)}`;
     case 'left_of': return `put ${t} on the left of the ${tokenName(step.target)}`;
     case 'right_of': return `put ${t} on the right of the ${tokenName(step.target)}`;
     case 'say_left': return 'tell me which one is on the left';
     case 'say_right': return 'tell me which one is on the right';
-    case 'say_box': return `tell me which one is in box ${step.box}`;
+    case 'say_box': return `tell me which one is ${boxPhrase(item, step.box)}`;
     default: return '';
   }
 }
@@ -575,7 +621,7 @@ const followOrdinal = (i, n) => (i === 0 ? 'first' : i === n - 1 && n > 2 ? 'fin
 export const followSteps = (item) => (item.steps || []).filter((st) => FOLLOW_STEP_TYPES.includes(st?.type));
 export function followInstruction(item) {
   const steps = followSteps(item);
-  return steps.map((st, i) => `${cap(followOrdinal(i, steps.length))}, ${followStepText(st, i ? steps[i - 1].token : null)}.`).join(' ');
+  return steps.map((st, i) => `${cap(followOrdinal(i, steps.length))}, ${followStepText(st, i ? steps[i - 1].token : null, item)}.`).join(' ');
 }
 const follow = {
   label: 'Listen',
@@ -587,7 +633,7 @@ const follow = {
   elementLabel: new Proxy({}, { get: (t, k) => (String(k).startsWith('step_') ? `Step ${Number(String(k).slice(5)) + 1}` : k) }),
   cueCardIndex: (el) => (String(el).startsWith('step_') ? Number(el.slice(5)) : null),
   prompt: () => 'Now you do it.',
-  simplePrompt: (item) => `Touch a ${followThing(item)}, then touch a box.`,
+  simplePrompt: (item) => `Touch a ${followThing(item)}, then touch ${followTarget(item)}.`,
   defaultCues: {},
   achieved: {},
   evidenceLabel: new Proxy({}, { get: (t, k) => (String(k).startsWith('step_') ? `Step ${Number(String(k).slice(5)) + 1}` : undefined) }),
@@ -952,7 +998,7 @@ export function describe(mode, els, item) {
   if (mode === 'follow') {
     const n = els.filter((e) => e.startsWith('step_')).length;
     const total = followSteps(item).length;
-    return n && n === total ? `followed ${total === 1 ? 'the step' : `all ${NUM[total] || total} steps`}` : `did ${n === 1 ? 'one step' : `${NUM[n] || n} steps`}`;
+    return n && n === total ? `followed ${total === 1 ? 'the step' : total === 2 ? 'both steps' : `all ${NUM[total] || total} steps`}` : `did ${n === 1 ? 'one step' : `${NUM[n] || n} steps`}`;
   }
   if (mode === 'explain') {
     const n = els.filter((e) => e.startsWith('point_')).length;

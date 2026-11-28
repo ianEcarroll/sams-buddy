@@ -458,7 +458,7 @@ function drawPractice() {
   // Listen Buddy on screen: Sam answers by tapping, so the board replaces the Talk button for those steps.
   const board = ui.board ? drawBoard(ui.board, speakingNow) : null;
   const tapHint = turn.expect === 'board'
-    ? h('p', { class: 'tap-hint' }, speakingNow ? 'Listen to all of it first\u2026' : 'Touch a shape, then touch a box.')
+    ? h('p', { class: 'tap-hint' }, speakingNow ? 'Listen to all of it first\u2026' : ui.board?.places ? 'Touch a picture, then touch where it goes.' : 'Touch a shape, then touch a box.')
     : null;
   // Task Buddy: the learner's hands are busy, so a big Done button replaces Talk while they do a step.
   const doneBtn = turn.expect === 'done'
@@ -712,13 +712,14 @@ function drawBoard(b, locked) {
   const at = {};
   for (const [tok, p] of Object.entries(b.pos || {})) if (p != null) at[p] = tok;
   const name = (id) => b.tokens.find((t) => t.id === id)?.name || id;
-  const boxes = h('div', { class: 'boxes' }, Array.from({ length: b.boxes }, (_, i) => {
+  const boxes = h('div', { class: 'boxes', style: `grid-template-columns:repeat(${b.boxes}, 1fr)` }, Array.from({ length: b.boxes }, (_, i) => {
     const tok = at[i];
+    const place = b.places?.[i];
     return h('button', {
-      class: 'box', 'data-highlight': String(b.highlight === i), 'data-selected': String(!!tok && tok === b.selected), disabled: locked,
-      'aria-label': tok ? `Box ${i + 1}, ${name(tok)}` : `Box ${i + 1}, empty`,
+      class: 'box', 'data-place': String(!!place), 'data-highlight': String(b.highlight === i), 'data-selected': String(!!tok && tok === b.selected), disabled: locked,
+      'aria-label': `${place ? place.name.replace(/^the /, '') : `Box ${i + 1}`}, ${tok ? name(tok) : 'empty'}`,
       onclick: () => (b.selected && b.selected !== tok ? sendAct({ type: 'box', box: i }) : tok ? sendAct({ type: 'token', token: tok }) : sendAct({ type: 'box', box: i })),
-    }, h('span', { class: 'box-num' }, String(i + 1)), tok ? tokenEl(b, tok) : null);
+    }, place ? h('span', { class: 'box-place' }, h('img', { src: place.img, alt: '', class: 'sym' }), h('small', {}, place.name.replace(/^the /, ''))) : h('span', { class: 'box-num' }, String(i + 1)), tok ? tokenEl(b, tok) : null);
   }));
   const tray = h('div', { class: 'tray', 'aria-label': b.tokens.some((t) => t.img) ? 'Pictures' : 'Shapes' }, b.tokens.filter((t) => b.pos?.[t.id] == null).map((t) =>
     h('button', { class: 'token', 'data-selected': String(b.selected === t.id), disabled: locked, 'aria-label': t.name, 'aria-pressed': String(b.selected === t.id), onclick: () => sendAct({ type: 'token', token: t.id }) }, tokenEl(b, t.id))));
