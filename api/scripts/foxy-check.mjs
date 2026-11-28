@@ -109,8 +109,9 @@ const SCENARIOS = [
 
   // Story, Describe, Explain.
   { name: 'story: whole story', activity: first(lib('tell-easy')),
-    steps: [say('First the boy got up, then he had breakfast, then he went to school and finally he played football. It ended well.')] },
-  { name: 'story: bit by bit', activity: first(lib('tell-easy')), steps: [say('a boy'), ctl('hint'), say('he went to school'), say("I don't know")] },
+    // The pictures: Mia in the street, it starts to rain, she opens her umbrella and walks to school, and stays dry.
+    steps: [say('Mia was in the street. It started to rain, so she opened her umbrella and walked to school. She stayed dry.', 'credit')] },
+  { name: 'story: bit by bit', activity: first(lib('tell-easy')), steps: [say('a girl'), say('it started raining'), ctl('hint'), say('she walked to school'), say("I don't know")] },
   { name: 'describe: full answer', activity: first(lib('describe-kitchen')), steps: [say('It is a fridge. It is a kitchen thing. It keeps food cold.', 'credit')] },
   { name: 'describe: one word at a time', activity: first(lib('describe-kitchen')), steps: [say('fridge'), say('in the kitchen'), say('for food')] },
 

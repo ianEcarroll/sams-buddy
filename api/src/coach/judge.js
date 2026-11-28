@@ -223,7 +223,7 @@ function answerKey(mode, item, activity) {
 }
 
 const ELEMENT_GUIDE = {
-  object: 'name = the learner named the object (approved name or obvious variant e.g. plural, "a"/"the"). category = they named its group (approved group only, or an obvious synonym of it). use = they said what it is used for, in any wording with the same meaning.',
+  object: 'name = the learner named the object (approved name or obvious variant e.g. plural, "a"/"the"). category = they named its group (approved group only, or an obvious synonym of it). Where it is kept or found ("in the kitchen", "at school") is a place, not its group. use = they said what it is used for, in any wording with the same meaning. A description of what it is or looks like ("a cold box", "a white thing") is not its use.',
   story: 'who = they said who was there (any one of the people listed, or an obvious way of naming them such as "my dad" for Dad). ending = they said how it ended or the outcome (meaning, not exact words). where = the learner said where it happens. event_N = they described event N (meaning, not exact words). order = only judge in events_in_order. vocabulary = they used one of the target words or approved alternatives AND it fits the picture/action.',
   task: 'step_N = the learner\'s retelling includes step N (meaning, not exact words). order = only judge in events_in_order.',
   listen: 'answer = the learner\'s response correctly answers the question, judged against the story and the accepted answers. Accept any wording, synonym or partial answer with the same meaning (e.g. "a bird" for "crow" only if bird is accepted; "Peter" for "Peter Pan"). A wrong or unrelated answer, or "I don\'t know", is not supplied. Evidence = their answer words. If question_type is "new_title" there is no single right answer: answer = any short, sensible name for the story that fits what happened (the original title, a character or event from the story, or a playful but related name all count). "I don\'t know", unrelated words or a whole retelling instead of a name do not count.',
@@ -232,7 +232,7 @@ const ELEMENT_GUIDE = {
   category: 'Category practice: the learner is asked to say words that belong to a group (answer key "group"). If kind is "add", Foxy said given_words_buddy_said and the learner must add a word of their own: word = they said at least one word that is NOT one of the given words and really belongs to the same group. If kind is "name", member = they named at least one real member of the group. example_members are only examples: ANY real member of the group counts, including less common ones, plural or singular, with "a"/"the" or a short description. Do not count the group name itself, words already in already_said_earlier, or words that are not in the group (for example a different group). Evidence = the learner\'s own word. Also fill "events": one entry per DIFFERENT real member they named in this response (text = the word as they said it, known = -1), leaving out given words and already_said_earlier.',
   think: 'This is a problem-solving role-play: Foxy described a situation and asked what the learner would do. The whole response may cover several parts at once. problem = they show they noticed what is wrong or unexpected (naming it, or giving a response that clearly deals with that specific problem). A safe response that is a sensible reaction to THIS situation (for example asking staff where the missing trainer is) shows the learner noticed, so set problem as well as action; the learner does not have to say out loud what is wrong. action = they say a safe, sensible thing they would do; asking a trusted adult, staff member, teacher or parent always counts; compare with the approved responses by meaning, not wording, and accept other safe, sensible ideas too. An unsafe idea (in not_safe, or plainly unsafe such as leaving alone, going with a stranger, or anything risky) is NOT an action: set unsafe_idea = true. reason = they say why their idea would help. Accept any purpose, benefit or outcome in their own words, even short or loosely phrased ("because…", "so that…", "she could tell me what is wrong", "they would know", "then I would find out"). Do not reject a reason because it also repeats the problem, and never mark a response as not met just because it is short. backup = they say what they would do if their first idea did not work. Saying what they WOULD do in the situation (e.g. "I\'d ask my coach for help", "I need help so I\'d ask the staff") is an answer, not a help_request; help_request is only for asking TALVO itself (e.g. "Can you say that again?", "I don\'t understand the question").',
   steps: 'The learner is learning or doing a task step by step and Foxy asked one question about this step (when heard_all_steps_first is true, Foxy read out every step earlier and the learner is answering from memory; for expressive, reasoning and independence they say how they would do it, why, or how they would check). answer = the response is a sensible, correct answer to the question for THIS step (meaning, not exact words; the example answer is one good answer, not the only one). By skill: understanding = they show they understood the instruction (saying the key action or thing is enough, e.g. "the sleeves"); memory = they say what this step is (when Foxy has not said it yet) or the step asked about; expressive = they describe what they did in this step in their own words, ideally a sentence (a single word like "folded" counts only if it clearly names the action); reasoning = any sensible reason why the step matters, or a sensible plan if something goes wrong; independence (problem solving) = any sensible way to put right or cope with something going wrong at this step (try again, change something, fix it, ask for help), or a sensible way of checking the step is right. "I don\'t know", unrelated words, or describing a different step do not count.',
-  conversation: 'turn = the learner made a relevant comment, a personal connection, or a question on the topic. Any of these is a valid turn.',
+  conversation: 'turn = the learner made a relevant comment, a personal connection, or a question on the topic. Any of these is a valid turn. relevant_to_topic is also true when the response carries on something either of you said earlier in this conversation (for example answering a question Foxy asked, or talking more about a question the learner asked), even if it has moved away from the original topic. "I don\'t know", "nothing" or a one-word answer that does not fit are not relevant.',
 };
 
 // Who Buddy is talking to: first name, age when the family gave a year of birth, and the interests the family entered.
@@ -263,7 +263,7 @@ Rules:
 - Repetition of a word is fine when it is accurate.
 - Never credit an element ${name} did not say. Evidence must be ${name}'s own words copied from the transcript.
 - Accept approved alternatives from the answer key. Do not invent stricter targets.
-- The transcript comes from speech recognition. If it looks like a recognition error (garbled, wrong-language fragments, words that make no sense in context) set transcript_seems_garbled = true rather than treating it as a language mistake. A clear sentence about something else (another topic, one of their interests) is NOT a recognition error: leave transcript_seems_garbled false and judge it as off-topic.
+- The transcript comes from speech recognition. Set transcript_seems_garbled = true only when the words themselves look mis-heard: non-words, mixed-up fragments, wrong-language bits, or a string that is not real English. Real words that do not fit the question are NOT a recognition error, however odd or short ("maths", "a vampire", "because I like numbers", one of their interests): leave transcript_seems_garbled false and judge them as off-topic.
 - A response that links the topic to ${name}'s own life counts as a personal connection.${interestsLine(learner)}
 - help_request: classify if ${name} is asking for repetition, saying they don't understand, asking for help, asking to be shown, or saying they need to check with their job coach. Otherwise "none".
 Always respond by calling the report tool.`;
@@ -278,7 +278,12 @@ Staying in the conversation:
 - Only if ${name} sincerely asks whether you are a real person, say briefly that you're their practice buddy, then carry on with the topic.
 - Never comment on ${name}'s progress: no "well done for asking a question", "you made a connection", "task complete", goals, levels or scores. Progress is recorded separately for the adults.
 ${interestsReply(learner)}- Build on what ${name} has already told you. Never ask about something they have already answered earlier in the conversation.
-- Don't tell ${name} to ask you a question; the app handles that. Vary your wording and don't reuse phrases from earlier in the conversation.`;
+- Don't tell ${name} to ask you a question; the app handles that. Vary your wording and don't reuse phrases from earlier in the conversation.
+When the response is NOT a valid turn, still write "reply", in one of these ways (these may always end with one easy question):
+- They talked about something else: say something short and warm about what they said, then link back to the topic with one easy question. Example: "Drumming sounds fun! Do you have a snack before you practise?"
+- They said they don't know, or "nothing": say that's fine, then ask an easier question on the topic with two choices. Example: "That's fine. Do you like sandwiches or hot food better?"
+- They said they don't understand: say "Let me ask it another way." then ask your last question again in simpler words, with two choices.
+Never just repeat your last question word for word.`;
 }
 
 export function makeClaudeJudge({ apiKey, model, workspaceId, fetchImpl = fetch }) {
@@ -311,6 +316,7 @@ export function makeClaudeJudge({ apiKey, model, workspaceId, fetchImpl = fetch 
             items: { type: 'object', properties: { text: { type: 'string' }, known: { type: 'integer' } }, required: ['text', 'known'] },
           },
           unsafe_idea: { type: 'boolean', description: 'Think mode only: the learner suggested something unsafe.' },
+          wrong_member_note: { type: 'string', description: 'Category mode only: if the learner named something that is NOT in the group, one short plain sentence saying so, e.g. "An apple is a fruit, not a vegetable." Otherwise an empty string.' },
           reply: { type: 'string' },
         },
         required: ['elements', 'events_in_order', 'help_request', 'transcript_seems_garbled'],
@@ -359,6 +365,11 @@ export function makeClaudeJudge({ apiKey, model, workspaceId, fetchImpl = fetch 
     out.garbled = !!input.transcript_seems_garbled;
     out.reply = mode === 'conversation' ? (input.reply || '').trim() || null : null;
     if (mode === 'conversation') out.met.turn = (out.relevant || out.connection || out.question) ? text : null;
+    // Talk: when the answer was not a valid turn, Claude's reply responds to what was actually said (off-topic, "I don't
+    // know", "I don't understand") instead of a fixed cue. The keyword judge has no bridge, so it keeps the fixed cues.
+    if (mode === 'conversation' && !out.met.turn && out.reply) out.bridge = out.reply;
+    if (mode === 'conversation' && out.help === 'dont_understand' && out.reply) out.bridge = out.reply;
+    if (mode === 'category') out.note = String(input.wrong_member_note || '').trim().slice(0, 160) || null;
     return out;
   };
 }
