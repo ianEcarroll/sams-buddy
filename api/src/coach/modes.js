@@ -110,7 +110,8 @@ const story = {
   simplePrompt: (item) => item.simple_prompt || 'Look at the pictures. Tell me what happens.',
   defaultCues: {
     who: ['Remember to say who was there.', 'Who was there?', '___ was there.', '{whoModel} {whoVerb} there.'],
-    where: ['Remember to say where it happens.', 'Where does the story happen?', 'It happens at the ___.', 'It happens at the {setting}.'],
+    // "in the kitchen", "at the beach", "on the football pitch": the right small word for the place.
+    where: ['Remember to say where it happens.', 'Where does the story happen?', 'It happens {settingPrep} ___.', 'It happens {settingPhrase}.'],
     ending: ['Remember to say how it ended.', 'What happened at the end?', 'At the end, ___.', 'At the end, {outcome}.'],
     event: ['Think about what happens {ordinal}.', 'What happens {ordinal}?', '{Ordinal}, ___.', '{Ordinal}, {event}.'],
     order: ['Tell it in order: first, next, then, finally.', 'What happened first?', 'First … next … then … finally …', '{orderedModel}'],
@@ -126,6 +127,8 @@ const story = {
       whoVerb: who.length > 1 ? 'were' : 'was',
       outcome: item.outcome,
       setting: item.setting,
+      settingPrep: placePhrase(item.setting).prep,
+      settingPhrase: placePhrase(item.setting).phrase,
       event: evs[i],
       ordinal: o,
       Ordinal: cap(o),
@@ -992,6 +995,18 @@ export function labelFor(mode, el) {
 
 // Brief, specific feedback for a set of elements, e.g.
 // "named the object and explained its use" / "said where it happened and told what happened first, next and last, in order".
+// The place in a story with the right small word in front: "in the kitchen", "at the beach", "on the road".
+const AT = new Set(['beach', 'bus stop', 'shop', 'party', 'cinema', 'station', 'gym', 'pool', 'zoo', 'farm']);
+const ON = new Set(['road', 'football pitch', 'pitch', 'bus', 'train', 'field']);
+export function placePhrase(setting) {
+  const raw = String(setting || '').trim();
+  if (/^(in|at|on|by|near|under|inside|outside)\b/i.test(raw)) return { prep: raw.split(/\s+/).slice(0, -1).join(' ') || raw, phrase: raw };
+  const place = raw.replace(/^the\s+/i, '');
+  if (/^(school|home|work|college)$/i.test(place)) return { prep: 'at', phrase: `at ${place}` };
+  const prep = AT.has(place.toLowerCase()) ? 'at the' : ON.has(place.toLowerCase()) ? 'on the' : 'in the';
+  return { prep, phrase: `${prep} ${place}` };
+}
+
 export function describe(mode, els, item) {
   if (mode === 'follow') {
     const n = els.filter((e) => e.startsWith('step_')).length;

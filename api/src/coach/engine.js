@@ -78,13 +78,16 @@ function topicChoices(state) {
   const score = (i) => words(topicLabel(items[i]) + ' ' + (items[i].opener || '')).filter((w) => likes.has(w)).length;
   return idx.sort((x, y) => score(y) - score(x) || x - y).slice(0, 2);
 }
-// Start the chosen topic: move it to the front so the rest follow in the team's order.
+// Start the chosen topic: the chosen topic first, then the other one offered (Sam heard it named), then the rest in
+// the team's order.
 function chooseTopic(state, pick, said = null) {
-  const items = [...state.activity.content.items];
+  const items = state.activity.content.items;
   const choice = pick ?? state.choosing[0];
+  const other = state.choosing.find((i) => i !== choice);
   state.choosing = null;
-  const [chosen] = items.splice(choice, 1);
-  state.activity = { ...state.activity, content: { ...state.activity.content, items: [chosen, ...items] } };
+  const chosen = items[choice];
+  const order = [chosen, ...(other != null ? [items[other]] : []), ...items.filter((_, i) => i !== choice && i !== other)];
+  state.activity = { ...state.activity, content: { ...state.activity.content, items: order } };
   state.itemIndex = 0;
   const lead = pick == null && said != null ? `Let's start with ${topicLabel(chosen)}.` : `Great, let's talk about ${topicLabel(chosen)}.`;
   return makeTurn(state, [line(lead, 'ack'), ...openItem(state)]);
@@ -346,10 +349,11 @@ async function process_(state, { text, displayText, confirmed }, judge) {
   it.responses.push({ text: displayText, afterSupport: it.anySupport });
 
   if (state.mode === 'conversation') {
+    conv.log.push({ who: state.learnerName || 'Learner', text });
     // "I don't understand" in Talk: Claude asks the same question again in simpler words, with two choices.
     const lines = j.bridge && (j.help === 'dont_understand' || j.help === 'other_clarification') ? convBridge(state, j.bridge, text)
       : j.help && j.help !== 'none' ? handleHelp(state, j.help, text, 'spoken') : conversationTurn(state, j, text);
-    conv.log.push({ who: state.learnerName || 'Learner', text }, ...lines.filter((l) => ['reply', 'cue', 'model', 'prompt', 'ack'].includes(l.kind)).map((l) => ({ who: 'Foxy', text: l.text })));
+    conv.log.push(...lines.filter((l) => ['reply', 'cue', 'model', 'prompt', 'ack'].includes(l.kind)).map((l) => ({ who: 'Foxy', text: l.text })));
     return { state, turn: makeTurn(state, lines) };
   }
 
@@ -610,6 +614,11 @@ function giveCue(state, el, by, forceLevel = null) {
     const q = lastFoxyQuestion(state, item);
     if (q) text = `Take your time. ${q}`;
   }
+  // After Foxy's own replies have tried to link back, the next cue goes back to its question plainly.
+  if (state.mode === 'conversation' && el === 'turn' && level === 1 && it.conv?.bridges) {
+    const q = lastFoxyQuestion(state, item);
+    if (q) text = `Let's go back to my question. ${q}`;
+  }
   it.supportGiven.push({ el, level, text, by });
   it.anySupport = true;
   // Talk: the topic's picture is a hint for finding something to say, so it goes with a comment cue only. It is not shown
@@ -668,7 +677,10 @@ function handleHelp(state, kind, text, source) {
       return [line('Sure.', 'ack'), exampleLine(state, 'sam')];
     case 'need_help':
     default:
-      return [line('Sure, here is a hint.', 'ack'), hintLine(state, 'sam')];
+    {
+      const h = hintLine(state, 'sam');
+      return /^Here is a whole answer/.test(h.text) ? [h] : [line('Sure, here is a hint.', 'ack'), h];
+    }
   }
 }
 
@@ -677,6 +689,8 @@ function hintLine(state, by) {
   if (state.mode === 'listen') return listenHelp(state, 'need_help', 'Give me a hint', by === 'sam' ? 'button' : 'spoken')[0];
   const el = state.mode === 'conversation' ? convFocus(state) : (state.item.phase === 'clarify' ? 'clarify' : (nextMissing(state) || (state.mode === 'think' ? state.item.focus : null)));
   if (!el) return line('You have already done everything for this one.', 'feedback');
+  // Already modelled this part: a hint would only repeat the model, so show the whole answer instead.
+  if (state.mode !== 'conversation' && state.mode !== 'recall' && state.mode !== 'category' && state.item.modelGiven[el]) return wholeExample(state, by);
   return giveCue(state, el, by);
 }
 
@@ -791,7 +805,9 @@ function conversationTurn(state, j, text) {
   c.validTurns += 1;
   const afterCue = it.anySupport && it.focus != null;
   c.turns.push({ text, connection: !!j.connection, question: !!j.question, independent: !afterCue, reply: j.reply });
-  if (afterCue) { it.focus = null; it.focusLevel = -1; it.anySupport = false; }
+  // A comment after a cue ends that cue. An invitation to ask a question carries on from where it was, so the next one is
+  // more concrete ("You could ask me the same question I asked you.") instead of another open one.
+  if (afterCue && !(it.focus === 'question' && !j.question)) { it.focus = null; it.focusLevel = -1; it.anySupport = false; }
 
   // Progress is recorded silently for the parent dashboard — Buddy never announces it during the chat.
   if (j.connection && !c.noted.connection) c.noted.connection = true;
@@ -1046,23 +1062,34 @@ function completeItem(state, newly) {
   return advance(state, lines);
 }
 
+function coveredAlready(state, item) {
+  const said = new Set((state.item?.conv?.log || []).filter((l) => l.who !== 'Foxy').flatMap((l) => words(l.text)));
+  return words(topicLabel(item)).some((w) => w.length > 3 && (said.has(w) || said.has(`${w}s`)));
+}
 const TOPIC_BRIDGES = ['Let me ask you about something different.', 'I am curious about something else.', 'Shall we talk about something new?'];
 function advance(state, lines) {
   state.completed.push(buildRecord(state, state.item));
-  const items = state.activity.content.items;
+  let items = state.activity.content.items;
   const timeUp = Date.now() - state.startedAt > state.settings.session_minutes * 60_000;
   // Talk: a prepared topic that repeats the one just discussed is skipped, so Sam is not asked the same thing twice.
   let next = state.itemIndex + 1;
   const sameTopic = (a, b) => !!a?.topic && String(a.topic).trim().toLowerCase() === String(b?.topic || '').trim().toLowerCase();
   if (state.mode === 'conversation') while (next < items.length && sameTopic(items[next], items[state.itemIndex])) next += 1;
+  // Talk: if Sam already took the chat onto the next topic ("what music do you like?" during food), its opener would ask
+  // what he has just answered, so that topic goes to the end when there is another one to do first.
+  if (state.mode === 'conversation' && next < items.length - 1 && coveredAlready(state, items[next])) {
+    const reordered = [...items];
+    reordered.push(...reordered.splice(next, 1));
+    state.activity = { ...state.activity, content: { ...state.activity.content, items: reordered } };
+    items = reordered;
+  }
   if (next < items.length && !timeUp) {
     const changedTopic = state.mode === 'conversation';
-    const was = items[state.itemIndex];
     state.itemIndex = next;
     const opening = openItem(state); // openItem leads in: "On to the next situation." etc.
-    // Talk: say that the subject is changing, so a prepared opener does not come out of nowhere.
-    // Name both topics so the change is clear ("Thanks for telling me about video games. Now let's talk about music.").
-    if (changedTopic) lines.push(line(was?.topic && items[next]?.topic ? `Thanks for telling me about ${topicLabel(was)}. Now let's talk about ${topicLabel(items[next])}.` : TOPIC_BRIDGES[next % TOPIC_BRIDGES.length], 'intro'));
+    // Talk: say that the subject is changing and name the new one, so a prepared opener does not come out of nowhere.
+    // "About that", not the old topic's name: Sam may have moved the chat somewhere else (drumming during food).
+    if (changedTopic) lines.push(line(items[next]?.topic ? `Thanks for telling me about that. Now let's talk about ${topicLabel(items[next])}.` : TOPIC_BRIDGES[next % TOPIC_BRIDGES.length], 'intro'));
     return lines.concat(opening);
   }
   state.done = true;
