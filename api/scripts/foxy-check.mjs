@@ -30,7 +30,25 @@ if (!offline && !KEY.startsWith('sk-ant-')) {
   process.exit(1);
 }
 const review = !offline && !flag('--no-review');
-const HEADERS = { 'content-type': 'application/json', 'x-api-key': KEY, 'anthropic-version': '2023-06-01', ...(process.env.ANTHROPIC_WORKSPACE_ID ? { 'anthropic-workspace-id': process.env.ANTHROPIC_WORKSPACE_ID } : {}) };
+const WORKSPACE = (process.env.ANTHROPIC_WORKSPACE_ID || '').trim();
+const HEADERS = { 'content-type': 'application/json', 'x-api-key': KEY, 'anthropic-version': '2023-06-01', ...(WORKSPACE ? { 'anthropic-workspace-id': WORKSPACE } : {}) };
+
+// One tiny call first, so a wrong key, workspace or model stops here with a clear message instead of failing every practice.
+if (!offline) {
+  console.log(`Key: ${KEY.slice(0, 10)}… · workspace: ${WORKSPACE || '(not set)'}`);
+  const model = modelsFromEnv().main;
+  const res = await fetch('https://api.anthropic.com/v1/messages', { method: 'POST', headers: HEADERS, body: JSON.stringify({ model, max_tokens: 1, messages: [{ role: 'user', content: 'Hi' }] }) });
+  if (!res.ok) {
+    const body = await res.text();
+    let msg = body; try { msg = JSON.parse(body).error?.message || body; } catch { /* plain text */ }
+    console.error(`\nCan't use the Claude API (${res.status}): ${msg.slice(0, 300)}`);
+    if (/workspace/i.test(msg)) console.error('→ Set the workspace from Render on the same line:  ANTHROPIC_WORKSPACE_ID=wrkspc_... npm run check:foxy');
+    else if (res.status === 401) console.error('→ The key was rejected. Check it is the full key from Render and starts with sk-ant-.');
+    else if (/credit/i.test(msg)) console.error('→ The account is out of API credit.');
+    else if (res.status === 404 || /model/i.test(msg)) console.error(`→ Check the model name (${model}), or set ANTHROPIC_MODEL.`);
+    process.exit(1);
+  }
+}
 
 // ---------------------------------------------------------------- the judge (fails loudly instead of falling back)
 let calls = 0;
@@ -39,7 +57,7 @@ const models = modelsFromEnv();
 const claude = new Map();
 const judge = offline ? async (a) => keywordJudge(a) : async (a) => {
   const model = modelForMode(a.mode, models);
-  if (!claude.has(model)) claude.set(model, makeClaudeJudge({ apiKey: KEY, model, workspaceId: process.env.ANTHROPIC_WORKSPACE_ID }));
+  if (!claude.has(model)) claude.set(model, makeClaudeJudge({ apiKey: KEY, model, workspaceId: WORKSPACE || undefined }));
   calls += 1;
   try { return await claude.get(model)(a); } catch (e) { judgeErrors += 1; console.error(`  judge error (${model}): ${e.message}`); return keywordJudge(a); }
 };
