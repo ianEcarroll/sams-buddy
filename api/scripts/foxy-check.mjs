@@ -93,13 +93,13 @@ const SCENARIOS = [
   { name: 'story: whole story', activity: first(lib('tell-easy')),
     steps: [say('First the boy got up, then he had breakfast, then he went to school and finally he played football. It ended well.')] },
   { name: 'story: bit by bit', activity: first(lib('tell-easy')), steps: [say('a boy'), ctl('hint'), say('he went to school'), say("I don't know")] },
-  { name: 'describe: full answer', activity: first(lib('describe-kitchen')), steps: [say('It is a spoon. It is cutlery. You eat soup with it.', 'credit')] },
-  { name: 'describe: one word at a time', activity: first(lib('describe-kitchen')), steps: [say('spoon'), say('cutlery'), say('for eating')] },
+  { name: 'describe: full answer', activity: first(lib('describe-kitchen')), steps: [say('It is a fridge. It is a kitchen thing. It keeps food cold.', 'credit')] },
+  { name: 'describe: one word at a time', activity: first(lib('describe-kitchen')), steps: [say('fridge'), say('in the kitchen'), say('for food')] },
 
   // Memory.
   { name: 'remember a story: Tinker Bell', activity: { id: 'tb', title: 'Tinker Bell', mode: 'listen', plan_goal: 'narrative', status: 'active', content: { items: STARTER_STORIES[0].items } },
     steps: [ctl('start_questions'), say('Neverland'), say('a hat'), say('Peter'), say("I don't know"), say('she glows')] },
-  { name: 'word groups: fruit', activity: first(lib('memory-food-name')), steps: [say('apple banana'), say('grapes'), say("I can't think of any more")] },
+  { name: 'word groups: vegetables', activity: first(lib('memory-food-name')), steps: [say('carrot and potato'), say('apple'), say("I can't think of any more")] },
   { name: 'remember my day', activity: first(lib('remember-weekend')), steps: [say('I went to the gym'), say('I watched TV'), say("I don't remember")] },
 
   // Listen and Task.
@@ -113,7 +113,7 @@ const SCENARIOS = [
 
   // Help buttons in the middle of a practice.
   { name: 'help: repeat and example in Think', activity: think([gym]), steps: [ctl('repeat'), say('um'), ctl('example'), say('ask the receptionist', 'credit')] },
-  { name: 'help: example in Describe', activity: first(lib('describe-kitchen')), steps: [say('spoon'), ctl('hint'), ctl('hint'), ctl('example')] },
+  { name: 'help: example in Describe', activity: first(lib('describe-kitchen')), steps: [say('a cold box'), ctl('hint'), ctl('hint'), ctl('example')] },
 ];
 
 // ---------------------------------------------------------------- the rule checks
@@ -197,7 +197,7 @@ Report only real problems a speech therapist would want fixed. An empty list is 
 Activity: ${run.state.activity.title} (${run.state.mode})
 
 ${run.log.join('\n')}`;
-  const res = await fetch('https://api.anthropic.com/v1/messages', { method: 'POST', headers: HEADERS, body: JSON.stringify({ model: REVIEW_MODEL, max_tokens: 1200, tools: [tool], tool_choice: { type: 'tool', name: 'report' }, messages: [{ role: 'user', content: prompt }] }) });
+  const res = await fetch('https://api.anthropic.com/v1/messages', { method: 'POST', headers: HEADERS, body: JSON.stringify({ model: REVIEW_MODEL, max_tokens: 1200, system: 'Always answer by calling the report tool exactly once. Do not reply with plain text.', tools: [tool], tool_choice: { type: 'auto' }, messages: [{ role: 'user', content: prompt }] }) });
   calls += 1;
   if (!res.ok) throw new Error(`review ${res.status}: ${(await res.text()).slice(0, 200)}`);
   const out = (await res.json()).content.find((c) => c.type === 'tool_use')?.input?.issues || [];

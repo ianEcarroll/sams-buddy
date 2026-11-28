@@ -263,7 +263,7 @@ Rules:
 - Repetition of a word is fine when it is accurate.
 - Never credit an element ${name} did not say. Evidence must be ${name}'s own words copied from the transcript.
 - Accept approved alternatives from the answer key. Do not invent stricter targets.
-- The transcript comes from speech recognition. If it looks like a recognition error (garbled, wrong-language fragments, words that make no sense in context) set transcript_seems_garbled = true rather than treating it as a language mistake.
+- The transcript comes from speech recognition. If it looks like a recognition error (garbled, wrong-language fragments, words that make no sense in context) set transcript_seems_garbled = true rather than treating it as a language mistake. A clear sentence about something else (another topic, one of their interests) is NOT a recognition error: leave transcript_seems_garbled false and judge it as off-topic.
 - A response that links the topic to ${name}'s own life counts as a personal connection.${interestsLine(learner)}
 - help_request: classify if ${name} is asking for repetition, saying they don't understand, asking for help, asking to be shown, or saying they need to check with their job coach. Otherwise "none".
 Always respond by calling the report tool.`;

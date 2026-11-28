@@ -1023,7 +1023,9 @@ export function describe(mode, els, item) {
   if (seq.length) {
     const ords = seq.map((e) => (mode === 'story' ? storyOrdinal : ordinal)(Number(e.split('_')[1]), total));
     const list = joinPhrases([...new Set(ords)]);
-    let p = mode === 'story' ? `told what happened ${list}` : `told the ${list} step${ords.length > 1 ? 's' : ''}`;
+    // "told what happened first and at the end", not "…finally".
+    const said = mode === 'story' ? joinPhrases([...new Set(ords.map((o) => ({ finally: 'at the end', then: 'after that' }[o] || o)))]) : list;
+    let p = mode === 'story' ? `told what happened ${said}` : `told the ${list} step${ords.length > 1 ? 's' : ''}`;
     if (els.includes('order') && seq.length > 1) p += ', in order';
     parts.push(p);
   } else if (els.includes('order')) {

@@ -331,7 +331,8 @@ async function process_(state, { text, displayText, confirmed }, judge) {
 
   const history = state.mode === 'conversation'
     ? [{ who: 'Foxy', text: item.opener }, ...conv.turns.flatMap((t) => [{ who: state.learnerName || 'Learner', text: t.text }, ...(t.reply ? [{ who: 'Foxy', text: t.reply }] : [])])]
-    : [];
+    // Think: what Foxy just asked, so an answer to "What could you do if that doesn't work?" is read as plan B.
+    : state.mode === 'think' && state.lastLines?.length ? [{ who: 'Foxy', text: state.lastLines.map((l) => l.text).join(' ') }] : [];
 
   const judgeElements = state.mode === 'conversation' ? ['turn'] : state.mode === 'recall' ? ['memory'] : state.mode === 'category' ? [categoryKind(item) === 'add' ? 'word' : 'member'] : it.elements.filter((e) => e !== 'order' && e !== 'clarify');
   const judgeItem = state.mode === 'recall' ? { ...item, memories: it.mems || [], already_recalled: it.recalled.map((r) => r.text) }
@@ -372,7 +373,8 @@ async function process_(state, { text, displayText, confirmed }, judge) {
     return { state, turn: makeTurn(state, lines) };
   }
 
-  if (newly.length) lines.push(line(`You ${describe(state.mode, newly, item)}.`, 'feedback'));
+  const before = state.mode === 'recall' ? Object.keys(it.met).filter((e) => e.startsWith('memory_') && !newly.includes(e)).length : 0;
+  if (newly.length) lines.push(line(before ? `You remembered ${newly.length === 1 ? 'another thing' : `${newly.length} more things`}.` : `You ${describe(state.mode, newly, item)}.`, 'feedback'));
 
   // After a model, one more attempt; if the element is still missing, note it and move to the next one.
   if (it.focus && it.modelGiven[it.focus] && !it.met[it.focus]) it.skipped[it.focus] = true;
@@ -542,7 +544,10 @@ function lastFoxyQuestion(state, item) {
   const replies = (state.item.conv?.turns || []).map((t) => t.reply).filter(Boolean);
   const latest = replies.length ? replies.at(-1) : item.opener;
   const qs = String(latest || '').match(/[^.!?]*\?/g);
-  return qs?.length ? qs.at(-1).trim() : null;
+  if (!qs?.length) return null;
+  // "I love snacks while I listen, so what snack would you pick?" → "What snack would you pick?"
+  const q = qs.at(-1).trim().split(/,\s*(?:so|and|but)?\s*/i).at(-1).trim();
+  return q.split(' ').length <= 14 ? q.charAt(0).toUpperCase() + q.slice(1) : null;
 }
 
 // Think: the same question as the cue ladder, but plain and tied to this situation, for "I don't understand".
@@ -976,7 +981,7 @@ function completeItem(state, newly) {
   // Think names everything he did, so a correct answer always ends with credit for it.
   // If he was already credited when the optional question was asked, only name what is new.
   const els = (it.anySupport && state.mode !== 'think') || it.praised ? newly : met;
-  if (it.praised && !els.length) lines.push(line('Well done.', 'feedback'));
+  if (it.praised && !els.length) lines.push(line('Thanks for telling me.', 'feedback'));
   else if (els.length) lines.push(line(`You ${describe(state.mode, els, item)}.`, 'feedback'));
   else if (state.mode === 'think') lines.push(line('Thanks for having a go. When something is not how you expect, you can always stop, think, and ask someone you trust.', 'feedback'));
   else lines.push(line('Thanks for working on that one.', 'feedback'));
