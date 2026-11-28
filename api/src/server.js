@@ -9,7 +9,7 @@ import { pgSpeechStore, pruneSpeech } from './speechStore.js';
 import { createSession, respond, confirmHeard, control, act, finish, previewLines, ENGINE_DEFAULTS } from './coach/engine.js';
 import { judgeFromEnv, modelsFromEnv } from './coach/judge.js';
 import { draftStepQuestions } from './coach/draft.js';
-import { MODES, STARTER_STORIES, STARTER_SCENARIOS, STARTER_EXPLAIN, STARTER_FOLLOW, STARTER_OBJECTS, STARTER_STEPS, STARTER_CATEGORY, STEP_SKILLS, STEP_LEVELS, FOLLOW_OBJECTS, isFollowToken, FOLLOW_STEP_TYPES, FOLLOW_BOXES, stampMemories } from './coach/modes.js';
+import { MODES, STARTER_STORIES, STARTER_SCENARIOS, STARTER_EXPLAIN, STARTER_FOLLOW, STARTER_OBJECTS, STARTER_STEPS, STARTER_CATEGORY, STEP_SKILLS, STEP_LEVELS, FOLLOW_OBJECTS, FOLLOW_PLACES, followBoxCount, isFollowToken, FOLLOW_STEP_TYPES, FOLLOW_BOXES, stampMemories } from './coach/modes.js';
 import { PLAN_GOALS, GOAL_KEYS, SUPPORT_CODES } from './coach/goals.js';
 import { emailEnabled, sendEmail, recipientsFor, practiceEmail, resetEmail } from './email.js';
 import { isPlatformAdmin, newInviteToken, INVITE_DAYS, estimateCost, ratesFor, validateFamily, ageFrom, cleanInterests } from './families.js';
@@ -54,12 +54,17 @@ const settingsOf = (learner) => ({ ...SETTING_DEFAULTS, ...(learner?.settings ||
 function followItemError(it) {
   const toks = Array.isArray(it.tokens) ? it.tokens : [];
   if (toks.length < 2 || toks.length > 4 || !toks.every(isFollowToken) || new Set(toks).size !== toks.length) return 'choose 2 to 4 different shapes or objects.';
+  if (it.places != null) {
+    const pl = Array.isArray(it.places) ? it.places : [];
+    if (pl.length && (pl.length < 2 || pl.length > 4 || !pl.every((p) => FOLLOW_PLACES[p]) || new Set(pl).size !== pl.length)) return 'choose 2 to 4 different places, or numbered boxes.';
+  }
+  const boxes = followBoxCount(it);
   const steps = Array.isArray(it.steps) ? it.steps : [];
   if (!steps.length || steps.length > 4) return 'add 1 to 4 steps.';
   for (const [k, st] of steps.entries()) {
     if (!FOLLOW_STEP_TYPES.includes(st?.type)) return `step ${k + 1} needs a type.`;
     if (!st.type.startsWith('say_') && !toks.includes(st.token)) return `step ${k + 1}: choose one of this instruction's shapes or objects.`;
-    if (['box', 'say_box'].includes(st.type) && !(Number(st.box) >= 1 && Number(st.box) <= FOLLOW_BOXES)) return `step ${k + 1}: choose a box from 1 to ${FOLLOW_BOXES}.`;
+    if (['box', 'say_box'].includes(st.type) && !(Number(st.box) >= 1 && Number(st.box) <= boxes)) return `step ${k + 1}: choose where it goes.`;
     if (['next_to', 'left_of', 'right_of'].includes(st.type) && (!toks.includes(st.target) || st.target === st.token)) return `step ${k + 1}: choose a different one to put it next to.`;
   }
   return null;
@@ -766,7 +771,10 @@ adult.delete('/activities/:id', wrap(async (req, res) => {
 adult.get('/modes', (req, res) => {
   const extra = {
     steps: { skills: Object.fromEntries(Object.entries(STEP_SKILLS).map(([k, v]) => [k, { label: v.label, goal: v.goal, when: v.when, question: v.question({ text: '' }, 1), learnQuestion: v.learn.question({ text: '' }, 0) }])), levels: STEP_LEVELS },
-    follow: { objects: Object.entries(FOLLOW_OBJECTS).map(([k, o]) => ({ id: `obj-${k}`, name: o.name, img: `/symbols/${o.file}.svg` })) } };
+    follow: {
+      objects: Object.entries(FOLLOW_OBJECTS).map(([k, o]) => ({ id: `obj-${k}`, name: o.name, img: `/symbols/${o.file}.svg` })),
+      places: Object.entries(FOLLOW_PLACES).map(([k, p]) => ({ id: k, name: p.name, img: `/symbols/${p.file}.svg` })),
+    } };
   res.json(Object.fromEntries(Object.entries(MODES).map(([k, m]) => [k, { label: m.label, tagline: m.tagline, activityName: m.activityName, defaultGoal: m.defaultGoal, defaultCues: m.defaultCues, ...(extra[k] || {}) }])));
 });
 // "Buddy will say…" in the activity editor: the opening lines for one item, from the real engine,

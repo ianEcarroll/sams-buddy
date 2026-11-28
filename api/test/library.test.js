@@ -162,7 +162,9 @@ test('Describe a picture and Follow on screen items are complete and read well',
   const objs = LIBRARY.filter((i) => i.mode === 'object');
   const fols = LIBRARY.filter((i) => i.mode === 'follow');
   assert.ok(objs.length >= 5 && fols.length >= 4);
-  assert.deepEqual(fols.map((f) => f.level), ['Easy', 'Easy', 'Medium', 'Harder']);
+  assert.deepEqual(fols.map((f) => f.level), ['Easy', 'Easy', 'Medium', 'Harder', 'Easy', 'Medium']);
+  assert.equal(libraryCard(libraryById('follow-places-2')).lines[0], 'First, put the milk in the fridge. Then, put the cereal in the cupboard.');
+  assert.match(libraryCard(libraryById('follow-places-3')).lines[0], /put the bread on the table\.$/);
   const first = libraryCard(libraryById('follow-shapes-2'));
   assert.equal(first.lines[0], 'First, put the yellow star in box 2. Then, put the green square in box 4.');
   assert.equal(libraryCard(libraryById('describe-bathroom')).images.length, 6);

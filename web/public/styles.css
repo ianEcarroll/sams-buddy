@@ -347,6 +347,12 @@ details > summary { cursor: pointer; font-weight: 700; padding: 6px 0; }
 .board { display: grid; gap: 14px; }
 .boxes { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
 .box { position: relative; aspect-ratio: 1; border: 2.5px dashed var(--line); border-radius: 14px; background: var(--surface); display: grid; place-items: center; padding: 0; min-height: 64px; }
+/* Follow on Screen with real places: the place's picture and name sit at the top of the box, the token below. */
+.box[data-place="true"] { border-style: solid; align-content: end; padding-bottom: 6px; }
+.box .box-place { position: absolute; top: 4px; left: 0; right: 0; display: grid; justify-items: center; gap: 0; pointer-events: none; }
+.box .box-place img { width: 38%; max-height: 40px; opacity: .55; }
+.box .box-place small { font-weight: 700; color: var(--ink-soft); font-size: .85rem; line-height: 1.1; }
+.box[data-place="true"] .shape { width: 46%; height: 46%; margin-top: 30%; }
 .box .box-num { position: absolute; top: 4px; left: 8px; font-weight: 700; color: var(--ink-soft); font-size: .95rem; }
 .box[data-highlight="true"] { border-color: var(--mod, #2563b0); border-style: solid; box-shadow: 0 0 0 4px var(--mod-soft, #e0ebf9); }
 .box[data-selected="true"] { border-style: solid; border-color: var(--ink); }

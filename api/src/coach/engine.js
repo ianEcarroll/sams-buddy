@@ -4,7 +4,7 @@
 
 import { RECALL_FRESH_DAYS as RECALL_DAYS, THINK_FOLLOW_UPS } from './modes.js';
 import { detectHelp } from './judge.js';
-import { FOLLOW_BOXES, followSteps, followStepText, followInstruction, tokenName, tokenImage, tokenWords, followThing } from './modes.js';
+import { FOLLOW_PLACES, followPlaces, followBoxCount, boxWords, boxPhrase, followTarget, followSteps, followStepText, followInstruction, tokenName, tokenImage, tokenWords, followThing } from './modes.js';
 import { MODES, LEVELS, TEAM_PHRASE, DEFAULT_CLARIFY_PHRASES, cueLadder, describe, labelFor, freshMemories, whenNoun, categoryKind, categoryWords } from './modes.js';
 import { PLAN_GOALS, supportCode, successFor } from './goals.js';
 import { STEP_SKILLS, STEP_LEVELS, stepCoach, stepSkillOf, stepRunOf } from './modes.js';
@@ -1092,7 +1092,7 @@ export function buildRecord(state, it, stopNote = null) {
       notes.length = stopNote ? 1 : 0; // the step-by-step notes below replace the generic ones
       followSteps(item).forEach((st, i) => {
         const el = `step_${i}`;
-        const what = followStepText(st);
+        const what = followStepText(st, null, item);
         const d = it.diag?.[el];
         if (it.skipped[el]) notes.push(`Step ${i + 1} (${what}): Foxy showed it.`);
         else if (!it.met[el]) notes.push(`Step ${i + 1} (${what}): not done.`);
@@ -1217,7 +1217,8 @@ function makeTurn(state, lines, expect = null) {
       step: stepUi?.step || null,
       stepList: stepUi?.list || null,
       board: state.mode === 'follow' && it?.board ? {
-        boxes: FOLLOW_BOXES,
+        boxes: followBoxCount(item),
+        places: followPlaces(item).length >= 2 ? followPlaces(item).map((p) => ({ name: FOLLOW_PLACES[p].name, img: `/symbols/${FOLLOW_PLACES[p].file}.svg` })) : null,
         tokens: (item.tokens || []).map((id) => ({ id, name: tokenName(id), img: tokenImage(id) })),
         pos: it.board.pos,
         selected: it.board.selected,
@@ -1298,17 +1299,18 @@ export function act(state, action = {}) {
   }
   if (action.type === 'box') {
     const slot = Number(action.box);
-    if (!Number.isInteger(slot) || slot < 0 || slot >= FOLLOW_BOXES) return { state, turn: followTurn(state, []) };
+    if (!Number.isInteger(slot) || slot < 0 || slot >= followBoxCount(curItem(state))) return { state, turn: followTurn(state, []) };
     const tok = it.board.selected;
-    if (!tok) return { state, turn: followTurn(state, [line(`Touch a ${followThing(curItem(state))} first, then touch a box.`, 'clarify')]) };
+    if (!tok) return { state, turn: followTurn(state, [line(`Touch a ${followThing(curItem(state))} first, then touch ${followTarget(curItem(state))}.`, 'clarify')]) };
     if (isSay(cur.step)) return { state, turn: followTurn(state, [line('Now tell me. Press Talk.', 'clarify')]) };
     it.attempts += 1;
-    it.responses.push({ text: `[put] ${tokenName(tok)} in box ${slot + 1}`, afterSupport: it.anySupport });
+    const where = boxPhrase(curItem(state), slot + 1);
+    it.responses.push({ text: `[put] ${tokenName(tok)} ${where}`, afterSupport: it.anySupport });
     const occupied = Object.entries(it.board.pos).some(([t, p]) => p === slot && t !== tok);
     if (cur.step.type !== 'touch' && tok === cur.step.token && !occupied && placeOk(it.board, cur.step, slot)) {
       it.board.pos[tok] = slot;
       it.board.selected = null;
-      return { state, turn: followTurn(state, followMet(state, cur, `put the ${tokenName(tok)} in box ${slot + 1}`)) };
+      return { state, turn: followTurn(state, followMet(state, cur, `put the ${tokenName(tok)} ${where}`)) };
     }
     it.board.selected = null; // wrong: the shape stays where it was
     return { state, turn: followTurn(state, followWrong(state, cur)) };
@@ -1335,7 +1337,7 @@ function followNextSupport(state, by, force = null) {
   const cur = followCur(state);
   if (!cur) return [];
   const steps = followSteps(curItem(state));
-  const text = followStepText(cur.step, cur.i ? steps[cur.i - 1].token : null);
+  const text = followStepText(cur.step, cur.i ? steps[cur.i - 1].token : null, curItem(state));
   const top = Math.max(0, ...it.supportGiven.filter((s) => s.el === cur.el).map((s) => s.level));
   const level = force ?? Math.min(3, it.supportGiven.some((s) => s.el === cur.el) ? top + 1 : 1);
   it.anySupport = true;
@@ -1386,7 +1388,7 @@ function followSpeech(state, text) {
   it.responses.push({ text, afterSupport: it.anySupport });
   const steps = followSteps(curItem(state));
   if (it.phase === 'retell') {
-    if (retellMatches(text, cur.step)) {
+    if (retellMatches(text, cur.step, curItem(state))) {
       it.diag[cur.el] = 'doing';
       it.phase = 'act';
       return followTurn(state, [line("Yes, that's right. Have another go.", 'ack')]);
@@ -1407,14 +1409,15 @@ function followSpeech(state, text) {
   }
   // A tap step, but Sam spoke: point him back to the screen without counting it.
   it.responses.pop();
-  return followTurn(state, [line(cur.step.type === 'touch' ? `Touch the ${followThing(curItem(state))} on the screen.` : `Touch a ${followThing(curItem(state))}, then touch a box.`, 'clarify')]);
+  return followTurn(state, [line(cur.step.type === 'touch' ? `Touch the ${followThing(curItem(state))} on the screen.` : `Touch a ${followThing(curItem(state))}, then touch ${followTarget(curItem(state))}.`, 'clarify')]);
 }
 
 // Did Sam say the step back? He needs the shape or object (a word that names it) and the key word of the action.
-function retellMatches(text, step) {
+function retellMatches(text, step, item = null) {
   const t = String(text).toLowerCase();
   const names = (tok) => tokenWords(tok).some((w) => t.includes(w));
-  const num = (n) => new RegExp(`\\b(${n}|${['zero', 'one', 'two', 'three', 'four', 'five'][n]})\\b`).test(t);
+  // A numbered box, or the place's own words ("fridge") when the instruction uses places.
+  const num = (n) => (boxWords(item, n) ? boxWords(item, n).some((w) => t.includes(w)) : new RegExp(`\\b(${n}|${['zero', 'one', 'two', 'three', 'four', 'five'][n]})\\b`).test(t));
   switch (step.type) {
     case 'touch': return names(step.token) && /\b(touch|tap|press|choose|pick|find|point)/.test(t);
     case 'box': return names(step.token) && num(Number(step.box));
