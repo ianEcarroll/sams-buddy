@@ -21,6 +21,7 @@ test('Think: the plan cue first, then the team\'s concrete clue, and the model s
 
 test('Talk: no cue pastes the topic name into a sentence; the first cue repeats Foxy\'s question', async () => {
   const { state } = createSession({ activity: lib('Talk: school and learning') });
+  control(state, 'topic_0');
   const t = (await respond(state, { text: 'um' }, { judge })).turn.lines.at(-1).text;
   assert.equal(t, 'Take your time. Which one do you like best?');
   const all = [t, control(state, 'hint').turn.lines.at(-1).text, control(state, 'hint').turn.lines.at(-1).text];

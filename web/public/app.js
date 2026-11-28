@@ -210,6 +210,15 @@ function greeting() {
   return seen ? `Welcome back, ${home.name}!` : `Hi ${home.name}!`;
 }
 
+// What he has done this week, in his own terms: no score, no streak. Nothing yet → the usual welcome.
+function weekLine() {
+  const w = home.week;
+  if (!w?.days) return 'Ready when you are.';
+  const days = w.days === 1 ? 'You practised on 1 day this week' : `You practised on ${w.days} days this week`;
+  return w.own ? `${days}, and answered ${w.own} on your own.` : `${days}.`;
+}
+const cap1 = (s) => String(s).charAt(0).toUpperCase() + String(s).slice(1);
+
 function renderHome() {
   const current = home.activities.find((a) => a.id === home.current_activity_id);
   // A module with nothing to practise isn't shown at all.
@@ -222,7 +231,7 @@ function renderHome() {
   }).filter(Boolean);
   mount(
     h('header', { class: 'home-header' }, brand(),
-      h('div', { class: 'home-greeting' }, h('h1', { class: 'hello' }, greeting()), h('p', { class: 'hello-sub' }, 'Ready when you are.'))),
+      h('div', { class: 'home-greeting' }, h('h1', { class: 'hello' }, greeting()), h('p', { class: 'hello-sub' }, weekLine()))),
     h('button', { class: 'start', disabled: !current, onclick: () => startPractice(current.id) },
       h('strong', {}, 'Start My Practice'), h('span', {}, current ? current.title : 'Your team has not picked one yet')),
     cards.length ? h('section', { class: 'module-section', 'aria-label': 'Choose something else' }, h('h2', {}, 'Choose something else'), h('div', { class: 'cards' }, cards)) : h('p', { class: 'hello-sub' }, 'Your team has not added any practice yet.'),
@@ -449,6 +458,9 @@ function drawPractice() {
       h('span', { class: 'talk-text' }, h('span', {}, speakingNow ? 'Foxy is talking\u2026' : 'Ready'),
         h('small', {}, speakingNow ? 'Listen to this step' : 'Press for the next step')))
     : null;
+  // Talk: choose the first topic by tapping (or by saying it with the Talk button below).
+  const topics = turn.expect === 'topic' && ui.topics ? h('div', { class: 'choice' },
+    ui.topics.map((t, i) => h('button', { class: i ? 'btn' : 'btn btn-primary', disabled: speakingNow, onclick: () => sendControl(t.action) }, cap1(t.label)))) : null;
   const choice = turn.expect === 'choice'
     ? h('div', { class: 'choice' },
       h('button', { class: 'btn btn-primary', disabled: speakingNow, onclick: () => sendControl('listen_retry') }, icon('listen'), 'Hear the story'),
@@ -507,6 +519,7 @@ function drawPractice() {
     P.problem ? h('div', { class: 'problem', role: 'alert' }, h('p', {}, `That did not work. ${P.problem}`), h('button', { class: 'btn', onclick: () => { P.problem = null; drawPractice(); } }, 'OK')) : null,
     cue,
     confirmBox,
+    topics,
     talk,
     controls,
     P.help ? helpSheet() : null,
@@ -832,7 +845,7 @@ const ICONS = {
 async function boot() {
   if (!token) return renderPair();
   try {
-    home = await api('/home');
+    home = await api(`/home?tz=${encodeURIComponent(Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC')}`);
     previewBar(!!home.preview, !!home.test);
     if (!home.consent?.agreed_at) return renderWaitingForGrownup();
     renderHome();
