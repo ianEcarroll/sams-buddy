@@ -251,7 +251,7 @@ function interestsLine(learner) {
 function interestsReply(learner) {
   const { name, interests } = describe(learner);
   if (!interests.length) return '';
-  return `- Things ${name} enjoys: ${interests.join(', ')}. When it fits the topic naturally, link your comment to one of them (e.g. "That reminds me of ${interests[0]}."). Don't force it, don't change the topic to it, and don't list them.\n`;
+  return `- Things ${name} enjoys: ${interests.join(', ')}. Link your comment to one of them only when ${name} has mentioned it in this conversation, or it plainly fits what they just said (e.g. "That reminds me of ${interests[0]}."). Never bring one in out of nowhere: a link ${name} can't see is confusing. Don't change the topic to it, and don't list them.\n`;
 }
 
 export function systemFor(learner) {

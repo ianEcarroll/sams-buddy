@@ -59,11 +59,11 @@ test('after the chosen topic comes the other one offered, not the next in the li
   assert.deepEqual(offered.slice(0, 2).sort(), ['food', 'sport'].sort(), 'the two offered come first');
 });
 
-test('a topic Sam already took the chat onto goes to the end', async () => {
+test('a topic Sam already took the chat onto stays next, and Foxy says he started on it', async () => {
   const { state } = createSession({ activity: three, settings: { turns_per_topic: 1 }, quickStart: true });
   control(state, 'topic_0'); // food, then music (offered), then sport
   const { turn } = await respond(state, { text: 'what music do you like?' }, { judge: judgeWith(null) });
-  assert.ok(turn.lines.some((l) => /let's talk about sport/.test(l.text)), turn.lines.map((l) => l.text).join(' | '));
+  assert.ok(turn.lines.some((l) => l.text === "You already started telling me about music. Let's talk about that some more."), turn.lines.map((l) => l.text).join(' | '));
 });
 
 test('the question invitations are plain, with no "What would you like to know?"', () => {
