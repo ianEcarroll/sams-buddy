@@ -612,6 +612,20 @@ LIBRARY.push(
     s('Press Pay. Tap your card or put in cash.', 'card', 'How do you pay?', 'tap my card or put in cash', { reasoning: ['Why do you check the total before you pay?', 'to make sure it is right'] }),
     s('Take your receipt and your shopping.', 'shop-2', 'What do you take at the end?', 'my receipt and my shopping'),
   ]),
+  // Buses for 13 to 20 (team review, 27 Nov): a diversion, a card with no money on it, and topping up.
+  think('bus-travel', 'Think: surprises on the bus', ['travel', 'out and about', 'independence'], [
+    sitc('What does the sign at the stop say?', 'Bus stop closed', 'You walk to your usual bus stop. There is a yellow sign on the pole: "Stop closed. Buses diverted. Use the stop on Park Road."', 'my stop is closed and the bus is going a different way', ['read the sign again', 'walk to the stop on Park Road', 'check the bus app', 'message a parent to say I will be a bit late'], 'the sign tells me where the bus stops today', 'ask a bus driver or someone at the other stop', ['wait at the closed stop for a long time', 'get in a car with someone I do not know']),
+    sitc('What did the card reader do?', 'Bus card does not work', 'You get on the bus and tap your bus card. The reader beeps twice and shows a red cross. The driver looks at you.', 'my bus card did not work', ['tap it once more', 'tell the driver my card is not working', 'pay with my bank card or cash if I can', 'message a parent'], 'the driver can tell me what to do', 'get off, top up my card and get the next bus', ['walk past the driver without paying', 'shout at the driver']),
+    sitc('What did the driver say?', 'The bus stops early', 'You are on the bus to town. At a stop you do not know, the driver says, "This bus terminates here. Everybody off, please."', 'the bus is not going all the way to town', ['get off and ask the driver which bus to take', 'check the bus app for the next bus', 'message a parent with where I am'], 'the driver knows which bus goes to town', 'ask someone who works at the bus station', ['stay on the bus on my own', 'walk off somewhere I do not know']),
+    sitc('What time does the app say now?', 'The bus is very late', 'You are at the stop for the 8:15 bus to college. It is 8:20. The bus app now says the bus will come at 8:45.', 'the bus is late and I will be late for college', ['message college or my parent to say I will be late', 'check if another bus goes to college', 'wait at the stop where it is safe'], 'college will know where I am', 'ask a parent if they can help me get there', ['walk to college on a road I do not know', 'go home without telling anyone']),
+  ]),
+  task('top-up-bus-card', 'Top up my bus card', 'Medium', ['travel', 'money', 'independence', 'technology'], [
+    s('Open the bus app on your phone.', 'mobile-phone', 'What do you open?', 'the bus app'),
+    s('Press Top up. Choose how much money to add.', 'money', 'What do you choose?', 'how much money to add', { reasoning: ['Why do you check the amount before you pay?', 'so I add the right amount'] }),
+    s('Pay with your bank card.', 'bank-card', 'How do you pay?', 'with my bank card', { independence: ['What could you do if the payment does not work?', 'check my card details, or ask a parent to help'] }),
+    s('Check the app says your card is topped up.', 'mobile-phone-text-message', 'What do you check?', 'that my card is topped up'),
+    s('When you get on the bus, tap your bus card on the reader.', 'get-on-bus-to', 'What do you do when you get on?', 'tap my bus card on the reader', { independence: ['What could you do if the reader shows a red cross?', 'tell the driver my card is not working'] }),
+  ]),
   task('running-late', 'Tell work I am running late', 'Medium', ['work', 'technology', 'independence'], [
     s('Open your messages. Find your manager’s name.', 'mobile-phone', 'Whose name do you find?', 'my manager'),
     s('Write: Sorry, I am running late.', 'mobile-phone-text-message', 'What do you write first?', 'sorry, I am running late', { reasoning: ['Why do you tell them straight away?', 'so they can plan without me'] }),
@@ -667,7 +681,7 @@ LIBRARY.push(
      qn('How did she find out she had the job?', ['phone call', 'a phone call', 'call', 'phoned', 'phone'], 'Her phone rang two days later.')]),
 );
 
-for (const [id, level] of [['think-college-work', 'Medium'], ['think-phones-messages', 'Medium'], ['explain-getting-things-done', 'Medium']]) LIBRARY.find((x) => x.id === id).level = level;
+for (const [id, level] of [['think-college-work', 'Medium'], ['think-phones-messages', 'Medium'], ['explain-getting-things-done', 'Medium'], ['think-bus-travel', 'Medium']]) LIBRARY.find((x) => x.id === id).level = level;
 
 export const libraryById = (id) => LIBRARY.find((x) => x.id === id) || null;
 

@@ -93,6 +93,7 @@ const SCENARIOS = [
   { name: 'think: unsafe idea, then safe', activity: think([gym]), steps: [say("I'd just walk home on my own"), say('ok I would ask the receptionist', 'credit')] },
   { name: 'think: card declined (library)', activity: { ...lib('think-college-work'), content: { items: [lib('think-college-work').content.items[3]] } },
     steps: [say('I would try again and then tell the person at the till', 'credit')] },
+  { name: 'think: bus stop closed (library)', activity: first(lib('think-bus-travel')), steps: [say('I would go to the stop on Park Road', 'credit')] },
   { name: 'think: scam text (library)', activity: first(lib('think-phones-messages')), steps: [say('I would not reply and I would show my dad', 'credit')] },
   { name: 'think: short answers', activity: think([gym]), steps: [say('reception'), say('because'), say('dunno')] },
 
