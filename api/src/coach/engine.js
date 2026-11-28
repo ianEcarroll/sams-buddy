@@ -665,7 +665,7 @@ function handleHelp(state, kind, text, source) {
     case 'dont_understand':
     case 'other_clarification':
       // Think: say the missing step in the words of this situation, not the generic "What could you do?" Sam may already have answered.
-      if (state.mode === 'think') return [line("That's okay. Let me say it another way.", 'ack'), line(thinkSimpler(state, item), 'prompt')];
+      if (state.mode === 'think') return [line("That's okay. Here it is again, with a question to help you.", 'ack'), line(thinkSimpler(state, item), 'prompt')];
       if (state.mode === 'conversation' && !item.simple_prompt) {
         const q = lastFoxyQuestion(state, item);
         if (q) return [line('Let me ask it another way.', 'ack'), line(q, 'prompt')];
@@ -1069,27 +1069,24 @@ function coveredAlready(state, item) {
 const TOPIC_BRIDGES = ['Let me ask you about something different.', 'I am curious about something else.', 'Shall we talk about something new?'];
 function advance(state, lines) {
   state.completed.push(buildRecord(state, state.item));
-  let items = state.activity.content.items;
+  const items = state.activity.content.items;
   const timeUp = Date.now() - state.startedAt > state.settings.session_minutes * 60_000;
   // Talk: a prepared topic that repeats the one just discussed is skipped, so Sam is not asked the same thing twice.
   let next = state.itemIndex + 1;
   const sameTopic = (a, b) => !!a?.topic && String(a.topic).trim().toLowerCase() === String(b?.topic || '').trim().toLowerCase();
   if (state.mode === 'conversation') while (next < items.length && sameTopic(items[next], items[state.itemIndex])) next += 1;
-  // Talk: if Sam already took the chat onto the next topic ("what music do you like?" during food), its opener would ask
-  // what he has just answered, so that topic goes to the end when there is another one to do first.
-  if (state.mode === 'conversation' && next < items.length - 1 && coveredAlready(state, items[next])) {
-    const reordered = [...items];
-    reordered.push(...reordered.splice(next, 1));
-    state.activity = { ...state.activity, content: { ...state.activity.content, items: reordered } };
-    items = reordered;
-  }
+  // Talk: Sam may already have taken the chat onto the next topic ("what music do you like?" during food). It stays next
+  // (he was offered it), and Foxy says so, so its opener reads as carrying on rather than not listening.
+  const started = state.mode === 'conversation' && next < items.length && coveredAlready(state, items[next]);
   if (next < items.length && !timeUp) {
     const changedTopic = state.mode === 'conversation';
     state.itemIndex = next;
     const opening = openItem(state); // openItem leads in: "On to the next situation." etc.
     // Talk: say that the subject is changing and name the new one, so a prepared opener does not come out of nowhere.
     // "About that", not the old topic's name: Sam may have moved the chat somewhere else (drumming during food).
-    if (changedTopic) lines.push(line(items[next]?.topic ? `Thanks for telling me about that. Now let's talk about ${topicLabel(items[next])}.` : TOPIC_BRIDGES[next % TOPIC_BRIDGES.length], 'intro'));
+    if (changedTopic) lines.push(line(!items[next]?.topic ? TOPIC_BRIDGES[next % TOPIC_BRIDGES.length]
+      : started ? `You already started telling me about ${topicLabel(items[next])}. Let's talk about that some more.`
+        : `Thanks for telling me about that. Now let's talk about ${topicLabel(items[next])}.`, 'intro'));
     return lines.concat(opening);
   }
   state.done = true;

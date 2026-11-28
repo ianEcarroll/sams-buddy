@@ -30,7 +30,7 @@ test("Foxy's conversation reply rules include the child's interests", async () =
   await judge({ mode: 'conversation', item: { topic: 'music' }, elements: ['turn'], text: 'I like it', learner: { name: 'Sam', age: 15, interests: ['drumming'] } });
   const userText = sent.messages[0].content;
   assert.match(userText, /Things Sam enjoys: drumming/);
-  assert.match(userText, /Don't force it/);
+  assert.match(userText, /Never bring one in out of nowhere/);
   assert.match(sent.system, /Sam enjoys: drumming/);
 });
 
