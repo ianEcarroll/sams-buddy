@@ -992,6 +992,15 @@ app.use('/api/adult', adult);
 const device = express.Router();
 device.use(wrap(requireDevice));
 
+// The learner's own week, for their home screen: days practised in the last 7 and answers with no adult prompt (code I).
+async function weekFor(learnerId, tz) {
+  const zone = /^[A-Za-z_]+(\/[A-Za-z_+-]+){0,2}$/.test(String(tz || '')) ? tz : 'UTC';
+  try {
+    return await one(`select count(distinct (created_at at time zone $2)::date)::int as days,
+      count(*) filter (where support_code='I' and success is not false)::int as own
+      from practice_records where learner_id=$1 and hidden_at is null and created_at > now() - interval '7 days'`, [learnerId, zone]);
+  } catch { return null; }
+}
 device.get('/home', wrap(async (req, res) => {
   await ensureStarters(req.learnerId);
   const l = await one('select name, settings, current_activity_id from learners where id=$1', [req.learnerId]);
@@ -1008,6 +1017,7 @@ device.get('/home', wrap(async (req, res) => {
     preview: !!req.device.preview,
     test: !!req.device.test,
     voice: voiceEnabled(),
+    week: req.device.preview ? null : await weekFor(req.learnerId, req.query.tz),
   });
 }));
 device.put('/settings', wrap(async (req, res) => {

@@ -1,7 +1,7 @@
 // The first practice of the day greets Sam and explains the buttons; later ones go straight to the task.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createSession } from '../src/coach/engine.js';
+import { createSession, control } from '../src/coach/engine.js';
 
 const activity = { id: 'c', title: 'Name the group', mode: 'category', plan_goal: 'other', content: { items: [{ kind: 'name', group: 'animals', target: 3, accepted: ['dog', 'cat', 'horse'] }] } };
 const think = { id: 't', title: 'Surprises', mode: 'think', plan_goal: 'other', content: { items: [{ problem: 'Your bus is late.', question: 'What do you do?' }] } };
@@ -22,6 +22,7 @@ test('Talk: a repeated topic is skipped, a new one gets a bridge, and the pictur
     { topic: 'Fall', opener: 'What is your favourite thing to do in the fall?', image_id: 'sym:pumpkin', example_comment: 'a', example_question: 'b' },
     { topic: 'music', opener: 'What music do you like?', example_comment: 'a', example_question: 'b' }] } };
   const { state } = createSession({ activity: talk, settings: { turns_per_topic: 1 }, learnerName: 'Sam' });
+  control(state, 'topic_0'); // keep the team's order
   const { respond } = await import('../src/coach/engine.js');
   const judge = async () => ({ met: { turn: 'x' }, relevant: true, connection: false, question: true, help: null, reply: 'Nice.' });
   const t = await respond(state, { text: 'I like cousins' }, { judge });

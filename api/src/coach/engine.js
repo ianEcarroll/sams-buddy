@@ -53,8 +53,51 @@ export function createSession({ activity, settings = {}, learnerName = '', learn
   };
   // Welcome lines come first but stay out of lastLines, so Repeat replays the task, not the greeting.
   // Not the first practice of the day: no greeting, button explanation or "this is a ... practice" speech, straight to the task.
-  const lines = [...(quickStart ? [] : [...welcomeLines(state), ...modeIntroLines(state)]), ...openItem(state)];
+  // Talk with two or more topics: the learner chooses what to talk about first (the plan asks for him to have a say).
+  const intro = quickStart ? [] : [...welcomeLines(state), ...modeIntroLines(state)];
+  if (state.mode === 'conversation' && items.length >= 2) {
+    state.choosing = topicChoices(state);
+    openItem(state); // so the turn has an item; it is reopened on the chosen topic
+    const [a, b] = state.choosing.map((i) => topicLabel(items[i]));
+    const ask = line(`What would you like to talk about first: ${a}, or ${b}?`, 'prompt');
+    state.lastLines = [ask];
+    return { state, turn: makeTurn(state, [...intro, ask], 'topic') };
+  }
+  const lines = [...intro, ...openItem(state)];
   return { state, turn: state.mode === 'listen' ? listenTurn(state, lines) : state.mode === 'follow' ? followTurn(state, lines) : state.mode === 'steps' ? stepsTurn(state, lines) : makeTurn(state, lines) };
+}
+
+// ---- Talk: choosing the first topic
+const topicLabel = (item) => String(item.topic || item.title || 'something else').trim();
+const words = (s) => String(s || '').toLowerCase().match(/[a-z']+/g) || [];
+// Two topics to offer: ones that match the learner's interests first, then the activity's order.
+function topicChoices(state) {
+  const items = state.activity.content.items;
+  const likes = new Set((state.learnerInterests || []).flatMap(words).filter((w) => w.length > 2));
+  const idx = items.map((_, i) => i);
+  const score = (i) => words(topicLabel(items[i]) + ' ' + (items[i].opener || '')).filter((w) => likes.has(w)).length;
+  return idx.sort((x, y) => score(y) - score(x) || x - y).slice(0, 2);
+}
+// Start the chosen topic: move it to the front so the rest follow in the team's order.
+function chooseTopic(state, pick, said = null) {
+  const items = [...state.activity.content.items];
+  const choice = pick ?? state.choosing[0];
+  state.choosing = null;
+  const [chosen] = items.splice(choice, 1);
+  state.activity = { ...state.activity, content: { ...state.activity.content, items: [chosen, ...items] } };
+  state.itemIndex = 0;
+  const lead = pick == null && said != null ? `Let's start with ${topicLabel(chosen)}.` : `Great, let's talk about ${topicLabel(chosen)}.`;
+  return makeTurn(state, [line(lead, 'ack'), ...openItem(state)]);
+}
+// What the learner said: the offered topic whose words they used, else the first one.
+function topicFromSpeech(state, text) {
+  const said = new Set(words(text));
+  const items = state.activity.content.items;
+  const hit = state.choosing.find((i) => words(topicLabel(items[i])).some((w) => w.length > 2 && (said.has(w) || said.has(`${w}s`) || said.has(w.replace(/s$/, '')))));
+  if (hit != null) return hit;
+  if (/(second|other|last|two)/i.test(text)) return state.choosing[1];
+  if (/(first|one)/i.test(text)) return state.choosing[0];
+  return null;
 }
 
 // A warm start to every practice, and (if the team leaves it on) what the four buttons do.
@@ -243,6 +286,7 @@ export async function respond(state, input, { judge }) {
   if (state.done) return { state, turn: makeTurn(state, []) };
   state.paused = false;
   const text = String(input.text || '').trim();
+  if (state.choosing) return { state, turn: chooseTopic(state, topicFromSpeech(state, text), text) };
   if (state.mode === 'listen' && state.item.listen.phase === 'story') return { state, turn: listenTurn(state, startQuestions(state)) };
   if (state.mode === 'listen' && state.item.listen.phase === 'offer') return listenOfferSpoken(state, text);
   if (state.mode === 'steps' && ['doing', 'indep'].includes(state.item.steps.phase)) return { state, turn: stepsTurn(state, stepsSpokenWhileDoing(state, text)) };
@@ -619,6 +663,11 @@ function wholeExample(state, by) {
 /** Buttons on the practice screen. */
 export function control(state, action) {
   if (state.done) return { state, turn: makeTurn(state, []) };
+  // Talk topic buttons ("topic_0", "topic_1") while choosing what to talk about first.
+  if (state.choosing && /^topic_\d$/.test(action)) return { state, turn: chooseTopic(state, state.choosing[Number(action.slice(6))] ?? null) };
+  if (state.choosing && !['repeat', 'pause', 'resume', 'ready', 'finish'].includes(action)) {
+    return { state, turn: makeTurn(state, [line('You choose. Tap one, or say which one you want to talk about.', 'clarify'), ...state.lastLines], 'topic') };
+  }
   const it = state.item;
   const item = curItem(state);
   const m = MODES[state.mode];
@@ -1164,6 +1213,7 @@ function makeTurn(state, lines, expect = null) {
       itemNumber: state.itemIndex + 1,
       itemCount: state.activity.content.items.length,
       clarifyPhrases: state.mode === 'task' ? (item.clarify_phrases || DEFAULT_CLARIFY_PHRASES) : null,
+      topics: state.choosing ? state.choosing.map((i, n) => ({ action: `topic_${n}`, label: topicLabel(state.activity.content.items[i]) })) : null,
       step: stepUi?.step || null,
       stepList: stepUi?.list || null,
       board: state.mode === 'follow' && it?.board ? {
